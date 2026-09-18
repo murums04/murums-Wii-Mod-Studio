@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Drawing;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
@@ -14,6 +15,8 @@ namespace murumsWiiModStudio
 
         static readonly ConditionalWeakTable<Control, Marker> attached = new ConditionalWeakTable<Control, Marker>();
         static readonly ConditionalWeakTable<Form, Marker> forms = new ConditionalWeakTable<Form, Marker>();
+        static readonly HashSet<ToolStripDropDown> openMenus = new HashSet<ToolStripDropDown>();
+        static readonly ConditionalWeakTable<Control, Marker> quietControls = new ConditionalWeakTable<Control, Marker>();
         static Timer timer;
         static HoverHintWindow hover;
         static HoverInputFilter inputFilter;
@@ -55,6 +58,12 @@ namespace murumsWiiModStudio
                 timer.Dispose();
                 hover.Dispose();
             };
+        }
+
+        public static void DisableHover(Control control)
+        {
+            quietControls.GetValue(control, delegate { return new Marker(); });
+            control.Enter += delegate { Hide(); };
         }
 
         public static void SetHelp(Control c, string text)
@@ -189,8 +198,31 @@ namespace murumsWiiModStudio
             return hint == null ? active : hint.HostForm;
         }
 
+        public static void TrackDropDown(ToolStripDropDown menu)
+        {
+            Marker marker;
+            if (attached.TryGetValue(menu, out marker))
+                return;
+            attached.Add(menu, new Marker());
+            menu.Opened += delegate
+            {
+                openMenus.Add(menu);
+                Hide();
+            };
+            menu.Closed += delegate
+            {
+                openMenus.Remove(menu);
+                Hide();
+            };
+            menu.Disposed += delegate
+            {
+                openMenus.Remove(menu);
+            };
+        }
         internal static bool HasOpenDropDown(Control control)
         {
+            if (openMenus.Count > 0 || (control.ContextMenuStrip != null && control.ContextMenuStrip.Visible))
+                return true;
             var combo = control as ComboBox;
             if (combo != null && combo.DroppedDown)
                 return true;
@@ -278,6 +310,9 @@ namespace murumsWiiModStudio
             // Help text may also be used for accessibility. Only concrete interactive
             // targets should create floating hints, never the empty area of a container.
             if (c == null || c.IsDisposed || !c.ClientRectangle.Contains(point))
+                return null;
+            Marker quiet;
+            if (quietControls.TryGetValue(c, out quiet) || (c is TextBoxBase && c.Focused))
                 return null;
             if (c is TabControl)
                 return null; // Labels already identify the views; no floating tab popup.

@@ -120,28 +120,24 @@ namespace murumsWiiModStudio
         internal static string HistoryText()
         {
             return CurrentHeading() + "\n\n" + L.T(
-                "• Updates: Prüfung beim Programmstart und Hinweis bei einer neueren Version. Manuell unter Hilfe → Nach Updates suchen.\n\n"
-                + "• Update-Installation: geprüfte Downloads; Projekte, Einstellungen und optionale Tools bleiben erhalten.\n\n"
-                + "• Dateien öffnen: Ein Doppelklick auf zugeordnete Dateien wie .szs öffnet sie im installierten Studio statt im Setup.\n\n"
-                + "• Einheitliche Namen: Alle acht Einträge im Tools-Menü tragen den Präfix MKWii.\n\n"
-                + "• Modellquellen: Earth.szs, BackModel.szs und globe.arc aus einer eigenen Mario-Kart-Wii-ISO/WBFS importieren und lokal wiederverwenden. Benötigt Wiimms ISO Tools.\n\n"
-                + "• Fehlende Menüarchive aus ISO/WBFS importieren: Dateiauswahl und frei wählbarer Zielordner. Vorhandene Dateien werden nicht überschrieben.\n\n"
-                + "• Ausgabeordner: einheitlich MUR_EDITED. Der Font Changer speichert seine Kopie direkt dort.\n\n"
-                + "• Exporthinweise erklären den Ausgabeordner und das Sichern und Ersetzen der Pack-Dateien.\n\n"
-                + "• Himmelbilder werden als Standbild exportiert. GIF-Animationen folgen in einem späteren Patch; GIFs verwenden vorerst nur das erste Bild.\n\n"
-                + "• Kleine, gut lesbare Datei- und Formatbeispiele in allen acht Tools.\n\n"
-                + "• Changelog unter Hilfe → Changelog; GitHub-Link und korrigierte Buttons im Über-Fenster.\n\n",
-                "• Updates: Checks at startup and a notice when a newer version is available. Check manually under Help → Check for updates.\n\n"
-                + "• Update installation: Verified downloads; projects, settings and optional tools are preserved.\n\n"
-                + "• Opening files: Double-clicking associated files such as .szs opens them in the installed Studio instead of setup.\n\n"
-                + "• Consistent names: All eight Tools menu entries use the MKWii prefix.\n\n"
-                + "• Model sources: Import Earth.szs, BackModel.szs and globe.arc from your own Mario Kart Wii ISO/WBFS and reuse them locally. Requires Wiimms ISO Tools.\n\n"
-                + "• Import missing menu archives from ISO/WBFS: choose the file and destination folder. Existing files are not overwritten.\n\n"
-                + "• Consistent MUR_EDITED output folders. Font Changer saves its copy there directly.\n\n"
-                + "• Export instructions explain the output folder and how to back up and replace pack files.\n\n"
-                + "• Sky pictures export as still images. GIF animation is deferred to a later patch; GIFs currently use only the first frame.\n\n"
-                + "• Small, readable file and format examples in all eight tools.\n\n"
-                + "• Changelog under Help → Changelog; GitHub link and corrected About dialog buttons.\n\n")
+                "• Custom Pack Maker: .szs-Dateien, Beschreibung und Pfadvorlagen; gemeinsame Auswahl mehrerer Packs in den Tools.\n\n" + "• Updates: automatische/manuelle Prüfung, geprüfte Downloads; Projekte, Einstellungen und Tools bleiben erhalten.\n\n"
+                + "• Zugeordnete Dateien öffnen per Doppelklick direkt im Studio.\n\n"
+                + "• ISO/WBFS empfohlen: Menü- und Modellarchive importieren, Ziel frei wählen, Originale behalten. Vorhandene Archive bleiben nutzbar; benötigt Wiimms ISO Tools.\n\n"
+                + "• Export nach MUR_EDITED, auch beim Font Changer; Hinweise zum Sichern und Ersetzen der Pack-Dateien.\n\n"
+                + "• Race HUD: Teilwortsuche, Scrollvorschau, Itembox-/Glaskategorie sowie Slash, km/h und Input-Texturen in der Texturliste. Verfügbare Mod-Zusatzarchive werden mitgeladen.\n\n"
+                + "• Menüs: Lizenzhintergrund, obere/untere Balken und weitere Wartefenster bearbeitbar.\n\n"
+                + "• Himmel: vorerst nur Standbilder; bei GIFs das erste Bild. Animationen folgen später.\n\n"
+                + "• Oberfläche: einheitliche Pack-Auswahl und Statusleisten, kompaktere Anordnung, Hover-/Layoutkorrekturen, einheitliche MKWii-Namen und Dateihinweise in allen Tools.\n\n"
+                + "• Changelog mit GitHub-Link; Buttons im Über-Fenster korrigiert.\n\n",
+                "• Custom Pack Maker: .szs files, descriptions and path presets; shared multi-pack selection across tools.\n\n" + "• Updates: automatic/manual checks, verified downloads; projects, settings and tools are preserved.\n\n"
+                + "• Associated files open directly in Studio on double-click.\n\n"
+                + "• ISO/WBFS recommended: import menu/model archives, choose a destination and keep originals. Existing archives remain supported; requires Wiimms ISO Tools.\n\n"
+                + "• MUR_EDITED exports, including Font Changer; guidance for backing up and replacing pack files.\n\n"
+                + "• Race HUD: substring search, scrolling preview, item box/glass category; slash, km/h and input textures in the texture list. Available supplementary mod archives load alongside them.\n\n"
+                + "• Menus: edit license backgrounds, top/bottom bars and additional waiting screens.\n\n"
+                + "• Sky: still images only for now; GIFs use the first frame. Animation will follow later.\n\n"
+                + "• Interface: consistent pack selection and status bars, simpler layout, hover/layout fixes, consistent MKWii names and file hints in all tools.\n\n"
+                + "• Changelog with GitHub link; corrected About buttons.\n\n")
                 + "2.1.0-beta1 — Release\n\n"
                 + L.T("Erste öffentliche Beta.", "First public beta.");
         }

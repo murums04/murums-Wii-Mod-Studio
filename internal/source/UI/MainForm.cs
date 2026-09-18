@@ -195,6 +195,11 @@ namespace murumsWiiModStudio
                 FindEntry(true);
             }));
             ToolStripMenuItem tools = new ToolStripMenuItem(L.T("Tools", "Tools"));
+            tools.DropDownItems.Add(MakeMenu("MKWii Custom Pack Maker...", Keys.None, delegate
+            {
+                using (var maker = new CustomPackMakerForm())
+                    maker.ShowDialog(this);
+            }));
             tools.DropDownItems.Add(MakeMenu("MKWii Game HUD Tool...", Keys.None, delegate
             {
                 using (var hud = new GameHudForm())
@@ -742,16 +747,10 @@ namespace murumsWiiModStudio
 
         private void OpenDialog()
         {
-            using (OpenFileDialog dialog = new OpenFileDialog())
-            {
-                dialog.Filter = ResourceDetector.OpenFilter;
-                dialog.Title = L.T("Nintendo-Wii-Datei öffnen", "Open Nintendo Wii file");
-                if (dialog.ShowDialog(this) != DialogResult.OK)
-                    return;
-                OpenFromPath(dialog.FileName);
-            }
+            string path = GameArchiveImportForm.Select(this, ResourceDetector.OpenFilter);
+            if (path != null)
+                OpenFromPath(path);
         }
-
         private void LoadArchive(string path)
         {
             try
@@ -2068,6 +2067,7 @@ namespace murumsWiiModStudio
             if (entry == null)
                 return;
             ContextMenuStrip menu = new ContextMenuStrip();
+            murumsWiiModStudio.StudioUx.TrackDropDown(menu);
             menu.Renderer = new MurumsDarkToolStripRenderer();
             menu.BackColor = DarkTheme.Panel;
             menu.ForeColor = DarkTheme.Fore;

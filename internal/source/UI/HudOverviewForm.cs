@@ -9,60 +9,81 @@ namespace murumsWiiModStudio
 {
     internal sealed class HudOverviewForm : StudioToolForm
     {
-        public HudOverviewForm(List<HudTexture> textures) : base("HUD Preview", "Current pending textures • Pressed/released states together • Illustration of assets, not game placement")
+        readonly List<HudTexture> entries;
+        readonly FlowLayoutPanel gallery = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true };
+
+        public HudOverviewForm(List<HudTexture> textures)
+            : base("HUD Preview", "Current pending textures • Pressed/released states together • Illustration of assets, not game placement")
         {
-            var gallery = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                AutoScroll = true
-            };
+            entries = textures.Where(t => TplTextureEditor.IsTpl(t.Archive.Files[t.Key].Data)).ToList();
             Body.Controls.Add(gallery);
+            Finish();
+            RenderGallery();
+        }
+
+        static Bitmap MakeThumbnail(Bitmap source)
+        {
+            float scale = Math.Min(230f / source.Width, 148f / source.Height);
+            return new Bitmap(source, Math.Max(1, (int)(source.Width * scale)), Math.Max(1, (int)(source.Height * scale)));
+        }
+        void RenderGallery()
+        {
+            gallery.SuspendLayout();
+            while (gallery.Controls.Count > 0)
+                gallery.Controls[0].Dispose();
             int shown = 0;
-            foreach (var t in textures.Where(t => TplTextureEditor.IsTpl(t.Archive.Files[t.Key].Data)).Take(100))
+            int failed = 0;
+            foreach (var texture in entries)
             {
-                byte[] data = t.Archive.Files[t.Key].Data, b;
-                string path;
-                if (t.Archive.Generated.TryGetValue(t.Key, out b))
-                    data = b;
-                if (t.Archive.Pictures.TryGetValue(t.Key, out path))
-                    using (var bitmap = TplTextureEditor.LoadSourceBitmap(path))
+                byte[] data = texture.Archive.Files[texture.Key].Data;
+                byte[] generated;
+                string replacement;
+                if (texture.Archive.Generated.TryGetValue(texture.Key, out generated))
+                    data = generated;
+                if (texture.Archive.Pictures.TryGetValue(texture.Key, out replacement))
+                    using (var bitmap = TplTextureEditor.LoadSourceBitmap(replacement))
                         data = TplTextureEditor.ReplaceFirstImage(data, bitmap, true);
-                TexturePreviewResult d;
+                TexturePreviewResult decoded;
                 string error;
-                if (!TexturePreview.TryDecode(t.Key, data, 0, out d, out error))
-                    continue;
-                using (d)
+                var panel = new Panel { Width = 230, Height = 210, Margin = new Padding(6) };
+                if (TexturePreview.TryDecode(texture.Key, data, 0, out decoded, out error))
                 {
-                    var panel = new Panel
+                    using (decoded)
                     {
-                        Width = 230,
-                        Height = 210,
-                        Margin = new Padding(6)
-                    };
-                    var picture = new PictureBox
-                    {
-                        Dock = DockStyle.Fill,
-                        SizeMode = PictureBoxSizeMode.Zoom,
-                        Image = new Bitmap(d.Bitmap),
-                        BackColor = Color.FromArgb(55, 55, 62)
-                    };
-                    picture.Disposed += delegate
-                    {
-                        if (picture.Image != null)
+                        var picture = new PictureBox
                         {
-                            picture.Image.Dispose();
-                            picture.Image = null;
-                        }
-                    };
-                    panel.Controls.Add(picture);
-                    panel.Controls.Add(new Label { Dock = DockStyle.Bottom, Height = 62, Text = Path.GetFileName(t.Key) + "\n" + Path.GetFileName(t.Archive.Source), AutoEllipsis = true });
-                    gallery.Controls.Add(panel);
+                            Dock = DockStyle.Fill,
+                            SizeMode = PictureBoxSizeMode.Zoom,
+                            Image = MakeThumbnail(decoded.Bitmap),
+                            BackColor = Color.FromArgb(55, 55, 62)
+                        };
+                        picture.Disposed += delegate
+                        {
+                            if (picture.Image != null)
+                            {
+                                picture.Image.Dispose();
+                                picture.Image = null;
+                            }
+                        };
+                        panel.Controls.Add(picture);
+                    }
                     shown++;
                 }
+                else
+                {
+                    failed++;
+                    panel.Controls.Add(new Label { Dock = DockStyle.Fill, Text = error });
+                }
+                panel.Controls.Add(new Label
+                {
+                    Dock = DockStyle.Bottom, Height = 62, AutoEllipsis = true,
+                    Text = Path.GetFileName(texture.Key) + "\n" + Path.GetFileName(texture.Archive.Source)
+                });
+                gallery.Controls.Add(panel);
             }
-
-            Finish();
-            Status.Text = shown + " textures shown (maximum 100). Uses the pending exported texture bytes.\nLayout position, game tinting and animation are not simulated. Input on/off states have separate labelled tiles.";
+            Status.Text = entries.Count + L.T(" Texturen. Alle Einträge durch Scrollen erreichbar.", " textures. Scroll to reach every entry.")
+                + (failed > 0 ? "; " + failed + L.T(" nicht lesbar", " unreadable") : "")
+                + "\n" + L.T("Texturübersicht; keine Simulation von Spielpositionen oder Animationen.", "Texture gallery; does not simulate game placement or animations.");            gallery.ResumeLayout();
         }
     }
 }

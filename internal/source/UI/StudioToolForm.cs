@@ -40,7 +40,7 @@ namespace murumsWiiModStudio
             Text = title + " — murums Wii Mod Studio";
             Size = new Size(1120, 800);
             MinimumSize = new Size(950, 680);
-            Font = new Font("Segoe UI", 10);
+            Font = new Font("Segoe UI", 10); AutoScaleMode = AutoScaleMode.Font;
             StartPosition = FormStartPosition.CenterParent;
             try
             {
@@ -57,24 +57,29 @@ namespace murumsWiiModStudio
                 RowCount = 5,
                 Padding = new Padding(12)
             };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, fileExamples == null ? 118 : 152));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             Control header = StudioChrome.Header(title, subtitle);
             root.Controls.Add(fileExamples == null ? header : ToolFileHint.Wrap(header, fileExamples), 0, 0);
             root.Controls.Add(Actions, 0, 1);
             root.Controls.Add(Body, 0, 2);
-            root.Controls.Add(Status, 0, 3);
-            root.Controls.Add(Footer, 0, 4);
+            root.Controls.Add(ToolStatus.Wrap(this, Status), 0, 4);
+            root.Controls.Add(Footer, 0, 3);
             Controls.Add(root);
         }
 
         protected void Finish()
         {
+            string[] packTools = { "FontChangerForm", "GameHudForm", "ThemeProjectForm", "ArchiveCompareForm", "MenuTextForm", "MusicLoopForm", "MenuTextureForm" };
+            if (Array.IndexOf(packTools, GetType().Name) >= 0)
+                PackSelection.Attach(this, OnPackSelected);
             DarkTheme.Apply(this);
             StudioUx.Attach(this);
+            ToolStatus.Watch(this);
             if (primary != null)
             {
                 primary.BackColor = DarkTheme.Accent;
@@ -106,7 +111,7 @@ namespace murumsWiiModStudio
             var button = Action(caption, help, action);
             Actions.Controls.Remove(button);
             Footer.Controls.Add(button);
-            button.MinimumSize = new Size(200, 36);
+            button.MinimumSize = new Size(130, 36);
             if (isPrimary)
             {
                 primary = button;
@@ -120,6 +125,7 @@ namespace murumsWiiModStudio
         {
             try
             {
+                ToolStatus.Set(this, false);
                 UseWaitCursor = true;
                 action();
             }
@@ -133,6 +139,8 @@ namespace murumsWiiModStudio
             }
         }
 
+        protected virtual void OnPackSelected(CustomPack pack) { }
+
         protected string OpenPath(string filter)
         {
             if (filter.Contains("*.szs") || filter.Contains("*.arc") || filter.Contains("*.u8")
@@ -143,7 +151,7 @@ namespace murumsWiiModStudio
             }
             using (var d = new OpenFileDialog
             {
-                Filter = filter
+                InitialDirectory = PackSelection.Folder(this), Filter = filter
             }
 
             )
@@ -152,21 +160,23 @@ namespace murumsWiiModStudio
 
         protected string SavePath(string name, string filter)
         {
+            string output = PackSelection.Output(this, "");
+            if (output.Length > 0) Directory.CreateDirectory(output);
             using (var d = new SaveFileDialog
             {
                 FileName = name,
-                Filter = filter
+                InitialDirectory = output, Filter = filter
             }
 
             )
                 return d.ShowDialog(this) == DialogResult.OK ? d.FileName : null;
         }
 
-        protected string Folder(string path)
+        protected string Folder(string path, bool forExport = true)
         {
             using (var d = new FolderPickerDialog
             {
-                SelectedPath = path,
+                SelectedPath = forExport ? PackSelection.Output(this, path) : (String.IsNullOrEmpty(PackSelection.Folder(this)) ? path : PackSelection.Folder(this)),
                 Description = "Choose a folder"
             }
 

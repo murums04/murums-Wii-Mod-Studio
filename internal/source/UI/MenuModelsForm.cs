@@ -48,15 +48,22 @@ namespace murumsWiiModStudio
         readonly string archiveName;
         TableLayoutPanel layout;
         Func<string> sharedOutput;
-        public void UseOutputFolder(Func<string> resolve)
+        Action<string> setSharedOutput;
+        string selectedGlobe;
+        bool customOutput;
+
+        public void UseOutputFolder(Func<string> resolve, Action<string> update = null)
         {
             sharedOutput = resolve;
-            layout.RowStyles[4].Height = 0;
-            foreach (Control c in layout.Controls)
-                if (layout.GetRow(c) == 4)
-                    c.Visible = false;
+            setSharedOutput = update;
+            output.Text = resolve();
+            customOutput = false;
         }
 
+        string OutputFolder()
+        {
+            return customOutput || sharedOutput == null ? output.Text.Trim() : sharedOutput();
+        }
         public MenuModelsForm(string archiveName)
         {
             this.archiveName = archiveName;
@@ -90,11 +97,11 @@ namespace murumsWiiModStudio
             };
             Controls.Add(scrollHost);
             grid.Dock = DockStyle.Top;
-            grid.Height = 460;
+            grid.Height = 450;
             scrollHost.Controls.Add(grid);
             scrollHost.SizeChanged += delegate
             {
-                grid.Height = Math.Max(460, scrollHost.ClientSize.Height);
+                grid.Height = Math.Max(450, scrollHost.ClientSize.Height);
             };
             var help = new Label
             {
@@ -111,25 +118,38 @@ namespace murumsWiiModStudio
                 Text = L.T("Quelle wählen…", "Choose source…"),
                 Dock = DockStyle.Fill
             };
-            var sourceMenu = new ContextMenuStrip();
-            sourceMenu.Items.Add(L.T("Aus vorhandenem Spielordner laden…", "Load from existing game folder…"),
-                null, delegate { ChooseGameFolder(); });
-            sourceMenu.Items.Add(L.T("Aus Mario-Kart-Wii-ISO/WBFS laden…", "Import from Mario Kart Wii ISO/WBFS…"), null, delegate { ImportGameModels(); });
-            sourceMenu.Items.Add(L.T("Vorhandenes Modellarchiv wählen…", "Choose existing model archive…"), null, delegate
-            {
-                ChooseModelArchive();
-            });
             browse.Text = L.T("Auswählen...", "Browse...");
-            browse.Click += delegate
+            browse.Click += delegate { ImportGameModels(); };
+            grid.Controls.Remove(source);
+            var sourcePanel = new TableLayoutPanel
             {
-                sourceMenu.Show(browse, 0, browse.Height);
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                Margin = Padding.Empty
             };
-            Disposed += delegate
+            sourcePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            sourcePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+            sourcePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            sourcePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            sourcePanel.Controls.Add(new Label
             {
-                sourceMenu.Dispose();
+                Text = L.T("Spielabbild: ISO / WBFS", "Game image: ISO / WBFS"),
+                AutoSize = true,
+                Anchor = AnchorStyles.Left
+            }, 0, 0);
+            sourcePanel.Controls.Add(browse, 1, 0);
+            sourcePanel.Controls.Add(source, 0, 1);
+            var addArchive = new Button
+            {
+                Text = L.T("Archiv hinzufügen...", "Add archive..."),
+                Dock = DockStyle.Fill
             };
-            grid.Controls.Add(browse, 1, 1);
-            models.Dock = DockStyle.Fill;
+            addArchive.Click += delegate { ChooseModelArchive(); };
+            sourcePanel.Controls.Add(addArchive, 1, 1);
+            grid.Controls.Add(sourcePanel, 0, 1);
+            grid.SetColumnSpan(sourcePanel, 2);
+            grid.RowStyles[1].Height = 70;            models.Dock = DockStyle.Fill;
             models.AutoScroll = true;
             models.Padding = new Padding(4, 4, 4, 4);
             grid.Controls.Add(models, 0, 2);
@@ -273,8 +293,18 @@ namespace murumsWiiModStudio
             grid.SetColumnSpan(appearance, 2);
             UpdatePictureInfo();
             output.Dock = DockStyle.Fill;
-            output.Text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MUR_EDITED");
-            grid.Controls.Add(output, 0, 4);
+            output.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MUR_EDITED");
+            var outputPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Margin = Padding.Empty };
+            outputPanel.Controls.Add(new Label { Text = L.T("Ausgabeordner", "Output location"), AutoSize = true }, 0, 0);
+            outputPanel.Controls.Add(output, 0, 1);
+            grid.Controls.Add(outputPanel, 0, 4);
+            grid.RowStyles[4].Height = 64;
+            output.TextChanged += delegate
+            {
+                customOutput = true;
+                if (setSharedOutput != null)
+                    setSharedOutput(output.Text);
+            };
             var folder = new Button
             {
                 Text = L.T("Auswählen...", "Browse..."),
@@ -296,18 +326,30 @@ namespace murumsWiiModStudio
             build.Dock = DockStyle.None;
             build.Anchor = AnchorStyles.Right;
             build.Size = new Size(260, 34);
-            build.Enabled = false;
+            ToolStatus.Set(this, false); build.Enabled = false;
             build.Click += delegate
             {
                 Build();
             };
-            grid.Controls.Add(build, 0, 6);
-            grid.SetColumnSpan(build, 2);
-            status.Dock = DockStyle.Fill;
-            grid.Controls.Add(status, 0, 5);
-            grid.SetColumnSpan(status, 2);
+            grid.RowCount = 5;
+            while (grid.RowStyles.Count > 5) grid.RowStyles.RemoveAt(grid.RowStyles.Count - 1);
+            var footer = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 78, ColumnCount = 1, RowCount = 2, Padding = new Padding(14, 0, 14, 0) };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            footer.Controls.Add(build, 0, 0);
+            footer.Controls.Add(ToolStatus.Wrap(this, status), 0, 1);
+            Controls.Add(footer);
+            footer.SendToBack();
+            PackSelection.Attach(this, delegate(CustomPack pack)
+            {
+                output.Text = Path.Combine(pack.FilesFolder, "MUR_EDITED");
+                customOutput = true;
+                if (setSharedOutput != null) setSharedOutput(output.Text);
+            });
             DarkTheme.Apply(this);
             StyleButtons(this);
+            ToolStatus.Watch(this);
             build.BackColor = DarkTheme.Accent;
             build.ForeColor = Color.White;
             VisibleChanged += delegate
@@ -319,8 +361,8 @@ namespace murumsWiiModStudio
                     LoadArchive(available);
             };
             appearance.Visible = false;
-            help.Text = L.T("Modelldateien auswählen oder aus deinem Spielabbild importieren. Speicherort frei wählbar.", "Choose model files or import from your game image. Choose where to save them.");
-            help.Text += "\n" + (archiveName == "Earth.szs" ? "Earth.szs / globe.arc" : "BackModel.szs") + L.T(" oder ISO/WBFS", " or ISO/WBFS");
+            help.Text = L.T("ISO/WBFS empfohlen: Originaldateien importieren und Speicherort wählen. Vorhandene Archive alternativ hinzufügen.", "ISO/WBFS recommended: import original files and choose where to save them. Alternatively, add existing archives.");
+            help.Text += "\n" + L.T("ISO/WBFS (empfohlen) oder ", "ISO/WBFS (recommended) or ") + (archiveName == "Earth.szs" ? "Earth.szs / globe.arc" : "BackModel.szs");
             layout.RowStyles[0].Height = 64;
             string cached = MenuModelSource.FindCached(archiveName);
             if (cached != null)
@@ -331,7 +373,7 @@ namespace murumsWiiModStudio
 
         void ImportGameModels()
         {
-            string folder = sharedOutput == null ? output.Text : sharedOutput();
+            string folder = OutputFolder();
             string imported = GameArchiveImportForm.Import(this, archiveName, folder);
             if (imported == null)
                 return;
@@ -353,6 +395,7 @@ namespace murumsWiiModStudio
                     }
                 }
                 string sourceCopy = MenuModelSource.RememberArchive(model, archiveName, globeOverride);
+                selectedGlobe = null;
                 LoadArchive(sourceCopy);
                 status.Text = L.T("Import gespeichert in: ", "Import saved to: ") + Path.GetDirectoryName(imported)
                     + L.T(". Bearbeitete Kopien werden im gewählten Ausgabeordner gespeichert.",
@@ -398,22 +441,54 @@ namespace murumsWiiModStudio
         {
             using (var dialog = new OpenFileDialog
             {
-                Title = L.T("Modellarchiv wählen: ", "Choose model archive: ") + archiveName,
-                Filter = archiveName + "|" + archiveName,
+                Title = L.T("Modellarchive hinzufügen", "Add model archives"),
+                Filter = archiveName == "Earth.szs"
+                    ? "Earth.szs / globe.arc|Earth.szs;globe.arc"
+                    : "BackModel.szs|BackModel.szs",
+                InitialDirectory = PackSelection.Folder(this), Multiselect = true,
                 CheckFileExists = true
-            }
-
-            )
+            })
             {
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                    LoadArchive(dialog.FileName);
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+                try
+                {
+                    AddArchives(dialog.FileNames);
+                }
+                catch (Exception error)
+                {
+                    StudioMessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
+        internal void AddArchives(string[] paths)
+        {
+            foreach (string path in paths)
+            {
+                if (String.Equals(Path.GetFileName(path), "globe.arc", StringComparison.OrdinalIgnoreCase))
+                {
+                    var archive = U8Archive.Load(File.ReadAllBytes(path));
+                    if (SceneColorTools.Find(archive.Root, "earth.brres.LZ") == null)
+                        throw new InvalidDataException(L.T("globe.arc enthält kein Globusmodell.", "globe.arc contains no globe model."));
+                    selectedGlobe = path;
+                }
+            }
+            foreach (string path in paths)
+                if (String.Equals(Path.GetFileName(path), archiveName, StringComparison.OrdinalIgnoreCase))
+                    LoadArchive(path);
+            status.Text = L.T("Geladene Archive: ", "Loaded archives: ")
+                + (source.Text.Length > 0 ? Path.GetFileName(source.Text) : L.T("Earth.szs fehlt", "Earth.szs missing"))
+                + (selectedGlobe != null ? " + globe.arc" : "");
+        }
         public Button ExternalBuildButton()
         {
-            layout.RowStyles[6].SizeType = SizeType.Absolute;
-            layout.RowStyles[6].Height = 0;
+            var footer = build.Parent as TableLayoutPanel;
+            if (footer != null)
+            {
+                footer.RowStyles[0].Height = 0;
+                footer.Height = 30;
+            }
             return build;
         }
 
@@ -514,7 +589,7 @@ namespace murumsWiiModStudio
             }
             catch (Exception ex)
             {
-                build.Enabled = false;
+                ToolStatus.Set(this, false); build.Enabled = false;
                 murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, Text);
             }
         }
@@ -703,11 +778,11 @@ namespace murumsWiiModStudio
 
         void Build()
         {
-            build.Enabled = false;
+            ToolStatus.Set(this, false); build.Enabled = false;
             UseWaitCursor = true;
             try
             {
-                string dir = Path.GetFullPath(sharedOutput == null ? output.Text.Trim() : sharedOutput()), path = Path.Combine(dir, Path.GetFileName(source.Text));
+                string dir = Path.GetFullPath(OutputFolder()), path = Path.Combine(dir, Path.GetFileName(source.Text));
                 if (String.Equals(Path.GetFullPath(source.Text), path, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException(L.T("Bitte einen anderen Ausgabeordner wählen; das Quellarchiv bleibt erhalten.", "Choose a different output folder to preserve the source archive."));
                 var archive = U8Archive.Load(File.ReadAllBytes(source.Text));
@@ -731,7 +806,7 @@ namespace murumsWiiModStudio
                 }
 
                 byte[] globe = null;
-                string globeSource = MenuModelSource.FindGlobeArchive(source.Text);
+                string globeSource = selectedGlobe ?? MenuModelSource.FindGlobeArchive(source.Text);
                 if (isEarth && (globeColor.ToArgb() != Color.White.ToArgb() || glowColor.ToArgb() != Color.White.ToArgb()))
                 {
                     if (!File.Exists(globeSource))

@@ -42,7 +42,7 @@ namespace murumsWiiModStudio
         };
         public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy", "MenuSingle_E.szs / Title_E.szs · *.bmg")
         {
-            Action("Open archive / BMG…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
+            Action("Browse ISO/WBFS…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
             Actions.Controls.Add(resource);
             resource.SelectedIndexChanged += delegate
             {

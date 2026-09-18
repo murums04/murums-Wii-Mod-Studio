@@ -27,7 +27,7 @@ namespace murumsWiiModStudio
             {
                 if (!CanDiscard())
                     return;
-                string folder = Folder("");
+                string folder = Folder("", false);
                 if (folder != null)
                 {
                     project = new ThemeProject
@@ -60,7 +60,7 @@ namespace murumsWiiModStudio
                 {
                     project.Save(p);
                     dirty = false;
-                    Status.Text = "Saved project: " + p;
+                    Status.Text = "Saved project: " + p; ToolStatus.Set(this, true);
                 }
             }, false);
             add = Action("Add edited file…", "First choose the original file inside your pack, then its edited replacement. This defines the build destination.", delegate

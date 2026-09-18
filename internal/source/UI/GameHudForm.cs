@@ -101,11 +101,11 @@ namespace murumsWiiModStudio
             Status.AutoEllipsis = false;
             if (!embedded)
             {
-                Action(L.T("Archiv öffnen…", "Open archive…"), "MenuSingle.szs, MenuMulti.szs, Title.szs, Common.szs…", delegate
+                Action(L.T("ISO/WBFS auswählen…", "Browse ISO/WBFS…"), "MenuSingle.szs, MenuMulti.szs, Title.szs, Common.szs…", delegate
                 {
                     OpenArchive(false);
                 });
-                Action(L.T("Archiv hinzufügen…", "Add archive…"), "Add archives with shared textures or language resources.", delegate
+                Action(L.T("Archiv / ISO hinzufügen…", "Add archive / ISO…"), "Add archives with shared textures or language resources.", delegate
                 {
                     OpenArchive(true);
                 });
@@ -204,19 +204,20 @@ namespace murumsWiiModStudio
             Body.Controls.Add(root);
             var archiveHeader = FieldHeader(L.T("Layout-Archiv auswählen", "Choose layout archive"), archiveChoice);
             root.Controls.Add(archiveHeader, 0, 0);
-            root.SetColumnSpan(archiveHeader, 3);
+            root.SetColumnSpan(archiveHeader, 2);
             root.Controls.Add(FieldHeader(L.T("1  Layouts suchen", "1  Search layouts"), search), 0, 1);
             root.Controls.Add(FieldHeader(L.T("2  Layout auswählen", "2  Choose a layout"), layouts), 1, 1);
-            root.Controls.Add(FieldHeader(L.T("3  Verschieben", "3  Move"), moveWhole), 2, 1);
+            moveWhole.Margin = new Padding(0, 2, 0, 6);
             root.Controls.Add(tree, 0, 3);
             root.Controls.Add(canvas, 1, 3);
-            root.Controls.Add(properties, 2, 3);
+            root.Controls.Add(properties, 2, 0);
+            root.SetRowSpan(properties, 4);
             StudioUx.SetHelp(aspectChoice, L.T("Bildformat der HUD-Positionen. Ändert nicht die Renderauflösung des Spiels.", "Aspect ratio for HUD positions. Does not change game render resolution."));
             aspectChoice.Items.AddRange(new object[] { "16:9", "4:3" });
             aspectChoice.SelectedIndex = 0;
             root.Controls.Add(FieldHeader(L.T("Bildformat", "Aspect ratio"), aspectChoice), 0, 2);
             root.Controls.Add(FieldHeader(L.T("Bildschirmposition / Spieleransicht aus BRCTR", "Screen placement / player view from BRCTR"), placementChoice), 1, 2);
-            root.SetColumnSpan(root.GetControlFromPosition(1, 2), 2);
+            root.SetColumnSpan(root.GetControlFromPosition(1, 2), 1);
             placementChoice.SelectedIndexChanged += delegate
             {
                 if (!loadingPlacement)
@@ -234,6 +235,7 @@ namespace murumsWiiModStudio
             };
             StudioUx.SetHelp(moveWhole, L.T("Zieht die oberste Gruppe mit allen Kindern. Gilt für das gewählte Teillayout, nicht für andere Dateien.", "Drags the top-level group with all children. Affects this component layout, not other files."));
             StudioUx.SetHelp(search, L.T("Layouts nach Dateiname filtern, z. B. button, select, position, map oder inputviewer.", "Filter layout filenames, e.g. button, select, position, map or inputviewer."));
+            properties.Controls.Add(moveWhole);
             properties.Controls.Add(selectedLabel);
             AddNumber("X", -100000, 100000, 2);
             AddNumber("Y", -100000, 100000, 2);
@@ -247,7 +249,7 @@ namespace murumsWiiModStudio
             advanced = new CheckBox
             {
                 AutoSize = true,
-                Text = L.T("Skalierung und Drehung anzeigen", "Show scale and rotation"),
+                Text = L.T("Skalierung, Drehung und Details", "Scale, rotation and details"),
                 Margin = new Padding(0, 5, 0, 5)
             };
             properties.Controls.Add(advanced);
@@ -255,6 +257,7 @@ namespace murumsWiiModStudio
                 values[i].Parent.Visible = false;
             advanced.CheckedChanged += delegate
             {
+                info.Visible = advanced.Checked;
                 for (int i = 4; i <= 6; i++)
                     values[i].Parent.Visible = advanced.Checked;
             };
@@ -281,6 +284,7 @@ namespace murumsWiiModStudio
                 unexported = true;
                 LoadLayout();
             });
+            info.Visible = false;
             properties.Controls.Add(info);
             StudioUx.SetHelp(properties, L.T("Element wählen und ziehen. Ganze Gruppen lassen sich mit ihren Kindern verschieben.", "Select and drag an element. Groups move together with their children."));
             save = ExportAction(embedded ? L.T("In Race HUD übernehmen", "Apply to Race HUD") : L.T("Archivkopien speichern…", "Save archive copies…"), "Apply changes or save separate archive copies.", Export);
@@ -882,6 +886,7 @@ namespace murumsWiiModStudio
             Session.Save(folder);
             unexported = false;
             Status.Text = L.T("Archivkopien gespeichert: ", "Archive copies saved: ") + folder;
+            ToolStatus.Set(this, true);
         }
 
         Bitmap PaneImage(BrlytPaneInfo p)

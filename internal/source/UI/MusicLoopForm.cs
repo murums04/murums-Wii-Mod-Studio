@@ -198,7 +198,7 @@ namespace murumsWiiModStudio
             if (string.Equals(Path.GetFullPath(p), Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a different file to preserve your source.");
             BackupManager.WriteAllBytesSafely(p, wave.Build((int)start.Value, (int)end.Value, false));
-            Status.Text = "Saved loop markers: " + p + "\nAdd this WAV in Looping Audio Converter and choose BRSTM output.";
+            ToolStatus.Set(this, true); Status.Text = "Saved loop markers: " + p + "\nAdd this WAV in Looping Audio Converter and choose BRSTM output.";
         }
 
         void Launch(string id, string path)

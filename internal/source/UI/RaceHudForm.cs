@@ -9,6 +9,9 @@ namespace murumsWiiModStudio
 {
     internal sealed class RaceHudForm : Form
     {
+        readonly Timer searchDelay = new Timer { Interval = 250 };
+        bool refreshingTextures;
+        readonly TextBox search = new TextBox { Width = 220 };
         readonly HudFontSettings numberSettings = new HudFontSettings();
         readonly RaceHudSession session = new RaceHudSession();
         readonly ListBox textures = new ListBox
@@ -93,14 +96,14 @@ namespace murumsWiiModStudio
                 -1f,
                 58f,
                 38f,
-                44f,
-                46f
+                46f,
+                30f
             }
 
             )
                 grid.RowStyles.Add(new RowStyle(height < 0 ? SizeType.Percent : SizeType.Absolute, height < 0 ? 100 : height));
             Controls.Add(grid);
-            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("MKWii Race HUD Tool: pictures and placement shadows", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs · Race_E.szs · RaceAssets.szs (Retro Rewind) · *.png / *.jpg"), 0, 0);
+            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("MKWii Race HUD Tool", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs · Race_E.szs · RaceAssets.szs (Retro Rewind) · *.png / *.jpg"), 0, 0);
             grid.RowStyles[1].SizeType = SizeType.AutoSize;
             var bar = new FlowLayoutPanel
             {
@@ -108,24 +111,37 @@ namespace murumsWiiModStudio
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
-            bar.Controls.Add(Button("Open Race archive / ISO…", Open, "Open your language archive, e.g. Race_E.szs. Race.szs and available RaceAssets.szs beside it are loaded automatically."));
+            bar.Controls.Add(Button("Browse ISO / WBFS…", Open, "Choose ISO/WBFS (recommended) to import original archives. Alternatively, choose your existing Race archive in the file type list to keep pack changes. Mod-only HUD assets require the mod archive."));
             bar.Controls.Add(Button("Add archive / ISO…", Add, "Add Race.szs, a language archive or Retro Rewind RaceAssets.szs without losing current selections."));
             import = Button("Import matching pictures…", Match, "Scan a picture folder and its subfolders. Exact filename matches become pending replacements; no archive is saved yet.");
             bar.Controls.Add(import);
-            category.Items.AddRange(new object[] { "Placement numbers", "Timer / laps / score", "Items / minimap", "Pending replacements", "All textures", "Countdown / start / finish", "Player names / warnings", "Results", "Input viewer", "Minimap / icons", "Speedometer" });
+            category.Items.AddRange(new object[] { "Placement numbers", "Timer / laps / score", "Items / minimap", "Pending replacements", "All textures", "Countdown / start / finish", "Player names / warnings", "Results", "Input viewer", "Minimap / icons", "Speedometer", "Item box / glass" });
             category.SelectedIndex = 0;
             category.SelectedIndexChanged += delegate
             {
                 RefreshList();
             };
-            bar.Controls.Add(category);
-            mapColours = Button("Map colours…", EditMapColours, "Edit the minimap material colour, opacity and four-corner gradient with a sample preview.");
-            bar.Controls.Add(mapColours);
-            moveHud = Button(L.T("HUD visuell verschieben…", "Move HUD visually…"), EditLayouts, "Drag the whole selected HUD layout or individual elements. Apply here, then save edited archives below.");
-            bar.Controls.Add(moveHud);
-            bar.Controls.Add(Button("Preview category…", delegate
+            StudioUx.DisableHover(search);
+            search.TextChanged += delegate
             {
-                using (var d = new HudOverviewForm(session.Textures(category.SelectedIndex)))
+                searchDelay.Stop();
+                searchDelay.Start();
+            };
+            searchDelay.Tick += delegate
+            {
+                searchDelay.Stop();
+                RefreshList();
+            };
+            Disposed += delegate { searchDelay.Dispose(); };
+            StudioUx.SetHelp(search, L.T("Sucht einen Namensteil in allen geladenen Texturen, unabhängig von der Kategorie.", "Find part of a name in all loaded textures, regardless of category."));
+            mapColours = Button("Map colours…", EditMapColours, "Edit the minimap material colour, opacity and four-corner gradient with a sample preview.");
+            var layoutActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
+            layoutActions.Controls.Add(mapColours);
+            moveHud = Button(L.T("HUD visuell verschieben…", "Move HUD visually…"), EditLayouts, "Drag the whole selected HUD layout or individual elements. Apply here, then save edited archives below.");
+            layoutActions.Controls.Add(moveHud);
+            layoutActions.Controls.Add(Button("Preview category…", delegate
+            {
+                using (var d = new HudOverviewForm(FilteredTextures()))
                     d.ShowDialog(this);
             }, "Review current images together, including pending replacements and separate input states. Not a game layout simulation."));
             grid.Controls.Add(bar, 0, 1);
@@ -136,18 +152,34 @@ namespace murumsWiiModStudio
                 Width = 1100,
                 SplitterDistance = 410
             };
-            split.Panel1.Controls.Add(textures);
+            var browser = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+            browser.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            browser.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
+            browser.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            browser.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
+            browser.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            browser.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            browser.Controls.Add(new Label { Text = L.T("Kategorie", "Category"), AutoSize = true }, 0, 0);
+            category.Dock = DockStyle.Fill;
+            browser.Controls.Add(category, 0, 1);
+            browser.Controls.Add(new Label { Text = L.T("Textur suchen (alle Kategorien)", "Find texture (all categories)"), AutoSize = true }, 0, 2);
+            search.Dock = DockStyle.Fill;
+            browser.Controls.Add(search, 0, 3);
+            browser.Controls.Add(textures, 0, 4);
+            split.Panel1.Controls.Add(browser);
             var right = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                RowCount = 3,
+                RowCount = 4,
                 ColumnCount = 1
             };
+            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             right.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
-            right.Controls.Add(preview, 0, 0);
-            right.Controls.Add(detail, 0, 1);
+            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            right.Controls.Add(layoutActions, 0, 0);
+            right.Controls.Add(preview, 0, 1);
+            right.Controls.Add(detail, 0, 2);
             var actions = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill
@@ -170,15 +202,18 @@ namespace murumsWiiModStudio
             actions.Controls.Add(numberFont);
             colours = Button("Colours…", Recolour, "Change dark/base and light/outline colours of this texture. Preview retains alpha, dimensions and format. Pressed and released states can be edited separately.");
             actions.Controls.Add(colours);
-            right.Controls.Add(actions, 0, 2);
+            actions.AutoSize = true;
+            right.Controls.Add(actions, 0, 3);
+
             split.Panel2.Controls.Add(right);
             grid.Controls.Add(split, 0, 3);
             textures.SelectedIndexChanged += delegate
             {
-                ShowPreview();
+                if (!refreshingTextures)
+                    ShowPreview();
             };
             var explanation = Label();
-            explanation.Text = "Import matches names such as tt_position_no_st_64x64_01.tpl-0.png. Review the ● entries under Pending replacements.\nPictures stretch to the existing texture size. Use transparent PNGs for cut-out numbers. The preview does not render game animations.";
+            explanation.Text = "Import pictures with matching texture names. Review changes under Pending replacements.\nUse transparent PNGs for cut-outs. Preview shows textures, not game animations.";
             grid.Controls.Add(explanation, 0, 4);
             var options = new FlowLayoutPanel
             {
@@ -217,10 +252,12 @@ namespace murumsWiiModStudio
             }, "Choose a separate output folder using Explorer navigation."), 2, 0);
             save = Button("Save edited archives", Save, "Write only archives with selected changes, using their original filenames. Sources remain unchanged.");
             export.Controls.Add(save, 3, 0);
-            grid.Controls.Add(status, 0, 6);
-            grid.Controls.Add(export, 0, 7);
+            grid.Controls.Add(ToolStatus.Wrap(this, status), 0, 7);
+            grid.Controls.Add(export, 0, 6);
+            PackSelection.Attach(this, delegate(CustomPack pack) { output.Text = Path.Combine(pack.FilesFolder, "MUR_EDITED"); });
             DarkTheme.Apply(this);
             StudioUx.Attach(this);
+            ToolStatus.Watch(this);
             StudioUx.SetHelp(category, "Filter all loaded archives. Input viewer lists textures referenced by the controller-overlay layouts, including pressed and released states. Pending replacements shows the next export.");
             StudioUx.SetHelp(output, "Edited copies are saved here under their original archive names. The source folder cannot be overwritten.");
             StudioUx.SetHelp(shadows, "Checked: make position_sha transparent in the single and multiplayer layouts. Unchecked: preserve the opened source.");
@@ -250,6 +287,7 @@ namespace murumsWiiModStudio
             StudioUx.SetHelp(b, help);
             b.Click += delegate
             {
+                ToolStatus.Set(this, false);
                 UseWaitCursor = true;
                 try
                 {
@@ -277,7 +315,7 @@ namespace murumsWiiModStudio
             if (path == null)
                 return;
             session.Open(path);
-            output.Text = Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED");
+            output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
             shadows.Checked = false;
             dirty = false;
             RefreshList();
@@ -291,7 +329,7 @@ namespace murumsWiiModStudio
                 return;
             session.Add(path);
             if (output.Text.Length == 0)
-                output.Text = Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED");
+                output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
             RefreshList();
             UpdateState();
         }
@@ -340,14 +378,20 @@ namespace murumsWiiModStudio
                 }
         }
 
+        List<HudTexture> FilteredTextures()
+        {
+            return session.SearchTextures(category.SelectedIndex, search.Text);
+        }
+
         void RefreshList()
         {
             var selected = Selected;
+            refreshingTextures = true;
             textures.BeginUpdate();
             try
             {
                 textures.Items.Clear();
-                foreach (var t in session.Textures(category.SelectedIndex))
+                foreach (var t in FilteredTextures())
                     textures.Items.Add(t);
                 if (textures.Items.Count > 0)
                 {
@@ -365,15 +409,19 @@ namespace murumsWiiModStudio
                 else
                 {
                     SetImage(null);
-                    detail.Text = category.SelectedIndex == 8 ? "No Input Viewer textures loaded. Use Add archive to open Retro Rewind Assets/RaceAssets.szs. Both standard and Nunchuk layouts are supported." : category.SelectedIndex == 2 ? "Items and minimap are normally in Race.szs. Use Add archive to load Race.szs from the same custom pack." : category.SelectedIndex == 3 ? "No pending picture replacements. Choose a texture in another category or import a picture folder." : "No textures in this category. Add your language's Race archive or select All textures.";
+                    detail.Text = search.Text.Trim().Length > 0 ? L.T("Keine Textur mit diesem Namensteil in den geladenen Archiven.", "No texture matching this name in the loaded archives.") : category.SelectedIndex == 11 ? "No tt_item_box_* textures loaded. Add Race.szs from your pack. These textures also appear under Items / minimap." : category.SelectedIndex == 10 ? "No speedometer layout loaded. Add the mod archive containing the speedometer, such as RaceAssets.szs. Race.szs and its language archive may not contain it." : category.SelectedIndex == 8 ? "No Input Viewer textures loaded. Use Add archive to open Retro Rewind Assets/RaceAssets.szs. Both standard and Nunchuk layouts are supported." : category.SelectedIndex == 2 ? "Items and minimap are normally in Race.szs. Use Add archive to load Race.szs from the same custom pack." : category.SelectedIndex == 3 ? "No pending picture replacements. Choose a texture in another category or import a picture folder." : "No textures in this category. Add your language's Race archive or select All textures.";
                 }
             }
             finally
             {
                 textures.EndUpdate();
+                refreshingTextures = false;
             }
 
-            UpdateState();
+            if (Selected != null)
+                ShowPreview();
+            else
+                UpdateState();
         }
 
         void UpdateState()

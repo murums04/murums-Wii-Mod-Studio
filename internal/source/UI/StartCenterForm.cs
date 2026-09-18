@@ -131,18 +131,13 @@ namespace murumsWiiModStudio
 
         private void PickTextures()
         {
-            using (OpenFileDialog dialog = new OpenFileDialog())
-            {
-                dialog.Title = L.T("Menüdatei auswählen, z.B. MenuSingle.szs oder Title.szs", "Choose a menu file, e.g. MenuSingle.szs or Title.szs");
-                dialog.Filter = "Menu archives|*.szs;*.arc;*.u8|All files|*.*";
-                if (dialog.ShowDialog(this) != DialogResult.OK)
-                    return;
-                Hide();
-                _owner.BrowseTexturesFromFile(dialog.FileName);
-                Close();
-            }
+            string path = GameArchiveImportForm.Select(this, "Menu archives|*.szs;*.arc;*.u8|All files|*.*");
+            if (path == null)
+                return;
+            Hide();
+            _owner.BrowseTexturesFromFile(path);
+            Close();
         }
-
         private Control Card(string titleText, string description, string pattern)
         {
             Button b = new Button();

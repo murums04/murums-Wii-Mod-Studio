@@ -20,9 +20,8 @@ namespace murumsWiiModStudio
             string[] parts = filter.Split('|');
             if (parts.Length < 2)
                 return filter;
-            return L.T("Datei oder Spielabbild", "File or game image") + "|" + parts[1]
-                + ";*.iso;*.wbfs;*.wia;*.ciso;*.wdf|" + filter
-                + "|ISO / WBFS|*.iso;*.wbfs;*.wia;*.ciso;*.wdf";
+            return L.T("ISO / WBFS (empfohlen)", "ISO / WBFS (recommended)")
+                + "|*.iso;*.wbfs;*.wia;*.ciso;*.wdf|" + filter;
         }
 
         private static ToolDescriptor RequireTool()

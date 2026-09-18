@@ -26,14 +26,14 @@ namespace murumsWiiModStudio
         {
             using (var picker = new OpenFileDialog
             {
-                Title = L.T("Datei öffnen – fehlt sie, ISO/WBFS wählen", "Open a file — if missing, choose ISO/WBFS"),
-                Filter = GameArchiveImport.WithDiscFilter(filter),
+                Title = L.T("ISO/WBFS wählen (empfohlen) oder Dateityp auf Archiv ändern", "Choose ISO/WBFS (recommended), or change file type to archives"),
+                Filter = GameArchiveImport.WithDiscFilter(filter), InitialDirectory = PackSelection.Folder(owner), FilterIndex = String.IsNullOrEmpty(PackSelection.Folder(owner)) ? 1 : 2,
                 CheckFileExists = true
             })
             {
                 if (picker.ShowDialog(owner) != DialogResult.OK)
                     return null;
-                return Resolve(owner, picker.FileName, preferred, outputFolder);
+                return Resolve(owner, picker.FileName, preferred, PackSelection.Output(owner, outputFolder));
             }
         }
 
@@ -56,7 +56,7 @@ namespace murumsWiiModStudio
             {
                 if (picker.ShowDialog(owner) != DialogResult.OK)
                     return null;
-                return Resolve(owner, picker.FileName, preferred, outputFolder);
+                return Resolve(owner, picker.FileName, preferred, PackSelection.Output(owner, outputFolder));
             }
         }
 
@@ -87,7 +87,7 @@ namespace murumsWiiModStudio
                 AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 16)
             }, 0);
             AddWide(grid, new Label { Text = Path.GetFileName(path), AutoSize = true, Margin = new Padding(0, 0, 0, 12) }, 1);
-            AddWide(grid, new Label { Text = L.T("1. Benötigte Datei", "1. Required file"), AutoSize = true }, 2);
+            AddWide(grid, new Label { Text = L.T("1. Benötigte Datei (bei Race die Spielsprache wählen)", "1. Required file (for Race, choose your game language)"), AutoSize = true }, 2);
             AddWide(grid, archives, 3);
             related.Text = L.T("Zugehörige Dateien mitnehmen (empfohlen)", "Include related files (recommended)");
             AddWide(grid, related, 4);
@@ -158,6 +158,12 @@ namespace murumsWiiModStudio
                     throw new InvalidDataException(L.T("Das benötigte Archiv fehlt in diesem Spielabbild.", "This game image does not contain the required archive."));
                 archives.Items.AddRange(available.Select(Path.GetFileName).Cast<object>().ToArray());
                 int preferred = Array.FindIndex(available, path => String.Equals(Path.GetFileName(path), preferredName, StringComparison.OrdinalIgnoreCase));
+                if (preferredName == "Race.szs")
+                {
+                    int languageArchive = Array.FindIndex(available, path => Path.GetFileName(path).StartsWith("Race_", StringComparison.OrdinalIgnoreCase));
+                    if (languageArchive >= 0)
+                        preferred = languageArchive;
+                }
                 archives.SelectedIndex = preferred >= 0 ? preferred : 0;
                 import.Enabled = true;
             }

@@ -16,6 +16,7 @@ namespace murumsWiiModStudio
 
         internal static void Show(IWin32Window owner, string folder)
         {
+            ToolStatus.Set(owner as Form, true);
             StudioMessageBox.Show(owner, Message(folder), L.T("Gespeichert – nächste Schritte", "Saved — next steps"),
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }

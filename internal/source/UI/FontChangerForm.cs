@@ -61,7 +61,7 @@ namespace murumsWiiModStudio
         };
         public FontChangerForm() : base("MKWii Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy", "Font.szs · *.brfnt · *.ttf")
         {
-            Action("Open Font.szs / BRFNT…", "Read your pack's font archive or one Wii BRFNT font.", Open);
+            Action("Browse ISO/WBFS…", "Read your pack's font archive or one Wii BRFNT font.", Open);
             Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Click Preview to apply it.", delegate
             {
                 string p = OpenPath("TrueType font|*.ttf");
@@ -253,7 +253,7 @@ namespace murumsWiiModStudio
 
         void Save()
         {
-            string folder = Path.Combine(Path.GetDirectoryName(source), "MUR_EDITED");
+            string folder = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(source), "MUR_EDITED"));
             string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source)));
             if (string.Equals(dest, Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a separate output folder.");

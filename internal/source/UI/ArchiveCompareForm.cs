@@ -113,6 +113,7 @@ namespace murumsWiiModStudio
                 copy.Files[key].Data = donor.Files[key].Data;
             copy.Save(p, donor.Source);
             Status.Text = "Saved combined copy: " + p;
+            ToolStatus.Set(this, true);
         }
     }
 }

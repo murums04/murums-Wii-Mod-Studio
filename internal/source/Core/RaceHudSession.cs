@@ -31,9 +31,7 @@ namespace murumsWiiModStudio
                     loaded.Add(new RaceHudArchive(common));
             }
 
-            string assets = Path.Combine(Path.GetDirectoryName(path), "RaceAssets.szs");
-            if (!File.Exists(assets))
-                assets = Path.Combine(Path.GetDirectoryName(path), "Assets", "RaceAssets.szs");
+            string assets = HudAssetSource.Find(path);
             if (File.Exists(assets) && !loaded.Any(a => string.Equals(a.Source, Path.GetFullPath(assets), StringComparison.OrdinalIgnoreCase)))
                 loaded.Add(new RaceHudArchive(assets));
             Archives.Clear();
@@ -47,7 +45,25 @@ namespace murumsWiiModStudio
                 return;
             if (Archives.Any(a => string.Equals(Path.GetFileName(a.Source), Path.GetFileName(full), StringComparison.OrdinalIgnoreCase)))
                 throw new IOException("This archive name is already loaded from another folder. Open a new pack instead.");
-            Archives.Add(new RaceHudArchive(full));
+            var added = new RaceHudArchive(full);
+            string assets = HudAssetSource.Find(full);
+            RaceHudArchive supplementary = null;
+            if (File.Exists(assets)
+                && !Path.GetFullPath(assets).Equals(full, StringComparison.OrdinalIgnoreCase)
+                && !Archives.Any(a => Path.GetFileName(a.Source).Equals("RaceAssets.szs", StringComparison.OrdinalIgnoreCase)))
+                supplementary = new RaceHudArchive(assets);
+            Archives.Add(added);
+            if (supplementary != null)
+                Archives.Add(supplementary);
+        }
+
+        public List<HudTexture> SearchTextures(int category, string query)
+        {
+            string term = (query ?? "").Trim();
+            if (term.Length == 0)
+                return Textures(category);
+            return Textures(4).Where(texture =>
+                Path.GetFileName(texture.Key).IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
         }
 
         public List<HudTexture> Textures(int category)
@@ -56,7 +72,7 @@ namespace murumsWiiModStudio
             foreach (var a in Archives)
             {
                 var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (category == 2 || category >= 5)
+                if (category == 2 || (category >= 5 && category <= 10))
                     foreach (var f in a.Files)
                     {
                         string name = Path.GetFileName(f.Key).ToLowerInvariant();
@@ -78,13 +94,17 @@ namespace murumsWiiModStudio
                     bool selected = a.Pictures.ContainsKey(f.Key) || a.Generated.ContainsKey(f.Key);
                     if (category == 0 && !n.Contains("position"))
                         continue;
-                    if (category == 1 && !n.Contains("number") && !n.Contains("lap") && !n.Contains("time") && !n.Contains("score"))
+                    if (category == 1 && !n.Contains("number") && !n.Contains("lap") && !n.Contains("time") && !n.Contains("score") && !n.Contains("slash"))
                         continue;
                     if (category == 2 && !n.Contains("item") && !n.Contains("map") && !referenced.Contains(Path.GetFileName(f.Key)))
                         continue;
                     if (category == 3 && !selected)
                         continue;
-                    if (category >= 5 && !referenced.Contains(Path.GetFileName(f.Key)))
+                    if (category == 11 && !Path.GetFileName(f.Key).StartsWith("tt_item_box_", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    bool namedSupplement = category == 10 && Path.GetFileNameWithoutExtension(f.Key).Equals("speed", StringComparison.OrdinalIgnoreCase)
+                        || category == 8 && Path.GetFileName(f.Key).StartsWith("basic_", StringComparison.OrdinalIgnoreCase);
+                    if (category >= 5 && category <= 10 && !namedSupplement && !referenced.Contains(Path.GetFileName(f.Key)))
                         continue;
                     result.Add(new HudTexture { Archive = a, Key = f.Key });
                 }

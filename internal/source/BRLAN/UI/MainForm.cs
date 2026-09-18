@@ -1011,6 +1011,7 @@ namespace murumsWiiModStudio.Brlan
             if (nr == null)
                 return;
             ContextMenuStrip menu = new ContextMenuStrip();
+            murumsWiiModStudio.StudioUx.TrackDropDown(menu);
             if (nr.Kind == NodeKind.Root || nr.Kind == NodeKind.Pai || nr.Kind == NodeKind.Animations)
             {
                 menu.Items.Add(L.T("Animation hinzufügen", "Add animation"), null, delegate
@@ -1526,6 +1527,7 @@ namespace murumsWiiModStudio.Brlan
             if (e.Button != MouseButtons.Right)
                 return;
             ContextMenuStrip menu = new ContextMenuStrip();
+            murumsWiiModStudio.StudioUx.TrackDropDown(menu);
             if (index >= 0)
             {
                 menu.Items.Add(L.T("Umbenennen", "Rename"), null, delegate
