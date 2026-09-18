@@ -35,7 +35,7 @@ namespace murumsWiiModStudio
             Height = 155
         };
         float[] peaks;
-        public MusicLoopForm() : base("MKWii Music & Loops Tool", "Choose audio • Set and preview a loop • Export a WAV with loop markers for BRSTM conversion")
+        public MusicLoopForm() : base("MKWii Music & Loops Tool", "Choose audio • Set and preview a loop • Export a WAV with loop markers for BRSTM conversion", "*.wav · *.mp3 / *.flac / *.ogg (FFmpeg) → *.wav → *.brstm")
         {
             Action("Open PCM WAV…", "Read a mono or stereo WAV. Loop positions count audio samples, not bytes.", delegate
             {

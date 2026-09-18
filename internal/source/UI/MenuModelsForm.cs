@@ -287,7 +287,7 @@ namespace murumsWiiModStudio
             grid.SetColumnSpan(appearance, 2);
             UpdatePictureInfo();
             output.Dock = DockStyle.Fill;
-            output.Text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RR_MODELS_BUILD");
+            output.Text = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MUR_EDITED");
             grid.Controls.Add(output, 0, 4);
             var folder = new Button
             {
@@ -334,6 +334,8 @@ namespace murumsWiiModStudio
             };
             appearance.Visible = false;
             help.Text = L.T("Modelle aus deinem Mario-Kart-Wii-Spielabbild laden. Studio speichert die Quelle lokal und erstellt nur bearbeitete Kopien.", "Import models from your Mario Kart Wii game image. Studio keeps the source locally and creates edited copies only.");
+            help.Text += "\n" + (archiveName == "Earth.szs" ? "Earth.szs · globe.arc" : "BackModel.szs");
+            layout.RowStyles[0].Height = 64;
             string cached = MenuModelSource.FindCached(archiveName);
             if (cached != null)
                 LoadArchive(cached);
@@ -748,6 +750,7 @@ namespace murumsWiiModStudio
 
                 BackupManager.WriteAllBytesSafely(path, model);
                 status.Text = L.T("Erstellt: ", "Created: ") + Path.GetFileName(path) + (globe != null ? " + globe.arc" : "") + "\r\n" + dir;
+                ExportHelp.Show(this, dir);
             }
             catch (Exception ex)
             {

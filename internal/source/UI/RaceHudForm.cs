@@ -87,7 +87,7 @@ namespace murumsWiiModStudio
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             foreach (float height in new[]
             {
-                112f,
+                148f,
                 82f,
                 48f,
                 -1f,
@@ -100,7 +100,7 @@ namespace murumsWiiModStudio
             )
                 grid.RowStyles.Add(new RowStyle(height < 0 ? SizeType.Percent : SizeType.Absolute, height < 0 ? 100 : height));
             Controls.Add(grid);
-            grid.Controls.Add(StudioChrome.Header("MKWii Race HUD Tool: pictures and placement shadows", "1  Open your pack's archives     2  Select replacements     3  Save copies to HUD_EDITED"), 0, 0);
+            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("MKWii Race HUD Tool: pictures and placement shadows", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs · Race_E.szs · RaceAssets.szs (Retro Rewind) · *.png / *.jpg"), 0, 0);
             grid.RowStyles[1].SizeType = SizeType.AutoSize;
             var bar = new FlowLayoutPanel
             {
@@ -281,7 +281,7 @@ namespace murumsWiiModStudio
                     if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard pending changes and open another pack?", "MKWii Race HUD Tool", MessageBoxButtons.YesNo) != DialogResult.Yes)
                         return;
                     session.Open(d.FileName);
-                    output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "HUD_EDITED");
+                    output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "MUR_EDITED");
                     shadows.Checked = false;
                     dirty = false;
                     RefreshList();
@@ -302,7 +302,7 @@ namespace murumsWiiModStudio
                 {
                     session.Add(d.FileName);
                     if (output.Text.Length == 0)
-                        output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "HUD_EDITED");
+                        output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "MUR_EDITED");
                     RefreshList();
                     UpdateState();
                 }
@@ -555,6 +555,8 @@ namespace murumsWiiModStudio
             var paths = session.Save(output.Text, shadows.Checked);
             dirty = false;
             status.Text = "Saved " + paths.Count + " edited archive(s) to " + output.Text + ". Back up your pack files before copying these results into it.";
+            if (paths.Count > 0)
+                ExportHelp.Show(this, output.Text);
         }
 
         protected override void Dispose(bool disposing)

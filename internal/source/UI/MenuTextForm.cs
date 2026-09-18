@@ -40,7 +40,7 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical,
             Font = new Font("Segoe UI", 16)
         };
-        public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy")
+        public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy", "MenuSingle_E.szs / Title_E.szs · *.bmg")
         {
             Action("Open archive / BMG…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
             Actions.Controls.Add(resource);
@@ -186,7 +186,7 @@ namespace murumsWiiModStudio
                 return;
             }
 
-            string folder = Folder(Path.Combine(Path.GetDirectoryName(source), "TEXT_EDITED"));
+            string folder = Folder(Path.Combine(Path.GetDirectoryName(source), "MUR_EDITED"));
             if (folder == null)
                 return;
             string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source)));
@@ -206,6 +206,7 @@ namespace murumsWiiModStudio
 
             dirty = false;
             Status.Text = "Saved: " + dest + "\nCheck message lengths in-game; this table does not simulate menu layout wrapping.";
+            ExportHelp.Show(this, folder);
         }
     }
 }

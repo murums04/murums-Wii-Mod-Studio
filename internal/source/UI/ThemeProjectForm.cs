@@ -21,7 +21,7 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical
         };
         readonly Button add, remove, build, save;
-        public ThemeProjectForm() : base("MKWii Theme Project Tool", "Collect your edited archives, fonts and music • Save a project • Build one output folder")
+        public ThemeProjectForm() : base("MKWii Theme Project Tool", "Collect your edited archives, fonts and music • Save a project • Build one output folder", "*.mtheme · MenuSingle.szs · Font.szs · *.brstm")
         {
             Action("New project…", "Choose your custom pack as the reference for destination filenames and folders.", delegate
             {
@@ -33,7 +33,7 @@ namespace murumsWiiModStudio
                     project = new ThemeProject
                     {
                         PackFolder = folder,
-                        OutputFolder = Path.Combine(folder, "THEME_EDITED")
+                        OutputFolder = Path.Combine(folder, "MUR_EDITED")
                     };
                     dirty = true;
                     RefreshProject();
@@ -94,6 +94,8 @@ namespace murumsWiiModStudio
                     dirty = true;
                     project.Build();
                     Status.Text = "Built " + project.Assets.Count + " files in " + folder + ". Save the project to retain this output location.";
+                    if (project.Assets.Count > 0)
+                        ExportHelp.Show(this, folder);
                 }
             });
             Action("Preview selected file…", "Inspect the selected replacement before building. Archives show their resources.", delegate

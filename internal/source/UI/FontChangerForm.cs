@@ -59,7 +59,7 @@ namespace murumsWiiModStudio
             Value = 2,
             Width = 65
         };
-        public FontChangerForm() : base("MKWii Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy")
+        public FontChangerForm() : base("MKWii Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy", "Font.szs · *.brfnt · *.ttf")
         {
             Action("Open Font.szs / BRFNT…", "Read your pack's font archive or one Wii BRFNT font.", Open);
             Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Click Preview to apply it.", delegate
@@ -119,7 +119,7 @@ namespace murumsWiiModStudio
             Actions.Controls.Add(hinting);
             StudioUx.SetHelp(hinting, "None preserves smooth outlines. Hinted modes rasterize TTF strokes against the pixel grid. Sharp uses monochrome rasterization. Click Preview to apply. These are Windows modes, not FreeType's slight/medium/full levels.");
             StudioUx.SetHelp(outlineSize, "Outline width in font-atlas pixels. Zero disables the outline. Click Preview to apply to the selected font.");
-            save = ExportAction("Save font copy…", "Save the previewed result using the original filename in a separate folder.", Save);
+            save = ExportAction("Save font copy", "Save the previewed result in MUR_EDITED beside the source file, keeping the original filename.", Save);
             var atlasTools = new FlowLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -253,9 +253,7 @@ namespace murumsWiiModStudio
 
         void Save()
         {
-            string folder = Folder(Path.Combine(Path.GetDirectoryName(source), "FONT_EDITED"));
-            if (folder == null)
-                return;
+            string folder = Path.Combine(Path.GetDirectoryName(source), "MUR_EDITED");
             string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source)));
             if (string.Equals(dest, Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a separate output folder.");
@@ -275,6 +273,7 @@ namespace murumsWiiModStudio
 
             dirty = false;
             Status.Text = "Saved: " + dest + "\nCopy this file into your test pack to check text spacing in-game.";
+            ExportHelp.Show(this, folder);
         }
     }
 }

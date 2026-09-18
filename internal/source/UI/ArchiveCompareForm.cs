@@ -15,7 +15,7 @@ namespace murumsWiiModStudio
             HorizontalScrollbar = true
         };
         readonly Button compare, save;
-        public ArchiveCompareForm() : base("MKWii Archive Compare Tool", "Compare resource contents • Select changed entries • Save a combined archive copy")
+        public ArchiveCompareForm() : base("MKWii Archive Compare Tool", "Compare resource contents • Select changed entries • Save a combined archive copy", "MenuSingle.szs ↔ MUR_EDITED/MenuSingle.szs · *.szs / *.arc / *.u8")
         {
             Action("Open base archive…", "This archive supplies all unchanged files in the combined copy.", delegate
             {
