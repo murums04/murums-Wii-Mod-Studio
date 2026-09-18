@@ -50,6 +50,7 @@ namespace murumsWiiModStudio
         };
         string fullPicture = "";
         bool isEarth;
+        readonly string archiveName;
         TableLayoutPanel layout;
         Func<string> sharedOutput;
         public void UseOutputFolder(Func<string> resolve)
@@ -61,8 +62,9 @@ namespace murumsWiiModStudio
                     c.Visible = false;
         }
 
-        public MenuModelsForm()
+        public MenuModelsForm(string archiveName)
         {
+            this.archiveName = archiveName;
             Font = new Font("Segoe UI", 10F);
             AutoScaleMode = AutoScaleMode.Font;
             Text = L.T("3D-Menühintergründe", "3D menu backgrounds");
@@ -114,17 +116,23 @@ namespace murumsWiiModStudio
                 Text = L.T("Quelle wählen…", "Choose source…"),
                 Dock = DockStyle.Fill
             };
+            var sourceMenu = new ContextMenuStrip();
+            sourceMenu.Items.Add(L.T("Aus Mario-Kart-Wii-ISO/WBFS laden…", "Import from Mario Kart Wii ISO/WBFS…"), null, async delegate
+            {
+                await ImportGameModels();
+            });
+            sourceMenu.Items.Add(L.T("Vorhandenes Modellarchiv wählen…", "Choose existing model archive…"), null, delegate
+            {
+                ChooseModelArchive();
+            });
+            browse.Text = L.T("Spielquelle…", "Game source…");
             browse.Click += delegate
             {
-                using (var d = new OpenFileDialog
-                {
-                    InitialDirectory = LocalFolder,
-                    Filter = "Model archives|BackModel.szs;Earth.szs|SZS|*.szs"
-                }
-
-                )
-                    if (d.ShowDialog(this) == DialogResult.OK)
-                        LoadArchive(d.FileName);
+                sourceMenu.Show(browse, 0, browse.Height);
+            };
+            Disposed += delegate
+            {
+                sourceMenu.Dispose();
             };
             grid.Controls.Add(browse, 1, 1);
             models.Dock = DockStyle.Fill;
@@ -316,9 +324,81 @@ namespace murumsWiiModStudio
             StyleButtons(this);
             build.BackColor = DarkTheme.Accent;
             build.ForeColor = Color.White;
-            string local = Path.Combine(LocalFolder, "BackModel.szs");
-            if (File.Exists(local))
-                LoadArchive(local);
+            VisibleChanged += delegate
+            {
+                if (!Visible || source.Text.Length != 0)
+                    return;
+                string available = MenuModelSource.FindCached(archiveName);
+                if (available != null)
+                    LoadArchive(available);
+            };
+            appearance.Visible = false;
+            help.Text = L.T("Modelle aus deinem Mario-Kart-Wii-Spielabbild laden. Studio speichert die Quelle lokal und erstellt nur bearbeitete Kopien.", "Import models from your Mario Kart Wii game image. Studio keeps the source locally and creates edited copies only.");
+            string cached = MenuModelSource.FindCached(archiveName);
+            if (cached != null)
+                LoadArchive(cached);
+            else
+                status.Text = L.T("Spielquelle wählen: ISO/WBFS oder ", "Choose a game source: ISO/WBFS or ") + archiveName + L.T(". Nicht im RR-Download enthalten.", ". Not included in the RR download.");
+        }
+
+        async System.Threading.Tasks.Task ImportGameModels()
+        {
+            string imagePath;
+            using (var dialog = new OpenFileDialog
+            {
+                Title = L.T("Mario-Kart-Wii-Spielabbild wählen", "Choose your Mario Kart Wii game image"),
+                Filter = "Wii game images|*.iso;*.wbfs;*.wia;*.ciso;*.wdf",
+                CheckFileExists = true
+            }
+
+            )
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+                imagePath = dialog.FileName;
+            }
+
+            Enabled = false;
+            UseWaitCursor = true;
+            status.Text = L.T("Benötigte Modelle werden aus dem Spiel geladen…", "Importing the required models from your game…");
+            try
+            {
+                string imported = await System.Threading.Tasks.Task.Run(() => MenuModelSource.ImportDisc(imagePath, archiveName));
+                if (!IsDisposed)
+                    LoadArchive(imported);
+            }
+            catch (Exception error)
+            {
+                if (!IsDisposed)
+                {
+                    status.Text = L.T("Import fehlgeschlagen. Bisherige Quelle bleibt erhalten.", "Import failed. Your previous source is unchanged.");
+                    StudioMessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            finally
+            {
+                if (!IsDisposed)
+                {
+                    Enabled = true;
+                    UseWaitCursor = false;
+                }
+            }
+        }
+
+        void ChooseModelArchive()
+        {
+            using (var dialog = new OpenFileDialog
+            {
+                Title = L.T("Modellarchiv wählen: ", "Choose model archive: ") + archiveName,
+                Filter = archiveName + "|" + archiveName,
+                CheckFileExists = true
+            }
+
+            )
+            {
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    LoadArchive(dialog.FileName);
+            }
         }
 
         public Button ExternalBuildButton()
@@ -397,6 +477,7 @@ namespace murumsWiiModStudio
         {
             try
             {
+                MenuModelSource.Validate(path, archiveName);
                 var archive = U8Archive.Load(File.ReadAllBytes(path));
                 switches.Clear();
                 while (models.Controls.Count > 0)
@@ -638,7 +719,7 @@ namespace murumsWiiModStudio
                 }
 
                 byte[] globe = null;
-                string globeSource = Path.Combine(LocalFolder, "globe.arc");
+                string globeSource = MenuModelSource.FindGlobeArchive(source.Text);
                 if (isEarth && (globeColor.ToArgb() != Color.White.ToArgb() || glowColor.ToArgb() != Color.White.ToArgb()))
                 {
                     if (!File.Exists(globeSource))

@@ -242,15 +242,12 @@ namespace murumsWiiModStudio
         {
             tab.AutoScroll = false;
             tab.Padding = new Padding(0);
-            MenuModelsForm editor = new MenuModelsForm();
+            MenuModelsForm editor = new MenuModelsForm(archiveName);
             editor.TopLevel = false;
             editor.FormBorderStyle = FormBorderStyle.None;
             editor.MinimumSize = Size.Empty;
             editor.Dock = DockStyle.Fill;
             editor.UseOutputFolder(ResolveOutputFolder);
-            string archive = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "internal", "local-game-files", archiveName);
-            if (File.Exists(archive))
-                editor.LoadArchive(archive);
             tab.Controls.Add(editor);
             editor.Show();
             _exports.Add(tab, editor.ExternalBuildButton());

@@ -286,6 +286,11 @@ namespace murumsWiiModStudio
             {
                 StudioUpdateForm.ShowUpdates(this, null);
             }));
+            helpMenu.DropDownItems.Add(MakeMenu("Changelog", Keys.None, delegate
+            {
+                using (var dialog = new StudioChangelogForm())
+                    dialog.ShowDialog(this);
+            }));
             helpMenu.DropDownItems.Add(MakeMenu(L.T("Allgemeine Hilfe", "General help"), Keys.F1, delegate
             {
                 StudioHelpWindow.Show(this, _helpPage, L.T("Hilfe", "Help"));

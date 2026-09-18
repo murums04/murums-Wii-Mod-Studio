@@ -27,7 +27,7 @@ namespace murumsWiiModStudio
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.Controls.Add(StudioChrome.Header(L.T("Dein Wii-Modding-Studio", "Your Wii modding studio"), L.T("Werkzeuge für Archive, Texturen und Menüs • Beta-Version", "Tools for archives, textures and menus • Beta release")), 0, 0);
             var features = new TableLayoutPanel
             {
@@ -49,7 +49,8 @@ namespace murumsWiiModStudio
             {
                 Text = L.T("Schliessen", "Close"),
                 DialogResult = DialogResult.OK,
-                Size = new Size(130, 36),
+                AutoSize = true,
+                MinimumSize = new Size(130, 36),
                 Anchor = AnchorStyles.Right,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = DarkTheme.Accent2,
@@ -57,17 +58,26 @@ namespace murumsWiiModStudio
                 Cursor = Cursors.Hand
             };
             close.FlatAppearance.BorderColor = DarkTheme.Accent;
-            var actions = new FlowLayoutPanel
+            var actions = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.RightToLeft,
-                WrapContents = false
+                AutoSize = true,
+                ColumnCount = 3,
+                RowCount = 1,
+                Margin = new Padding(0),
+                Padding = new Padding(0, 8, 0, 0)
             };
-            actions.Controls.Add(close);
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            actions.Controls.Add(close, 2, 0);
             var license = new Button
             {
                 Text = L.T("Credits & Lizenzen", "Credits & licenses"),
-                Size = new Size(170, 36),
+                AutoSize = true,
+                UseMnemonic = false,
+                MinimumSize = new Size(170, 36),
                 FlatStyle = FlatStyle.Flat
             };
             license.Click += delegate
@@ -75,18 +85,22 @@ namespace murumsWiiModStudio
                 using (var dialog = new StudioLicenseForm())
                     dialog.ShowDialog(this);
             };
-            actions.Controls.Add(license);
+            actions.Controls.Add(license, 1, 0);
             var profile = new LinkLabel
             {
                 Text = "github.com/murums04",
                 AutoSize = true,
-                Margin = new Padding(8, 10, 16, 0)
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(4, 4, 12, 4),
+                LinkColor = Color.FromArgb(190, 166, 255),
+                ActiveLinkColor = Color.White,
+                VisitedLinkColor = Color.FromArgb(190, 166, 255)
             };
             profile.LinkClicked += delegate
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/murums04") { UseShellExecute = true });
             };
-            actions.Controls.Add(profile);
+            actions.Controls.Add(profile, 0, 0);
             layout.Controls.Add(actions, 0, 3);
             Controls.Add(layout);
             AcceptButton = close;
