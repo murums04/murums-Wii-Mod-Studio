@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -98,6 +98,28 @@ namespace murumsWiiModStudio
                 }
             }
 
+            var label = c as Label;
+            if (label != null)
+            {
+                label.EnabledChanged += delegate { label.Invalidate(); };
+                label.Paint += delegate(object sender, PaintEventArgs e)
+                {
+                    if (label.Enabled) return;
+                    Color background = label.BackColor.A == 0 && label.Parent != null ? label.Parent.BackColor : label.BackColor;
+                    using (var brush = new SolidBrush(background)) e.Graphics.FillRectangle(brush, label.ClientRectangle);
+                    Rectangle bounds = label.ClientRectangle;
+                    bounds = new Rectangle(bounds.X + label.Padding.Left, bounds.Y + label.Padding.Top,
+                        Math.Max(0, bounds.Width - label.Padding.Horizontal), Math.Max(0, bounds.Height - label.Padding.Vertical));
+                    TextFormatFlags flags = label.AutoSize ? TextFormatFlags.SingleLine : TextFormatFlags.WordBreak;
+                    if (!label.UseMnemonic) flags |= TextFormatFlags.NoPrefix;
+                    if (label.AutoEllipsis) flags |= TextFormatFlags.EndEllipsis;
+                    if (label.TextAlign == ContentAlignment.MiddleLeft || label.TextAlign == ContentAlignment.MiddleCenter || label.TextAlign == ContentAlignment.MiddleRight) flags |= TextFormatFlags.VerticalCenter;
+                    if (label.TextAlign == ContentAlignment.TopCenter || label.TextAlign == ContentAlignment.MiddleCenter || label.TextAlign == ContentAlignment.BottomCenter) flags |= TextFormatFlags.HorizontalCenter;
+                    if (label.TextAlign == ContentAlignment.TopRight || label.TextAlign == ContentAlignment.MiddleRight || label.TextAlign == ContentAlignment.BottomRight) flags |= TextFormatFlags.Right;
+                    if (label.TextAlign == ContentAlignment.BottomLeft || label.TextAlign == ContentAlignment.BottomCenter || label.TextAlign == ContentAlignment.BottomRight) flags |= TextFormatFlags.Bottom;
+                    TextRenderer.DrawText(e.Graphics, label.Text, label.Font, bounds, DarkTheme.Disabled, flags);
+                };
+            }
             var combo = c as ComboBox;
             if (combo != null)
             {

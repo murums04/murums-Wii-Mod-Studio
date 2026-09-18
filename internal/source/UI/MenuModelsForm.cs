@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -118,7 +118,8 @@ namespace murumsWiiModStudio
                 Text = L.T("Quelle wählen…", "Choose source…"),
                 Dock = DockStyle.Fill
             };
-            browse.Text = L.T("Auswählen...", "Browse...");
+            browse.Text = "Browse ISO/WBFS…";
+            browse.Name = "PackSourceAction";
             browse.Click += delegate { ImportGameModels(); };
             grid.Controls.Remove(source);
             var sourcePanel = new TableLayoutPanel
@@ -142,6 +143,7 @@ namespace murumsWiiModStudio
             sourcePanel.Controls.Add(source, 0, 1);
             var addArchive = new Button
             {
+                Name = "PackSourceAction",
                 Text = L.T("Archiv hinzufügen...", "Add archive..."),
                 Dock = DockStyle.Fill
             };

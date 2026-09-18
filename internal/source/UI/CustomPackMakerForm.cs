@@ -9,6 +9,10 @@ namespace murumsWiiModStudio
     internal sealed class CustomPackMakerForm : StudioToolForm
     {
         readonly TextBox packName = new TextBox { Dock = DockStyle.Fill, MaxLength = 70 };
+        readonly NumericUpDown modId = new NumericUpDown { Minimum = -1, Maximum = Int32.MaxValue, Value = -1, Width = 95 };
+        readonly NumericUpDown priority = new NumericUpDown { Minimum = Int32.MinValue, Maximum = Int32.MaxValue, Width = 95 };
+        readonly CheckBox enabled = new CheckBox { Text = "IsEnabled", AutoSize = true };
+        readonly TextBox author = new TextBox { Dock = DockStyle.Fill, MaxLength = 120 };
         readonly TextBox description = new TextBox { Dock = DockStyle.Fill, Multiline = true, MaxLength = 2000, ScrollBars = ScrollBars.Vertical };
         readonly ComboBox template = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
         readonly TextBox destination = new TextBox { Dock = DockStyle.Fill };
@@ -72,8 +76,8 @@ namespace murumsWiiModStudio
             grid.Controls.Add(files, 0, 6);
             grid.SetColumnSpan(files, 3);
             var note = new Label { AutoSize = true, Dock = DockStyle.Fill, Text = L.T(
-                "Vorlagen sind Vorschläge; portable/eigene Pfade über Browse wählen. Kopiert ausgewählte .szs-Dateien und globe.arc. Ein neues Pack bleibt zunächst deaktiviert.",
-                "Presets are suggestions; use Browse for portable/custom paths. Copies selected .szs files and globe.arc. New packs start disabled.") };
+                "Vorlagen sind Vorschläge; portable/eigene Pfade über Browse wählen. Kopiert ausgewählte .szs-Dateien und globe.arc. IsEnabled ist standardmäßig aus.",
+                "Presets are suggestions; use Browse for portable/custom paths. Copies selected .szs files and globe.arc. IsEnabled is off by default.") };
             var packActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
             packActions.Controls.Add(new Label { Text = L.T("Gespeicherte Packs", "Saved packs"), AutoSize = true, Anchor = AnchorStyles.Left });
             var remember = new Button { Text = L.T("Pack hinzufügen…", "Add existing pack…"), AutoSize = true };
@@ -100,11 +104,33 @@ namespace murumsWiiModStudio
             grid.SetColumnSpan(packs, 3);
             grid.Controls.Add(note, 0, 9);
             grid.SetColumnSpan(note, 3);
+            grid.RowCount++;
+            foreach (Control control in grid.Controls.Cast<Control>().OrderByDescending(c => grid.GetRow(c)).ToArray())
+                if (grid.GetRow(control) >= 1) grid.SetRow(control, grid.GetRow(control) + 1);
+            grid.RowStyles.Insert(1, new RowStyle(SizeType.AutoSize));
+            AddRow(grid, 1, L.T("Pack-Autor", "Pack author"), author);
+            StudioUx.DisableHover(author);
+            var metadata = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+            metadata.Controls.Add(new Label { Text = "ModID", AutoSize = true, Anchor = AnchorStyles.Left });
+            metadata.Controls.Add(modId);
+            metadata.Controls.Add(new Label { Text = "Priority", AutoSize = true, Anchor = AnchorStyles.Left });
+            metadata.Controls.Add(priority);
+            metadata.Controls.Add(enabled);
+            grid.RowCount++;
+            foreach (Control control in grid.Controls.Cast<Control>().OrderByDescending(c => grid.GetRow(c)).ToArray())
+                if (grid.GetRow(control) >= 3) grid.SetRow(control, grid.GetRow(control) + 1);
+            grid.RowStyles.Insert(3, new RowStyle(SizeType.AutoSize));
+            AddRow(grid, 3, L.T("INI-Einstellungen", "INI settings"), metadata);
+            grid.SetColumnSpan(metadata, 2);
+            StudioUx.SetHelp(modId, L.T("-1 für ein eigenes lokales Pack beibehalten, sofern keine ModID vorliegt.", "Keep -1 for a local custom pack unless you have a ModID."));
+            StudioUx.SetHelp(priority, L.T("Prioritätswert in der Pack-INI. Standard: 0.", "Priority value written to the pack INI. Default: 0."));
+            StudioUx.SetHelp(enabled, L.T("Pack in der INI als aktiviert markieren.", "Mark the pack as enabled in its INI."));
             Body.Controls.Add(grid);
             create = ExportAction(L.T("Pack erstellen", "Create pack"), "Create a new pack without overwriting existing files.", Create);
             template.SelectedIndexChanged += delegate
             {
                 destination.Text = template.SelectedIndex == 2 ? CustomPacks.LegacyDolphinRoot() : CustomPacks.DefaultRoot(template.SelectedIndex == 0);
+                modId.Enabled = priority.Enabled = enabled.Enabled = template.SelectedIndex == 0;
                 UpdatePreview();
             };
             packName.TextChanged += delegate { UpdatePreview(); };
@@ -113,7 +139,7 @@ namespace murumsWiiModStudio
             StudioUx.DisableHover(packName);
             StudioUx.DisableHover(description);
             StudioUx.DisableHover(destination);
-            MinimumSize = new Size(950, 820);
+            MinimumSize = new Size(950, 870);
             Size = new Size(1140, 900);
             RefreshPacks();
             Finish();
@@ -169,9 +195,13 @@ namespace murumsWiiModStudio
         void Create()
         {
             var pack = CustomPacks.Create(destination.Text, packName.Text, description.Text,
-                template.SelectedIndex == 0, files.Items.Cast<string>());
+                template.SelectedIndex == 0, files.Items.Cast<string>(), author.Text,
+                template.SelectedIndex == 0 ? (int)modId.Value : -1,
+                template.SelectedIndex == 0 && enabled.Checked,
+                template.SelectedIndex == 0 ? (int)priority.Value : 0);
             string instructions = template.SelectedIndex == 0
-                ? L.T("Pack in deiner Mod-Liste aktivieren und das Spiel neu starten.", "Enable the pack in your mod list and restart your game.")
+                ? (pack.IsEnabled ? L.T("Pack ist aktiviert. Starte dein Spiel neu.", "The pack is enabled. Restart your game.")
+                    : L.T("Pack in deiner Mod-Liste aktivieren und das Spiel neu starten.", "Enable the pack in your mod list and restart your game."))
                 : L.T("Mario Kart Wii mit Riivolution-Patches starten, die neue XML unter riivolution öffnen und das Pack aktivieren.",
                     "Start Mario Kart Wii with Riivolution patches, open the new XML under riivolution and enable the pack.");
             try { CustomPacks.Register(pack); RefreshPacks(); }
@@ -181,10 +211,10 @@ namespace murumsWiiModStudio
                     Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             Status.Text = L.T("Pack erstellt: ", "Pack created: ") + pack.FilesFolder; ToolStatus.Set(this, true);
-            StudioMessageBox.Show(this, Status.Text + "\n\n" + instructions + "\n\n"
+            StudioMessageBox.ShowPath(this, pack.FilesFolder, instructions + "\n\n"
                 + L.T("In anderen Tools: Custom pack auswählen. Bearbeitete Kopien landen in MUR_EDITED; danach gewünschte Pack-Dateien ersetzen.",
                     "In other tools: select Custom pack. Edited copies go to MUR_EDITED; then replace the intended pack files."),
-                Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                L.T("Pack erstellt", "Pack created"));
         }
     }
 }

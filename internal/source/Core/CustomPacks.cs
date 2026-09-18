@@ -13,6 +13,11 @@ namespace murumsWiiModStudio
     {
         public string Name { get; set; }
         public string Description { get; set; }
+        public string Author { get; set; }
+        public int ModID { get; set; }
+        public bool IsEnabled { get; set; }
+        public int Priority { get; set; }
+        public CustomPack() { ModID = -1; }
         public string Folder { get; set; }
         public string FilesFolder { get; set; }
         public string Template { get; set; }
@@ -91,9 +96,10 @@ namespace murumsWiiModStudio
                 + "/Files\" recursive=\"false\" resize=\"true\" create=\"false\" /></patch>\n</wiidisc>\n";
         }
 
-        internal static CustomPack Create(string root, string name, string description, bool retroRewind, IEnumerable<string> sources)
+        internal static CustomPack Create(string root, string name, string description, bool retroRewind, IEnumerable<string> sources, string author = null, int modId = -1, bool isEnabled = false, int priority = 0)
         {
             ValidateName(name);
+            if (modId < -1) throw new ArgumentOutOfRangeException("modId");
             if (String.IsNullOrWhiteSpace(root))
                 throw new ArgumentException(L.T("Bitte einen Zielordner wählen.", "Please choose a destination folder."));
             root = Path.GetFullPath(root);
@@ -110,6 +116,8 @@ namespace murumsWiiModStudio
                     throw new IOException(L.T("Bitte vorhandene .szs-Dateien oder globe.arc wählen: ", "Please select existing .szs files or globe.arc: ") + file);
             var pack = new CustomPack {
                 Name = name, Description = description ?? "", Folder = folder,
+                ModID = modId, IsEnabled = isEnabled, Priority = priority,
+                Author = Regex.Replace(author ?? "", @"[\r\n\0]+", " ").Trim(),
                 FilesFolder = Path.Combine(folder, retroRewind ? name : "Files"),
                 Template = retroRewind ? "WheelWizard" : "Dolphin / Riivolution"
             };
@@ -126,12 +134,16 @@ namespace murumsWiiModStudio
                 {
                     string summary = Regex.Replace(pack.Description, @"[\r\n\0]+", " ");
                     File.WriteAllText(Path.Combine(stage, name + ".ini"),
-                        "[Mod]\nName = " + name + "\nAuthor = \nDescription = " + summary
-                        + "\nModID = -1\nIsEnabled = False\nPriority = 0\n", new UTF8Encoding(false));
+                        "[Mod]\nName = " + name + "\nAuthor = " + pack.Author + "\nDescription = " + summary
+                        + "\nModID = " + pack.ModID.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + "\nIsEnabled = " + pack.IsEnabled.ToString() + "\nPriority = "
+                        + pack.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n", new UTF8Encoding(false));
                 }
                 else
                 {
                     File.WriteAllText(Path.Combine(stage, "Description.txt"), pack.Description, new UTF8Encoding(false));
+                    if (!String.IsNullOrEmpty(pack.Author))
+                        File.WriteAllText(Path.Combine(stage, "Author.txt"), pack.Author, new UTF8Encoding(false));
                     Directory.CreateDirectory(Path.GetDirectoryName(xml));
                     using (var stream = new FileStream(xml, FileMode.CreateNew, FileAccess.Write))
                     {

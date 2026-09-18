@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -80,6 +81,14 @@ namespace murumsWiiModStudio
 
             BuildUi();
             AutoDetectPaths(currentArchivePath);
+            var openSource = NewButton("Browse ISO/WBFS…");
+            openSource.Name = "PackSourceAction";
+            openSource.Click += delegate { BrowseMenuSource(); };
+            Controls.Add(openSource);
+            var addSource = NewButton("Add archive / ISO…");
+            addSource.Name = "PackSourceAction";
+            addSource.Click += delegate { BrowseMenuSource(); };
+            Controls.Add(addSource);
             PackSelection.Attach(this, delegate(CustomPack pack)
             {
                 DetectArchivesInFolder(pack.FilesFolder);
@@ -929,6 +938,22 @@ namespace murumsWiiModStudio
             }
         }
 
+        private void BrowseMenuSource()
+        {
+            string path = GameArchiveImportForm.Select(this, "Menu archives|*.szs", null, _outputFolder.Text);
+            if (path == null) return;
+            string name = Path.GetFileNameWithoutExtension(path);
+            TargetEditor target = _targets.FirstOrDefault(t => name == t.ArchiveBaseName || name.StartsWith(t.ArchiveBaseName + "_", StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                StudioMessageBox.Show(this, L.T("Für Earth, globe und BackModel bitte den passenden Bereich unter Other UI verwenden.",
+                    "For Earth, globe and BackModel, use the matching section under Other UI."), Text);
+                return;
+            }
+            if (name == target.ArchiveBaseName) target.CommonPath.Text = path;
+            else { target.LanguagePath.Text = path; target.LanguageFields.Visible = true; }
+            ResetPathViews();
+        }
         private void BrowseOutputFolder()
         {
             using (murumsWiiModStudio.FolderPickerDialog d = new murumsWiiModStudio.FolderPickerDialog())

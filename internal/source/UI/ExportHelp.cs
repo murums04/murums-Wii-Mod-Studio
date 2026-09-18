@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
@@ -17,8 +17,9 @@ namespace murumsWiiModStudio
         internal static void Show(IWin32Window owner, string folder)
         {
             ToolStatus.Set(owner as Form, true);
-            StudioMessageBox.Show(owner, Message(folder), L.T("Gespeichert – nächste Schritte", "Saved — next steps"),
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            string message = Message(folder);
+            StudioMessageBox.ShowPath(owner, Path.GetFullPath(folder), message.Substring(message.IndexOf("\n\n") + 2),
+                L.T("Gespeichert – nächste Schritte", "Saved — next steps"));
         }
     }
 }
