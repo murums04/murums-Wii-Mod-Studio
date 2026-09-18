@@ -92,7 +92,7 @@ namespace murumsWiiModStudio
         {
         }
 
-        internal GameHudForm(IEnumerable<StudioArchiveCopy> archives) : base(archives == null ? "Game HUD Tool" : "Race HUD Tool – Layout", L.T("Layout auswählen • Elemente auf der Arbeitsfläche verschieben • Farben und Texturen bearbeiten", "Choose a layout • Drag elements on the canvas • Edit colours and textures"))
+        internal GameHudForm(IEnumerable<StudioArchiveCopy> archives) : base(archives == null ? "MKWii Game HUD Tool" : "MKWii Race HUD Tool – Layout", L.T("Layout auswählen • Elemente auf der Arbeitsfläche verschieben • Farben und Texturen bearbeiten", "Choose a layout • Drag elements on the canvas • Edit colours and textures"))
         {
             embedded = archives != null;
             Size = new Size(1380, 900);

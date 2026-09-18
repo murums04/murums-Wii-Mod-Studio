@@ -64,7 +64,7 @@ namespace murumsWiiModStudio
 
         public RaceHudForm()
         {
-            Text = "Race HUD Tool — murums Wii Mod Studio";
+            Text = "MKWii Race HUD Tool — murums Wii Mod Studio";
             Size = new Size(1180, 910);
             MinimumSize = new Size(1100, 860);
             StartPosition = FormStartPosition.CenterParent;
@@ -100,7 +100,7 @@ namespace murumsWiiModStudio
             )
                 grid.RowStyles.Add(new RowStyle(height < 0 ? SizeType.Percent : SizeType.Absolute, height < 0 ? 100 : height));
             Controls.Add(grid);
-            grid.Controls.Add(StudioChrome.Header("Race HUD Tool: pictures and placement shadows", "1  Open your pack's archives     2  Select replacements     3  Save copies to HUD_EDITED"), 0, 0);
+            grid.Controls.Add(StudioChrome.Header("MKWii Race HUD Tool: pictures and placement shadows", "1  Open your pack's archives     2  Select replacements     3  Save copies to HUD_EDITED"), 0, 0);
             grid.RowStyles[1].SizeType = SizeType.AutoSize;
             var bar = new FlowLayoutPanel
             {
@@ -232,7 +232,7 @@ namespace murumsWiiModStudio
             RefreshList();
             FormClosing += delegate (object sender, FormClosingEventArgs e)
             {
-                if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Close without saving the current selection changes?", "Race HUD Tool", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Close without saving the current selection changes?", "MKWii Race HUD Tool", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     e.Cancel = true;
             };
         }
@@ -258,7 +258,7 @@ namespace murumsWiiModStudio
                 catch (Exception ex)
                 {
                     status.Text = "Action failed; source archives unchanged.";
-                    murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, "Race HUD Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, "MKWii Race HUD Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 finally
                 {
@@ -278,7 +278,7 @@ namespace murumsWiiModStudio
             )
                 if (d.ShowDialog(this) == DialogResult.OK)
                 {
-                    if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard pending changes and open another pack?", "Race HUD Tool", MessageBoxButtons.YesNo) != DialogResult.Yes)
+                    if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard pending changes and open another pack?", "MKWii Race HUD Tool", MessageBoxButtons.YesNo) != DialogResult.Yes)
                         return;
                     session.Open(d.FileName);
                     output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "HUD_EDITED");

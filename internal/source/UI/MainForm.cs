@@ -195,17 +195,17 @@ namespace murumsWiiModStudio
                 FindEntry(true);
             }));
             ToolStripMenuItem tools = new ToolStripMenuItem(L.T("Tools", "Tools"));
-            tools.DropDownItems.Add(MakeMenu("Game HUD Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Game HUD Tool...", Keys.None, delegate
             {
                 using (var hud = new GameHudForm())
                     hud.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("Race HUD Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Race HUD Tool...", Keys.None, delegate
             {
                 using (var hud = new RaceHudForm())
                     hud.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu(L.T("RR-Backgrounds Tool...", "RR-Backgrounds Tool..."), Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu(L.T("MKWii RR-Backgrounds Tool...", "MKWii RR-Backgrounds Tool..."), Keys.None, delegate
             {
                 OpenRetroRewindGifWizard();
             }));

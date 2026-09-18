@@ -62,7 +62,7 @@ namespace murumsWiiModStudio
 
         public RetroRewindGifWizard(string currentArchivePath)
         {
-            Text = L.T("RR-Backgrounds Tool", "RR-Backgrounds Tool");
+            Text = L.T("MKWii RR-Backgrounds Tool", "MKWii RR-Backgrounds Tool");
             StartPosition = FormStartPosition.CenterParent;
             MinimumSize = new Size(980, 700);
             Size = new Size(1180, Math.Min(950, Screen.FromControl(this).WorkingArea.Height - 40));
@@ -1159,7 +1159,7 @@ namespace murumsWiiModStudio
 
                 _progress.Value = 100;
                 _status.Text = failures == 0 ? L.T("Fertig. Die Bereiche mit ausgewähltem Bild in diesem Tab wurden verarbeitet.", "Done. The areas with a selected picture in this tab were processed.") : L.F("Fertig mit {0} Fehler(n). Siehe Zusammenfassung.", "Done with {0} error(s). See summary.", failures);
-                murumsWiiModStudio.StudioMessageBox.Show(this, Summary, L.T("RR-Backgrounds Tool", "RR-Backgrounds Tool"), MessageBoxButtons.OK, failures == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                murumsWiiModStudio.StudioMessageBox.Show(this, Summary, L.T("MKWii RR-Backgrounds Tool", "MKWii RR-Backgrounds Tool"), MessageBoxButtons.OK, failures == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {

@@ -114,7 +114,7 @@ internal sealed class SetupPage : Form
         sidebar.Controls.Add(new Label { Text = "Included tools", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(193, 160, 255), Font = new Font("Segoe UI", 10, FontStyle.Bold) });
         string[] titles =
         {
-            "Race HUD & Game HUD",
+            "MKWii Race & Game HUD",
             "Archives & textures",
             "Fonts & messages",
             "Backgrounds & animation",

@@ -5,7 +5,7 @@ Current release: **2.1.0-beta2**. Developed by murums with AI assistance.
 
 ## Features
 
-- Race HUD Tool and Game HUD Tool: visual movement, resizing, colours and texture replacement.
+- MKWii Race HUD Tool and MKWii Game HUD Tool: visual movement, resizing, colours and texture replacement.
 - Archives and textures: open, inspect, edit, replace and export supported resources.
 - Fonts and messages: Font Changer and game text editing.
 - Backgrounds and animation: menu backgrounds, GIF import and BRLAN editing.
