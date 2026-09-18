@@ -209,27 +209,27 @@ namespace murumsWiiModStudio
             {
                 OpenRetroRewindGifWizard();
             }));
-            tools.DropDownItems.Add(MakeMenu("Font Changer Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Font Changer Tool...", Keys.None, delegate
             {
                 using (var f = new FontChangerForm())
                     f.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("Theme Project Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Theme Project Tool...", Keys.None, delegate
             {
                 using (var f = new ThemeProjectForm())
                     f.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("Archive Compare Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Archive Compare Tool...", Keys.None, delegate
             {
                 using (var f = new ArchiveCompareForm())
                     f.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("Menu Text Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Menu Text Tool...", Keys.None, delegate
             {
                 using (var f = new MenuTextForm())
                     f.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("Music && Loops Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("MKWii Music && Loops Tool...", Keys.None, delegate
             {
                 using (var f = new MusicLoopForm())
                     f.ShowDialog(this);

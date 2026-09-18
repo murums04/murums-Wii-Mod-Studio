@@ -59,7 +59,7 @@ namespace murumsWiiModStudio
             Value = 2,
             Width = 65
         };
-        public FontChangerForm() : base("Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy")
+        public FontChangerForm() : base("MKWii Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy")
         {
             Action("Open Font.szs / BRFNT…", "Read your pack's font archive or one Wii BRFNT font.", Open);
             Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Click Preview to apply it.", delegate

@@ -40,7 +40,7 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical,
             Font = new Font("Segoe UI", 16)
         };
-        public MenuTextForm() : base("Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy")
+        public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy")
         {
             Action("Open archive / BMG…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
             Actions.Controls.Add(resource);

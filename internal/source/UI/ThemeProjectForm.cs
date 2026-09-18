@@ -21,7 +21,7 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical
         };
         readonly Button add, remove, build, save;
-        public ThemeProjectForm() : base("Theme Project Tool", "Collect your edited archives, fonts and music • Save a project • Build one output folder")
+        public ThemeProjectForm() : base("MKWii Theme Project Tool", "Collect your edited archives, fonts and music • Save a project • Build one output folder")
         {
             Action("New project…", "Choose your custom pack as the reference for destination filenames and folders.", delegate
             {
