@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using System.IO.Compression;
 using murumsWiiModStudio.Brlan;
 
 namespace murumsWiiModStudio
@@ -67,27 +68,32 @@ namespace murumsWiiModStudio
             }
         }
 
-        public static byte[] Build(string templates, string path, out bool animated)
+        static byte[] LoadTemplate(bool animated)
         {
-            return Build(templates, path, false, out animated);
+            string name = animated ? "SkyAnimated.brres.gz" : "SkyStill.brres.gz";
+            using (var resource = typeof(GlobePictureBackground).Assembly.GetManifestResourceStream("Studio." + name))
+            {
+                if (resource == null)
+                    throw new InvalidDataException(L.T(
+                        "Die Bildvorlage fehlt im Programm. Bitte Studio erneut installieren.",
+                        "The program's picture template is missing. Please reinstall Studio."));
+                using (var compressed = new GZipStream(resource, CompressionMode.Decompress))
+                using (var output = new MemoryStream())
+                {
+                    compressed.CopyTo(output);
+                    return output.ToArray();
+                }
+            }
         }
 
-        public static byte[] Build(string templates, string path, bool firstFrameOnly, out bool animated)
-        {
-            return Build(templates, path, firstFrameOnly, true, out animated);
-        }
-
-        public static byte[] Build(string templates, string path, bool firstFrameOnly, bool stretch, out bool animated)
+        public static byte[] Build(string path, bool firstFrameOnly, bool stretch, out bool animated)
         {
             using (var image = Image.FromFile(path))
             {
                 var dimension = new FrameDimension(image.FrameDimensionsList[0]);
                 int count = image.GetFrameCount(dimension);
                 animated = !firstFrameOnly && image.RawFormat.Guid == ImageFormat.Gif.Guid && count > 1;
-                string template = Path.Combine(templates, animated ? "globe-animation-template.brres" : "globe-picture-template.brres");
-                if (!File.Exists(template))
-                    throw new FileNotFoundException("The local globe picture template is missing. Prepare it from your game files first.", template);
-                byte[] b = File.ReadAllBytes(template);
+                byte[] b = LoadTemplate(animated);
                 int tex = Find(b, "Textures(NW4R)", "galaxy3_2s");
                 int width = (b[tex + 28] << 8) | b[tex + 29], height = (b[tex + 30] << 8) | b[tex + 31];
                 if (width != 1024 || height != (animated ? 1024 : 576) || U(b, tex + 32) != 14 || U(b, tex + 36) != 1)

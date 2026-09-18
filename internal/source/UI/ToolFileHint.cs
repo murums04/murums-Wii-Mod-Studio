@@ -21,7 +21,8 @@ namespace murumsWiiModStudio
             var hint = new Label
             {
                 Name = "ToolFileExamples",
-                Text = L.T("Dateien / Beispiele: ", "Files / examples: ") + examples,
+                Text = L.T("Dateien / Beispiele: ", "Files / examples: ") + examples
+                    + (examples.Contains(".szs") ? L.T(" oder ISO/WBFS", " or ISO/WBFS") : ""),
                 Font = new Font("Segoe UI", 9F),
                 AutoSize = true,
                 Dock = DockStyle.Fill,

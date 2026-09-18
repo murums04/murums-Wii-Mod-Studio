@@ -29,3 +29,6 @@
 !/assets/murums_logo.png
 
 !/internal/tools/UPDATE_INSTALLER.cs
+!/internal/source/Resources/SkyPlane.dae
+!/internal/source/Resources/SkyStill.brres.gz
+!/internal/source/Resources/SkyAnimated.brres.gz

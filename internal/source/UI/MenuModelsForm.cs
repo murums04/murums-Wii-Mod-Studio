@@ -28,11 +28,6 @@ namespace murumsWiiModStudio
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(20, 20, 24)
         };
-        readonly ComboBox pictureMode = new ComboBox
-        {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 350
-        };
         readonly ComboBox fitting = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -117,15 +112,14 @@ namespace murumsWiiModStudio
                 Dock = DockStyle.Fill
             };
             var sourceMenu = new ContextMenuStrip();
-            sourceMenu.Items.Add(L.T("Aus Mario-Kart-Wii-ISO/WBFS laden…", "Import from Mario Kart Wii ISO/WBFS…"), null, async delegate
-            {
-                await ImportGameModels();
-            });
+            sourceMenu.Items.Add(L.T("Aus vorhandenem Spielordner laden…", "Load from existing game folder…"),
+                null, delegate { ChooseGameFolder(); });
+            sourceMenu.Items.Add(L.T("Aus Mario-Kart-Wii-ISO/WBFS laden…", "Import from Mario Kart Wii ISO/WBFS…"), null, delegate { ImportGameModels(); });
             sourceMenu.Items.Add(L.T("Vorhandenes Modellarchiv wählen…", "Choose existing model archive…"), null, delegate
             {
                 ChooseModelArchive();
             });
-            browse.Text = L.T("Spielquelle…", "Game source…");
+            browse.Text = L.T("Auswählen...", "Browse...");
             browse.Click += delegate
             {
                 sourceMenu.Show(browse, 0, browse.Height);
@@ -217,11 +211,11 @@ namespace murumsWiiModStudio
             };
             colors.Controls.Add(resetPattern);
             DarkTheme.StyleTabs(appearance);
-            colors.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(940, 0), Margin = new Padding(4, 12, 4, 4), Text = L.T("Sternmuster: kleines helles Muster auf dunklem Grund, das über den 3D-Himmel wiederholt wird. Für ein normales Hintergrundbild den Tab Foto / GIF verwenden.", "Star pattern: a small light pattern on a dark background, repeated across the 3D sky. For a normal background picture, use Photo / GIF.") });
+            colors.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(940, 0), Margin = new Padding(4, 12, 4, 4), Text = L.T("Sternmuster: kleines helles Muster auf dunklem Grund, das über den 3D-Himmel wiederholt wird. Für ein normales Hintergrundbild den Tab Standbild verwenden.", "Star pattern: a small light pattern on a dark background, repeated across the 3D sky. For a normal background picture, use Still image.") });
             var originalTab = new TabPage(L.T("Sternenhimmel", "Starry sky"));
             originalTab.Controls.Add(colors);
             appearance.TabPages.Add(originalTab);
-            var photoTab = new TabPage(L.T("Foto / GIF", "Photo / GIF"));
+            var photoTab = new TabPage(L.T("Standbild", "Still image"));
             appearance.TabPages.Add(photoTab);
             var photoGrid = new TableLayoutPanel
             {
@@ -243,7 +237,7 @@ namespace murumsWiiModStudio
             photoGrid.Controls.Add(preview, 1, 0);
             var choosePicture = new Button
             {
-                Text = L.T("Foto oder GIF wählen…", "Choose photo or GIF…"),
+                Text = L.T("Bild auswählen…", "Choose picture…"),
                 Width = 200,
                 Height = 32
             };
@@ -259,14 +253,6 @@ namespace murumsWiiModStudio
                         SelectPicture(d.FileName);
             };
             actions.Controls.Add(choosePicture);
-            pictureMode.Items.Add(L.T("Standbild · höhere Auflösung (empfohlen)", "Still image · higher resolution (recommended)"));
-            pictureMode.Items.Add(L.T("GIF · 8 Bilder (experimentell)", "GIF · 8 frames (experimental)"));
-            pictureMode.SelectedIndex = 0;
-            pictureMode.SelectedIndexChanged += delegate
-            {
-                UpdatePictureInfo();
-            };
-            actions.Controls.Add(pictureMode);
             fitting.Items.Add(L.T("Auf Bildschirm strecken (ohne Ränder)", "Stretch to screen (no borders)"));
             fitting.Items.Add(L.T("Bildschirm füllen (Ränder abschneiden)", "Fill screen (crop edges)"));
             fitting.SelectedIndex = 0;
@@ -291,7 +277,7 @@ namespace murumsWiiModStudio
             grid.Controls.Add(output, 0, 4);
             var folder = new Button
             {
-                Text = L.T("Ausgabeordner…", "Output folder…"),
+                Text = L.T("Auswählen...", "Browse..."),
                 Dock = DockStyle.Fill
             };
             folder.Click += delegate
@@ -333,8 +319,8 @@ namespace murumsWiiModStudio
                     LoadArchive(available);
             };
             appearance.Visible = false;
-            help.Text = L.T("Modelle aus deinem Mario-Kart-Wii-Spielabbild laden. Studio speichert die Quelle lokal und erstellt nur bearbeitete Kopien.", "Import models from your Mario Kart Wii game image. Studio keeps the source locally and creates edited copies only.");
-            help.Text += "\n" + (archiveName == "Earth.szs" ? "Earth.szs · globe.arc" : "BackModel.szs");
+            help.Text = L.T("Modelldateien auswählen oder aus deinem Spielabbild importieren. Speicherort frei wählbar.", "Choose model files or import from your game image. Choose where to save them.");
+            help.Text += "\n" + (archiveName == "Earth.szs" ? "Earth.szs / globe.arc" : "BackModel.szs") + L.T(" oder ISO/WBFS", " or ISO/WBFS");
             layout.RowStyles[0].Height = 64;
             string cached = MenuModelSource.FindCached(archiveName);
             if (cached != null)
@@ -343,47 +329,68 @@ namespace murumsWiiModStudio
                 status.Text = L.T("Spielquelle wählen: ISO/WBFS oder ", "Choose a game source: ISO/WBFS or ") + archiveName + L.T(". Nicht im RR-Download enthalten.", ". Not included in the RR download.");
         }
 
-        async System.Threading.Tasks.Task ImportGameModels()
+        void ImportGameModels()
         {
-            string imagePath;
-            using (var dialog = new OpenFileDialog
-            {
-                Title = L.T("Mario-Kart-Wii-Spielabbild wählen", "Choose your Mario Kart Wii game image"),
-                Filter = "Wii game images|*.iso;*.wbfs;*.wia;*.ciso;*.wdf",
-                CheckFileExists = true
-            }
-
-            )
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK)
-                    return;
-                imagePath = dialog.FileName;
-            }
-
-            Enabled = false;
-            UseWaitCursor = true;
-            status.Text = L.T("Benötigte Modelle werden aus dem Spiel geladen…", "Importing the required models from your game…");
+            string folder = sharedOutput == null ? output.Text : sharedOutput();
+            string imported = GameArchiveImportForm.Import(this, archiveName, folder);
+            if (imported == null)
+                return;
             try
             {
-                string imported = await System.Threading.Tasks.Task.Run(() => MenuModelSource.ImportDisc(imagePath, archiveName));
-                if (!IsDisposed)
-                    LoadArchive(imported);
+                string model = imported;
+                string globeOverride = null;
+                if (Path.GetFileName(imported) == "globe.arc")
+                {
+                    globeOverride = imported;
+                    model = Path.Combine(Path.GetDirectoryName(imported), archiveName);
+                    if (!File.Exists(model))
+                        model = MenuModelSource.FindCached(archiveName);
+                    if (model == null)
+                    {
+                        status.Text = L.T("globe.arc gespeichert. Bitte noch Earth.szs auswählen oder importieren.",
+                            "globe.arc saved. Please select or import Earth.szs as well.");
+                        return;
+                    }
+                }
+                string sourceCopy = MenuModelSource.RememberArchive(model, archiveName, globeOverride);
+                LoadArchive(sourceCopy);
+                status.Text = L.T("Import gespeichert in: ", "Import saved to: ") + Path.GetDirectoryName(imported)
+                    + L.T(". Bearbeitete Kopien werden im gewählten Ausgabeordner gespeichert.",
+                          ". Edited copies will be saved in the selected output folder.");
             }
             catch (Exception error)
             {
-                if (!IsDisposed)
-                {
-                    status.Text = L.T("Import fehlgeschlagen. Bisherige Quelle bleibt erhalten.", "Import failed. Your previous source is unchanged.");
-                    StudioMessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                StudioMessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally
+        }
+
+        void ChooseGameFolder()
+        {
+            using (var dialog = new FolderPickerDialog
             {
-                if (!IsDisposed)
+                Description = L.T("Spielordner mit Modelldateien wählen", "Choose a game folder containing model files")
+            })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+                string[] candidates =
                 {
-                    Enabled = true;
-                    UseWaitCursor = false;
+                    Path.Combine(dialog.SelectedPath, archiveName),
+                    Path.Combine(dialog.SelectedPath, "Scene", "Model", archiveName),
+                    Path.Combine(dialog.SelectedPath, "files", "Scene", "Model", archiveName)
+                };
+                foreach (string candidate in candidates)
+                {
+                    if (!File.Exists(candidate))
+                        continue;
+                    LoadArchive(candidate);
+                    return;
                 }
+                StudioMessageBox.Show(this,
+                    L.T("Nicht gefunden: ", "Not found: ") + archiveName + "\n\n"
+                    + L.T("Wähle einen Ordner mit den entpackten Modelldateien deines Spiels. Ein RR-Download allein enthält diese Dateien nicht.",
+                          "Choose a folder containing your extracted game models. An RR download alone does not include these files."),
+                    Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -423,14 +430,6 @@ namespace murumsWiiModStudio
                 }
 
                 StyleButtons(child);
-            }
-        }
-
-        static string LocalFolder
-        {
-            get
-            {
-                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "internal", "local-game-files");
             }
         }
 
@@ -511,7 +510,7 @@ namespace murumsWiiModStudio
                 starButton.Text = L.T("Sternmuster wählen…", "Choose star pattern…");
                 RefreshColors();
                 build.Enabled = true;
-                status.Text = L.T("Nur Kopien werden geschrieben. Kopiere das Ergebnis in dein Custom Pack und starte über WheelWizard neu.", "Only copies are written. Copy the result into your custom pack and restart through WheelWizard.");
+                status.Text = L.T("Nur Kopien werden geschrieben. Kopiere das Ergebnis in dein Custom Pack und starte dein Spiel neu.", "Only copies are written. Copy the result into your custom pack and restart your game.");
             }
             catch (Exception ex)
             {
@@ -555,7 +554,18 @@ namespace murumsWiiModStudio
         {
             clearPicture.Enabled = fullPicture.Length > 0;
             skyButton.Enabled = starButton.Enabled = fullPicture.Length == 0;
-            pictureInfo.Text = fullPicture.Length == 0 ? L.T("Kein Foto gewählt. Der Sternenhimmel bleibt erhalten. Beispiel: ein breites Bild im Format 16:9.", "No photo selected. Keeps the starry sky. Example: a wide 16:9 image.") : Path.GetFileName(fullPicture) + "\r\n" + (pictureMode.SelectedIndex == 0 ? L.T("Standbild: 1024 × 576; bei GIFs das erste Bild.", "Still image: 1024 × 576; first frame for GIFs.") : L.T("Experimentell: 8 verteilte GIF-Bilder, je 512 × 256. Weniger scharf und flüssig.", "Experimental: 8 sampled GIF frames, each 512 × 256. Less sharp and smooth.")) + "\r\n" + L.T("Vorschau zeigt das Standbild mit gewähltem Zuschnitt, nicht die Spielansicht. Ersetzt das Sternmuster; der Globus bleibt separat einstellbar.", "Preview shows the still image with selected fitting, not the game view. Replaces the star pattern; the globe is controlled separately.");
+            pictureInfo.Text = fullPicture.Length == 0
+                ? L.T(
+                    "Kein Bild gewählt. Der Sternenhimmel bleibt erhalten. Beispiel: ein breites Bild im Format 16:9.",
+                    "No picture selected. Keeps the starry sky. Example: a wide 16:9 image.")
+                : Path.GetFileName(fullPicture) + "\r\n"
+                    + L.T(
+                        "Standbild: 1024 × 576. GIFs werden nur als erstes Bild verwendet; keine Animation.",
+                        "Still image: 1024 × 576. GIFs use only the first frame; no animation.")
+                    + "\r\n"
+                    + L.T(
+                        "Die Vorschau zeigt den gewählten Zuschnitt. Ersetzt das Sternmuster; der Globus bleibt separat einstellbar.",
+                        "Preview shows the selected fitting. Replaces the star pattern; the globe is controlled separately.");
             if (fullPicture.Length == 0)
                 status.Text = L.T("Originalhimmel beim nächsten Erstellen. Bereits erstellte Dateien bleiben unverändert.", "Original sky on the next build. Existing files remain unchanged.");
         }
@@ -704,7 +714,7 @@ namespace murumsWiiModStudio
                 if (isEarth && fullPicture.Length > 0)
                 {
                     bool animated;
-                    SceneColorTools.Find(archive.Root, "galaxy.brres").Data = GlobePictureBackground.Build(LocalFolder, fullPicture, pictureMode.SelectedIndex == 0, fitting.SelectedIndex == 0, out animated);
+                    SceneColorTools.Find(archive.Root, "galaxy.brres").Data = GlobePictureBackground.Build(fullPicture, true, fitting.SelectedIndex == 0, out animated);
                 }
 
                 if (isEarth && fullPicture.Length == 0 && starPicture.Length > 0)

@@ -126,3 +126,5 @@ That review was not an exhaustive source-similarity audit. In particular, RiiStu
 overall licensing remains unresolved here; this document is not a blanket clearance
 to redistribute third-party programs or relicense third-party code.
 Earlier distributions were released under MIT. Their existing license grants remain valid.
+
+The built-in photo/GIF sky templates were generated from Studio's own simple plane (SkyPlane.dae) with BrawlCrate/BrawlLib v0.42h1. No extracted game models or textures are used in these templates. BrawlLib is not required at runtime for this feature.

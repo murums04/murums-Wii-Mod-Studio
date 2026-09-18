@@ -125,8 +125,10 @@ namespace murumsWiiModStudio
                 + "• Dateien öffnen: Ein Doppelklick auf zugeordnete Dateien wie .szs öffnet sie im installierten Studio statt im Setup.\n\n"
                 + "• Einheitliche Namen: Alle acht Einträge im Tools-Menü tragen den Präfix MKWii.\n\n"
                 + "• Modellquellen: Earth.szs, BackModel.szs und globe.arc aus einer eigenen Mario-Kart-Wii-ISO/WBFS importieren und lokal wiederverwenden. Benötigt Wiimms ISO Tools.\n\n"
+                + "• Fehlende Menüarchive aus ISO/WBFS importieren: Dateiauswahl und frei wählbarer Zielordner. Vorhandene Dateien werden nicht überschrieben.\n\n"
                 + "• Ausgabeordner: einheitlich MUR_EDITED. Der Font Changer speichert seine Kopie direkt dort.\n\n"
                 + "• Exporthinweise erklären den Ausgabeordner und das Sichern und Ersetzen der Pack-Dateien.\n\n"
+                + "• Himmelbilder werden als Standbild exportiert. GIF-Animationen folgen in einem späteren Patch; GIFs verwenden vorerst nur das erste Bild.\n\n"
                 + "• Kleine, gut lesbare Datei- und Formatbeispiele in allen acht Tools.\n\n"
                 + "• Changelog unter Hilfe → Changelog; GitHub-Link und korrigierte Buttons im Über-Fenster.\n\n",
                 "• Updates: Checks at startup and a notice when a newer version is available. Check manually under Help → Check for updates.\n\n"
@@ -134,8 +136,10 @@ namespace murumsWiiModStudio
                 + "• Opening files: Double-clicking associated files such as .szs opens them in the installed Studio instead of setup.\n\n"
                 + "• Consistent names: All eight Tools menu entries use the MKWii prefix.\n\n"
                 + "• Model sources: Import Earth.szs, BackModel.szs and globe.arc from your own Mario Kart Wii ISO/WBFS and reuse them locally. Requires Wiimms ISO Tools.\n\n"
+                + "• Import missing menu archives from ISO/WBFS: choose the file and destination folder. Existing files are not overwritten.\n\n"
                 + "• Consistent MUR_EDITED output folders. Font Changer saves its copy there directly.\n\n"
                 + "• Export instructions explain the output folder and how to back up and replace pack files.\n\n"
+                + "• Sky pictures export as still images. GIF animation is deferred to a later patch; GIFs currently use only the first frame.\n\n"
                 + "• Small, readable file and format examples in all eight tools.\n\n"
                 + "• Changelog under Help → Changelog; GitHub link and corrected About dialog buttons.\n\n")
                 + "2.1.0-beta1 — Release\n\n"

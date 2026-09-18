@@ -203,13 +203,23 @@ namespace murumsWiiModStudio
 
             tabs.SelectedIndexChanged += delegate
             {
+                ResetTabProgress();
                 RefreshExportLocation();
             };
             other.SelectedIndexChanged += delegate
             {
+                ResetTabProgress();
                 RefreshExportLocation();
             };
             RefreshExportLocation();
+        }
+
+        private void ResetTabProgress()
+        {
+            if (_busy)
+                return;
+            _progress.Value = 0;
+            _status.Text = L.T("Bereit.", "Ready.");
         }
 
         private void RefreshExportLocation()
@@ -231,7 +241,7 @@ namespace murumsWiiModStudio
         private string ResolveOutputFolder()
         {
             string output = Path.GetFullPath(_outputFolder.Text.Trim());
-            string source = Path.GetFullPath(_uiFolder.Text.Trim());
+            string source = String.IsNullOrWhiteSpace(_uiFolder.Text) ? "" : Path.GetFullPath(_uiFolder.Text.Trim());
             if (String.Equals(output.TrimEnd(Path.DirectorySeparatorChar), source.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
                 output = Path.Combine(source, "MUR_EDITED");
             _outputFolder.Text = output;
@@ -696,6 +706,7 @@ namespace murumsWiiModStudio
 
         private void AddFileRow(TableLayoutPanel form, ref int row, string label, out TextBox box, string cue, string filter)
         {
+
             var caption = new TableLayoutPanel
             {
                 AutoSize = true,
@@ -708,7 +719,7 @@ namespace murumsWiiModStudio
             Label fileHint = null;
             if (lines.Length > 1)
             {
-                fileHint = NewLabel(lines[1]);
+                fileHint = NewLabel(lines[1] + (filter.Contains(".szs") ? L.T(" oder ISO/WBFS", " or ISO/WBFS") : ""));
                 fileHint.Font = new Font("Segoe UI", 9F);
                 fileHint.Margin = new Padding(0, 0, 8, 6);
                 caption.Controls.Add(fileHint);
@@ -723,11 +734,11 @@ namespace murumsWiiModStudio
             Label fieldLabel = fileHint;
             if (fieldLabel != null && label.Contains(".szs"))
             {
-                string defaultHint = lines[1];
+                string defaultHint = lines[1] + L.T(" oder ISO/WBFS", " or ISO/WBFS");
                 captured.TextChanged += delegate
                 {
                     string fileName = Path.GetFileName(captured.Text);
-                    fieldLabel.Text = String.IsNullOrWhiteSpace(fileName) ? label : caption + "\n" + fileName;
+                    fieldLabel.Text = String.IsNullOrWhiteSpace(fileName) ? defaultHint : fileName + L.T(" oder ISO/WBFS", " or ISO/WBFS");
                 };
             }
             Button button = NewButton(L.T("Auswählen...", "Browse..."));
@@ -909,6 +920,17 @@ namespace murumsWiiModStudio
 
         private void BrowseFile(TextBox target, string filter)
         {
+            if (filter.Contains(".szs"))
+            {
+                string preferred = String.IsNullOrWhiteSpace(target.Text) ? null : Path.GetFileName(target.Text);
+                string imported = GameArchiveImportForm.Select(this, filter, preferred, _outputFolder.Text);
+                if (imported != null)
+                {
+                    target.Text = imported;
+                    ResetPathView(target);
+                }
+                return;
+            }
             using (OpenFileDialog d = new OpenFileDialog())
             {
                 d.Filter = filter;

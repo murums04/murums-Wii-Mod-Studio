@@ -135,6 +135,12 @@ namespace murumsWiiModStudio
 
         protected string OpenPath(string filter)
         {
+            if (filter.Contains("*.szs") || filter.Contains("*.arc") || filter.Contains("*.u8")
+                || filter.Contains("Original destination in your pack"))
+            {
+                string preferred = Text.Contains("Font Changer") ? "Font.szs" : null;
+                return GameArchiveImportForm.Select(this, filter, preferred);
+            }
             using (var d = new OpenFileDialog
             {
                 Filter = filter

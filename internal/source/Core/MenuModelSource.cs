@@ -114,6 +114,34 @@ namespace murumsWiiModStudio
             }
         }
 
+        internal static string RememberArchive(string path, string archiveName, string globeOverride = null)
+        {
+            Validate(path, archiveName);
+            string identifier = Guid.NewGuid().ToString("N");
+            string folder = Path.Combine(CacheRoot, identifier);
+            Directory.CreateDirectory(folder);
+            foreach (string name in new[] { "Earth.szs", "BackModel.szs" })
+            {
+                string previous = FindCached(name);
+                if (previous != null)
+                    File.Copy(previous, Path.Combine(folder, name));
+            }
+            string target = Path.Combine(folder, archiveName);
+            File.Copy(path, target, true);
+            string globe = globeOverride ?? FindGlobeArchive(path);
+            if (!File.Exists(globe) && archiveName != "Earth.szs")
+            {
+                string previousEarth = FindCached("Earth.szs");
+                if (previousEarth != null)
+                    globe = FindGlobeArchive(previousEarth);
+            }
+            if (File.Exists(globe))
+                File.Copy(globe, Path.Combine(folder, "globe.arc"));
+            BackupManager.WriteAllBytesSafely(Path.Combine(CacheRoot, "current.txt"),
+                System.Text.Encoding.UTF8.GetBytes(identifier));
+            return target;
+        }
+
         internal static string FindGlobeArchive(string modelPath)
         {
             string folder = Path.GetDirectoryName(modelPath);

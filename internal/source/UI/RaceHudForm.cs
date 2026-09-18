@@ -108,8 +108,8 @@ namespace murumsWiiModStudio
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
-            bar.Controls.Add(Button("Open Race archive…", Open, "Open your language archive, e.g. Race_E.szs. Race.szs and available RaceAssets.szs beside it are loaded automatically."));
-            bar.Controls.Add(Button("Add archive…", Add, "Add Race.szs, a language archive or Retro Rewind RaceAssets.szs without losing current selections."));
+            bar.Controls.Add(Button("Open Race archive / ISO…", Open, "Open your language archive, e.g. Race_E.szs. Race.szs and available RaceAssets.szs beside it are loaded automatically."));
+            bar.Controls.Add(Button("Add archive / ISO…", Add, "Add Race.szs, a language archive or Retro Rewind RaceAssets.szs without losing current selections."));
             import = Button("Import matching pictures…", Match, "Scan a picture folder and its subfolders. Exact filename matches become pending replacements; no archive is saved yet.");
             bar.Controls.Add(import);
             category.Items.AddRange(new object[] { "Placement numbers", "Timer / laps / score", "Items / minimap", "Pending replacements", "All textures", "Countdown / start / finish", "Player names / warnings", "Results", "Input viewer", "Minimap / icons", "Speedometer" });
@@ -270,42 +270,30 @@ namespace murumsWiiModStudio
 
         void Open()
         {
-            using (var d = new OpenFileDialog
-            {
-                Filter = "Race archives (*.szs)|*.szs"
-            }
-
-            )
-                if (d.ShowDialog(this) == DialogResult.OK)
-                {
-                    if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard pending changes and open another pack?", "MKWii Race HUD Tool", MessageBoxButtons.YesNo) != DialogResult.Yes)
-                        return;
-                    session.Open(d.FileName);
-                    output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "MUR_EDITED");
-                    shadows.Checked = false;
-                    dirty = false;
-                    RefreshList();
-                    UpdateState();
-                }
+            if (dirty && StudioMessageBox.Show(this, "Discard pending changes and open another pack?", Text,
+                MessageBoxButtons.YesNo) != DialogResult.Yes)
+                return;
+            string path = GameArchiveImportForm.Select(this, "Race archives (*.szs)|*.szs", "Race.szs");
+            if (path == null)
+                return;
+            session.Open(path);
+            output.Text = Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED");
+            shadows.Checked = false;
+            dirty = false;
+            RefreshList();
+            UpdateState();
         }
 
         void Add()
         {
-            using (var d = new OpenFileDialog
-            {
-                Filter = "Race archives (*.szs)|*.szs",
-                InitialDirectory = session.Archives.Count > 0 ? Path.GetDirectoryName(session.Archives[0].Source) : ""
-            }
-
-            )
-                if (d.ShowDialog(this) == DialogResult.OK)
-                {
-                    session.Add(d.FileName);
-                    if (output.Text.Length == 0)
-                        output.Text = Path.Combine(Path.GetDirectoryName(d.FileName), "MUR_EDITED");
-                    RefreshList();
-                    UpdateState();
-                }
+            string path = GameArchiveImportForm.Select(this, "Race archives (*.szs)|*.szs", "Race.szs");
+            if (path == null)
+                return;
+            session.Add(path);
+            if (output.Text.Length == 0)
+                output.Text = Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED");
+            RefreshList();
+            UpdateState();
         }
 
         void Match()
