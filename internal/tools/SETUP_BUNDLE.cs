@@ -65,6 +65,13 @@ internal static class SetupBundle
             key.SetValue("NoRepair", 1);
         }
 
+        using (var application = Registry.CurrentUser.CreateSubKey(@"Software\Classes\Applications\murums Wii Mod Studio.exe"))
+        {
+            application.SetValue("FriendlyAppName", "murums Wii Mod Studio");
+            using (var command = application.CreateSubKey(@"shell\open\command"))
+                command.SetValue("", QuoteArgument(exe) + " \"%1\"");
+        }
+
         Type shellType = Type.GetTypeFromProgID("WScript.Shell");
         object shell = Activator.CreateInstance(shellType);
         object shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "murums Wii Mod Studio.lnk") });
@@ -133,7 +140,7 @@ internal static class SetupBundle
         return best;
     }
 
-    static bool LaunchInstalledProgram()
+    static bool LaunchInstalledProgram(string documentPath)
     {
         string exe;
         using (var registrations = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall"))
@@ -141,14 +148,60 @@ internal static class SetupBundle
         if (exe == null)
             return false;
         Version installedVersion, packageVersion;
-        if (Version.TryParse(FileVersionInfo.GetVersionInfo(exe).FileVersion, out installedVersion) && Version.TryParse(FileVersionInfo.GetVersionInfo(Application.ExecutablePath).FileVersion, out packageVersion) && packageVersion > installedVersion)
+        if (documentPath == null && Version.TryParse(FileVersionInfo.GetVersionInfo(exe).FileVersion, out installedVersion) && Version.TryParse(FileVersionInfo.GetVersionInfo(Application.ExecutablePath).FileVersion, out packageVersion) && packageVersion > installedVersion)
         {
             UpdateInstaller.Show(Path.GetDirectoryName(exe));
             return true;
         }
 
-        Process.Start(new ProcessStartInfo { FileName = exe, WorkingDirectory = Path.GetDirectoryName(exe), UseShellExecute = false });
+        Process.Start(CreateLaunchInfo(exe, documentPath));
         return true;
+    }
+
+    internal static ProcessStartInfo CreateLaunchInfo(string executable, string documentPath)
+    {
+        return new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = Path.GetDirectoryName(executable),
+            UseShellExecute = false,
+            Arguments = documentPath == null ? "" : QuoteArgument(documentPath)
+        };
+    }
+
+    internal static string QuoteArgument(string value)
+    {
+        var result = new StringBuilder();
+        result.Append('"');
+        int backslashes = 0;
+        foreach (char character in value)
+        {
+            if (character == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+
+            result.Append('\\', character == '"' ? backslashes * 2 + 1 : backslashes);
+            result.Append(character);
+            backslashes = 0;
+        }
+
+        result.Append('\\', backslashes * 2);
+        result.Append('"');
+        return result.ToString();
+    }
+
+    internal static string GetDocumentPath(string[] args)
+    {
+        if (args.Length == 0 || (args.Length == 1 && args[0] == "--setup"))
+            return null;
+        if (args.Length != 1)
+            throw new ArgumentException("Open one file at a time.");
+        string path = Path.GetFullPath(args[0]);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("The selected file could not be found.", path);
+        return path;
     }
 
     [STAThread]
@@ -183,20 +236,28 @@ internal static class SetupBundle
             return 0;
         }
 
-        // --setup explicitly reopens installation; a normal double-click launches Studio.
-        if (args.Length == 0)
+        bool setupRequested = args.Length == 1 && args[0] == "--setup";
+        if (!setupRequested)
         {
             try
             {
-                if (LaunchInstalledProgram())
+                string documentPath = GetDocumentPath(args);
+                if (LaunchInstalledProgram(documentPath))
                     return 0;
+                if (documentPath != null)
+                {
+                    MessageBox.Show("Install murums Wii Mod Studio first, then open this file again. Run the downloaded EXE without a file to install it.",
+                        "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return 1;
+                }
             }
             catch (Exception e)
             {
-                MessageBox.Show("Studio could not be started.\n" + e.Message + "\n\nThe installer will now open.", "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Studio could not open the requested file or installation.\n" + e.Message,
+                    "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
             }
         }
-
         Application.Run(new SetupPage());
         return 0;
     }

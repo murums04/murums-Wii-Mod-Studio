@@ -38,6 +38,15 @@ try {
    if([string]::Equals($link.TargetPath,$exe,[StringComparison]::OrdinalIgnoreCase)){Remove-Item -LiteralPath $friendlyShortcut}
   }finally{if($null -ne $link){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($link)};[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($linkShell)}
  }
+ $applicationKey='HKCU:\Software\Classes\Applications\murums Wii Mod Studio.exe'
+ $commandKey=Join-Path $applicationKey 'shell\open\command'
+ if(Test-Path -LiteralPath $commandKey){
+  $registeredCommand=(Get-Item -LiteralPath $commandKey).GetValue('')
+  $expectedCommand='"'+$exe+'" "%1"'
+  if([string]::Equals($registeredCommand,$expectedCommand,[StringComparison]::OrdinalIgnoreCase)){
+   Remove-Item -LiteralPath $applicationKey -Recurse
+  }
+ }
  Remove-Item -LiteralPath $manifest
  $directories=@($targets | ForEach-Object { $p=[IO.Path]::GetDirectoryName($_);while($p.Length -gt $rootPath.Length){$p;$p=[IO.Path]::GetDirectoryName($p)} } | Sort-Object -Unique | Sort-Object Length -Descending)
  foreach($dir in $directories){if((Test-Path -LiteralPath $dir) -and [IO.Directory]::GetFileSystemEntries($dir).Length -eq 0){[IO.Directory]::Delete($dir)}}
