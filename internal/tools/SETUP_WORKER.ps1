@@ -171,7 +171,7 @@ function Build-ResponseFile([string]$Path, [string]$Output) {
         ('/out:"' + $Output + '"'),
         '/win32icon:"internal\source\App\murums.ico"',
         '/win32manifest:"internal\source\App\app.manifest"',
-        '/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll'
+        '/reference:System.dll','/reference:System.Core.dll','/reference:System.Web.Extensions.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll'
     )
     $lines += @($sources | ForEach-Object { '"' + $_.FullName + '"' })
     [IO.File]::WriteAllLines($Path, $lines, (New-Object Text.UTF8Encoding($true)))

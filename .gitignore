@@ -27,3 +27,5 @@
 !/assets/
 /assets/*
 !/assets/murums_logo.png
+
+!/internal/tools/UPDATE_INSTALLER.cs

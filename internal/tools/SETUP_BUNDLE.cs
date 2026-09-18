@@ -140,6 +140,13 @@ internal static class SetupBundle
             exe = FindInstalledProgram(registrations);
         if (exe == null)
             return false;
+        Version installedVersion, packageVersion;
+        if (Version.TryParse(FileVersionInfo.GetVersionInfo(exe).FileVersion, out installedVersion) && Version.TryParse(FileVersionInfo.GetVersionInfo(Application.ExecutablePath).FileVersion, out packageVersion) && packageVersion > installedVersion)
+        {
+            UpdateInstaller.Show(Path.GetDirectoryName(exe));
+            return true;
+        }
+
         Process.Start(new ProcessStartInfo { FileName = exe, WorkingDirectory = Path.GetDirectoryName(exe), UseShellExecute = false });
         return true;
     }
@@ -170,6 +177,12 @@ internal static class SetupBundle
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length == 2 && args[0] == "--update")
+        {
+            UpdateInstaller.Show(args[1]);
+            return 0;
+        }
+
         // --setup explicitly reopens installation; a normal double-click launches Studio.
         if (args.Length == 0)
         {

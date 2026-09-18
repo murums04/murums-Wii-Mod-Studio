@@ -282,6 +282,10 @@ namespace murumsWiiModStudio
             language.DropDownItems.Add(german);
             language.DropDownItems.Add(english);
             ToolStripMenuItem helpMenu = new ToolStripMenuItem(L.T("Hilfe", "Help"));
+            helpMenu.DropDownItems.Add(MakeMenu(L.T("Nach Updates suchen…", "Check for updates…"), Keys.None, delegate
+            {
+                StudioUpdateForm.ShowUpdates(this, null);
+            }));
             helpMenu.DropDownItems.Add(MakeMenu(L.T("Allgemeine Hilfe", "General help"), Keys.F1, delegate
             {
                 StudioHelpWindow.Show(this, _helpPage, L.T("Hilfe", "Help"));

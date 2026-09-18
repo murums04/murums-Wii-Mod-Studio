@@ -1,7 +1,7 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
 A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta1**. Developed by murums with AI assistance.
+Current release: **2.1.0-beta2**. Developed by murums with AI assistance.
 
 ## Features
 
@@ -23,6 +23,12 @@ Download **murums Wii Mod Studio.exe** from [Releases](https://github.com/murums
 3. Install and select Launch program.
 
 Later, the same download launches a detected installation. Pass --setup to reopen installation.
+
+Beta2 adds startup update notifications and **Help > Check for updates**.
+Public Beta 1 users need to download the next installer once; a newer installer upgrades their existing installation.
+Downloads are verified against GitHub's SHA-256 digest. Close Studio, then choose **Install and restart**.
+Projects, settings and optional tools are preserved. If file replacement fails, the updater restores the previous program files.
+Offline or up-to-date startup checks do not interrupt the user. Beta builds also check for newer beta releases.
 Uninstall through Windows Installed Apps or the installed Uninstall.exe.
 
 Requires Windows and .NET Framework 4.x. Optional tools have their own requirements.

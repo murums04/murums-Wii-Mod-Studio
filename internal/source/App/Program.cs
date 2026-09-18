@@ -28,6 +28,10 @@ namespace murumsWiiModStudio
                 Application.SetCompatibleTextRenderingDefault(false);
                 StudioUx.Install();
                 MainForm form = new MainForm();
+                form.Shown += delegate
+                {
+                    StudioUpdateForm.CheckAtStartup(form);
+                };
                 if (args != null && args.Length > 0 && File.Exists(args[0]))
                     form.OpenFromPath(args[0]);
                 Application.Run(form);
