@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -36,6 +36,18 @@ namespace murumsWiiModStudio
             var packs = Load();
             packs.RemoveAll(p => String.Equals(p.FilesFolder, pack.FilesFolder, StringComparison.OrdinalIgnoreCase));
             packs.Add(pack);
+            Save(packs);
+        }
+
+        internal static void Remove(string filesFolder)
+        {
+            var packs = Load();
+            packs.RemoveAll(p => String.Equals(p.FilesFolder, filesFolder, StringComparison.OrdinalIgnoreCase));
+            Save(packs);
+        }
+
+        static void Save(List<CustomPack> packs)
+        {
             Directory.CreateDirectory(Path.GetDirectoryName(StorePath));
             string temporary = StorePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(packs), new UTF8Encoding(false));
@@ -94,8 +106,8 @@ namespace murumsWiiModStudio
             if (files.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length)
                 throw new IOException(L.T("Zwei Dateien haben denselben Namen. Bitte nur eine auswählen.", "Two files share the same name. Please select only one."));
             foreach (string file in files)
-                if (!File.Exists(file) || !Path.GetExtension(file).Equals(".szs", StringComparison.OrdinalIgnoreCase))
-                    throw new IOException(L.T("Bitte nur vorhandene .szs-Dateien wählen: ", "Please select existing .szs files only: ") + file);
+                if (!File.Exists(file) || !(Path.GetExtension(file).Equals(".szs", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(file).Equals("globe.arc", StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException(L.T("Bitte vorhandene .szs-Dateien oder globe.arc wählen: ", "Please select existing .szs files or globe.arc: ") + file);
             var pack = new CustomPack {
                 Name = name, Description = description ?? "", Folder = folder,
                 FilesFolder = Path.Combine(folder, retroRewind ? name : "Files"),

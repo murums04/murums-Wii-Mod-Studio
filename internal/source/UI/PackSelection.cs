@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -30,7 +30,7 @@ namespace murumsWiiModStudio
             if (states.TryGetValue(form, out state)) return;
             state = new State();
             states.Add(form, state);
-            var strip = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, Padding = new Padding(4) };
+            var strip = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4, Padding = new Padding(4) };
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -39,6 +39,14 @@ namespace murumsWiiModStudio
             strip.Controls.Add(choice, 1, 0);
             var refresh = new Button { Text = L.T("Aktualisieren", "Refresh"), AutoSize = true };
             strip.Controls.Add(refresh, 2, 0);
+            strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var create = new Button {
+                Name = "CreateCustomPack",
+                Text = L.T("Custom Pack erstellen…", "Create custom pack…"),
+                AutoSize = true,
+                MinimumSize = new Size(170, 30)
+            };
+            strip.Controls.Add(create, 3, 0);
             bool loading = false;
             Action reload = delegate
             {
@@ -71,6 +79,19 @@ namespace murumsWiiModStudio
                 if (changed != null && selected != null) changed(selected);
             };
             refresh.Click += delegate { reload(); };
+            create.Click += delegate
+            {
+                try
+                {
+                    using (var maker = new CustomPackMakerForm())
+                        maker.ShowDialog(form.TopLevelControl as Form ?? form);
+                }
+                catch (Exception error)
+                {
+                    StudioMessageBox.Show(form, error.Message, "Custom packs", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally { reload(); }
+            };
             reload();
             Control content = form.Controls.Cast<Control>().FirstOrDefault(c => c.Dock == DockStyle.Fill);
             if (content == null) return;

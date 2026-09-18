@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
@@ -31,36 +31,51 @@ internal sealed class SetupPage : Form
         BackColor = Background;
         ForeColor = Color.White;
         Font = new Font("Segoe UI", 10);
-        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        Icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
         var header = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 100,
+            Height = 126,
             Padding = new Padding(24, 16, 24, 12),
             BackColor = PanelColor
         };
-        header.Controls.Add(new Label { Text = "Choose your tools. Make it yours.", Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.FromArgb(180, 181, 197) });
-        header.Controls.Add(new Label { Text = "Install murums Wii Mod Studio", Dock = DockStyle.Top, Height = 48, Font = new Font("Segoe UI", 22, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft });
+        var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        heading.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
+        heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, Image = Icon.ToBitmap(), Margin = new Padding(0, 12, 20, 12) };
+        logo.Disposed += delegate { logo.Image.Dispose(); };
+        heading.Controls.Add(logo, 0, 0);
+        var headings = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        headings.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
+        headings.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        headings.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        headings.Controls.Add(new Label { Text = "murums Wii Mod Studio", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 0);
+        headings.Controls.Add(new Label { Text = "Install Studio", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 20, FontStyle.Bold) }, 0, 1);
+        headings.Controls.Add(new Label { Text = "Choose a folder • Select optional tools • Start creating", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(190, 196, 210) }, 0, 2);
+        heading.Controls.Add(headings, 1, 0);
+        header.Controls.Add(heading);
         var footer = new TableLayoutPanel
         {
             Dock = DockStyle.Bottom,
             Height = 106,
             Padding = new Padding(24, 8, 24, 12),
             ColumnCount = 2,
-            RowCount = 2
+            RowCount = 3
         };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 310));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 4));
         status.Text = "Ready to install.";
         status.Dock = DockStyle.Fill;
         status.TextAlign = ContentAlignment.MiddleLeft;
         status.AutoEllipsis = true;
         footer.Controls.Add(status, 0, 0);
         progress.Dock = DockStyle.Fill;
-        progress.Margin = new Padding(0, 17, 18, 17);
-        footer.Controls.Add(progress, 0, 1);
+        progress.Margin = Padding.Empty;
+        footer.Controls.Add(progress, 0, 2);
+        footer.SetColumnSpan(progress, 2);
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -69,7 +84,7 @@ internal sealed class SetupPage : Form
             Padding = new Padding(0, 5, 0, 0)
         };
         var close = Button("Close");
-        close.Width = 78;
+        close.Width = 96;
         install.Text = "Install";
         launch.Text = "Launch program";
         launch.Visible = false;
@@ -86,7 +101,7 @@ internal sealed class SetupPage : Form
         details.Margin = Padding.Empty;
         details.FlatAppearance.BorderSize = 0;
         details.ForeColor = Color.FromArgb(193, 160, 255);
-        footer.Controls.Add(details, 1, 0);
+        footer.Controls.Add(details, 0, 1);
         actions.Controls.Add(close);
         actions.Controls.Add(install);
         actions.Controls.Add(launch);
@@ -117,7 +132,7 @@ internal sealed class SetupPage : Form
             "MKWii Race & Game HUD",
             "Archives & textures",
             "Fonts & messages",
-            "Backgrounds & animation",
+            "Backgrounds & custom packs",
             "Audio & models",
             "Projects & help"
         };
@@ -126,7 +141,7 @@ internal sealed class SetupPage : Form
             "Move, resize and recolour",
             "Edit, replace and export",
             "Fonts and game text",
-            "Menu backgrounds and GIFs",
+            "Menus, skies and pack creation",
             "WAV loops and workflows",
             "Themes, previews and guides"
         };
@@ -201,7 +216,7 @@ internal sealed class SetupPage : Form
         tools.Dock = DockStyle.Fill;
         tools.BackgroundColor = PanelColor;
         tools.BorderStyle = BorderStyle.None;
-        tools.ScrollBars = ScrollBars.None;
+        tools.ScrollBars = ScrollBars.Vertical;
         tools.AllowUserToAddRows = false;
         tools.AllowUserToDeleteRows = false;
         tools.AllowUserToResizeRows = false;
@@ -244,7 +259,7 @@ internal sealed class SetupPage : Form
         {
             if (tools.Rows.Count > 0)
             {
-                int height = Math.Max(1, (tools.ClientSize.Height - tools.ColumnHeadersHeight - 2) / tools.Rows.Count);
+                int height = Math.Max(32, (tools.ClientSize.Height - tools.ColumnHeadersHeight - 2) / tools.Rows.Count);
                 foreach (DataGridViewRow row in tools.Rows)
                     row.Height = height;
             }

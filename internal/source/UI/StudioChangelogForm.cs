@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -120,7 +120,7 @@ namespace murumsWiiModStudio
         internal static string HistoryText()
         {
             return CurrentHeading() + "\n\n" + L.T(
-                "• Custom Pack Maker: .szs-Dateien, Beschreibung und Pfadvorlagen; gemeinsame Auswahl mehrerer Packs in den Tools.\n\n" + "• Updates: automatische/manuelle Prüfung, geprüfte Downloads; Projekte, Einstellungen und Tools bleiben erhalten.\n\n"
+                "• Custom Pack Maker: ISO-Dateiauswahl mit kurzen Erklärungen, .szs-Import und Beschreibung; Packs erstellen und in allen Tools verwalten.\n\n" + "• Updates: automatische/manuelle Prüfung, geprüfte Downloads; Projekte, Einstellungen und Tools bleiben erhalten.\n\n"
                 + "• Zugeordnete Dateien öffnen per Doppelklick direkt im Studio.\n\n"
                 + "• ISO/WBFS empfohlen: Menü- und Modellarchive importieren, Ziel frei wählen, Originale behalten. Vorhandene Archive bleiben nutzbar; benötigt Wiimms ISO Tools.\n\n"
                 + "• Export nach MUR_EDITED, auch beim Font Changer; Hinweise zum Sichern und Ersetzen der Pack-Dateien.\n\n"
@@ -129,7 +129,7 @@ namespace murumsWiiModStudio
                 + "• Himmel: vorerst nur Standbilder; bei GIFs das erste Bild. Animationen folgen später.\n\n"
                 + "• Oberfläche: einheitliche Pack-Auswahl und Statusleisten, kompaktere Anordnung, Hover-/Layoutkorrekturen, einheitliche MKWii-Namen und Dateihinweise in allen Tools.\n\n"
                 + "• Changelog mit GitHub-Link; Buttons im Über-Fenster korrigiert.\n\n",
-                "• Custom Pack Maker: .szs files, descriptions and path presets; shared multi-pack selection across tools.\n\n" + "• Updates: automatic/manual checks, verified downloads; projects, settings and tools are preserved.\n\n"
+                "• Custom Pack Maker: ISO file selection with short descriptions, .szs import and pack descriptions; create packs and manage their shared list.\n\n" + "• Updates: automatic/manual checks, verified downloads; projects, settings and tools are preserved.\n\n"
                 + "• Associated files open directly in Studio on double-click.\n\n"
                 + "• ISO/WBFS recommended: import menu/model archives, choose a destination and keep originals. Existing archives remain supported; requires Wiimms ISO Tools.\n\n"
                 + "• MUR_EDITED exports, including Font Changer; guidance for backing up and replacing pack files.\n\n"

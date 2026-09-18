@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -12,7 +12,8 @@ namespace murumsWiiModStudio
         {
             Dock = DockStyle.Fill,
             CheckOnClick = true,
-            HorizontalScrollbar = true
+            HorizontalScrollbar = true,
+            IntegralHeight = false
         };
         readonly Button compare, save;
         public ArchiveCompareForm() : base("MKWii Archive Compare Tool", "Compare resource contents • Select changed entries • Save a combined archive copy", "MenuSingle.szs ↔ MUR_EDITED/MenuSingle.szs · *.szs / *.arc / *.u8")
@@ -39,11 +40,18 @@ namespace murumsWiiModStudio
             });
             compare = Action("Compare entries", "Compare uncompressed entry bytes. Archive compression and file order do not create false differences.", Compare);
             save = ExportAction("Save selected changes…", "Replace checked resources in a copy of the base archive. BRLYT and BRLAN resources are copied as complete files.", Save);
+            var fileColumn = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Margin = Padding.Empty };
+            fileColumn.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            fileColumn.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            fileColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            fileColumn.Controls.Add(new Label { Text = "Changed resources\nCheck entries to copy", Dock = DockStyle.Fill }, 0, 0);
+            fileColumn.Controls.Add(files, 0, 1);
             var views = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2
+                ColumnCount = 2, RowCount = 1, Margin = Padding.Empty
             };
+            views.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             views.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             views.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             var before = new ResourcePreviewPanel();
@@ -56,7 +64,9 @@ namespace murumsWiiModStudio
                 Width = 1000,
                 SplitterDistance = 300
             };
-            split.Panel1.Controls.Add(files);
+            split.Panel1.Controls.Add(fileColumn);
+            before.ShowResource("Base archive", null);
+            after.ShowResource("Edited archive", null);
             split.Panel2.Controls.Add(views);
             Body.Controls.Add(split);
             files.SelectedIndexChanged += delegate

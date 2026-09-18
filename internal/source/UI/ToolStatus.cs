@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
@@ -57,6 +57,18 @@ namespace murumsWiiModStudio
             if (String.IsNullOrEmpty(status.Text)) status.Text = L.T("Bereit.", "Ready.");
             panel.Controls.Add(bar, 0, 1);
             panel.Controls.Add(status, 0, 0);
+            Action resizeStatus = delegate
+            {
+                var root = panel.Parent as TableLayoutPanel;
+                if (root == null) return;
+                int row = root.GetRow(panel);
+                if (row < 0 || row >= root.RowStyles.Count) return;
+                int lines = Math.Min(3, status.Text.Split('\n').Length);
+                root.RowStyles[row].SizeType = SizeType.Absolute;
+                root.RowStyles[row].Height = Math.Max(30, status.Font.Height * lines + 12);
+            };
+            status.TextChanged += delegate { resizeStatus(); };
+            panel.ParentChanged += delegate { resizeStatus(); };
             owner.ParentChanged += delegate
             {
                 bar.Visible = owner.TopLevel;

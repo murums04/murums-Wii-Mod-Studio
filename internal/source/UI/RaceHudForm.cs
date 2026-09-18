@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Drawing;
@@ -92,9 +92,9 @@ namespace murumsWiiModStudio
             {
                 148f,
                 82f,
-                48f,
+                34f,
                 -1f,
-                58f,
+                42f,
                 38f,
                 46f,
                 30f
@@ -150,7 +150,7 @@ namespace murumsWiiModStudio
             {
                 Dock = DockStyle.Fill,
                 Width = 1100,
-                SplitterDistance = 410
+                SplitterDistance = 360
             };
             var browser = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
             browser.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -166,6 +166,13 @@ namespace murumsWiiModStudio
             search.Dock = DockStyle.Fill;
             browser.Controls.Add(search, 0, 3);
             browser.Controls.Add(textures, 0, 4);
+            browser.Controls.Clear();
+            browser.RowCount = 2;
+            browser.RowStyles.Clear();
+            browser.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
+            browser.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            browser.Controls.Add(new Label { Text = L.T("Texturen", "Textures"), AutoSize = true }, 0, 0);
+            browser.Controls.Add(textures, 0, 1);
             split.Panel1.Controls.Add(browser);
             var right = new TableLayoutPanel
             {
@@ -173,11 +180,13 @@ namespace murumsWiiModStudio
                 RowCount = 4,
                 ColumnCount = 1
             };
-            right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
             right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
             right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            right.Controls.Add(layoutActions, 0, 0);
+            right.Controls.Add(new Label { Text = L.T("Texturvorschau", "Texture preview"), AutoSize = true }, 0, 0);
+            bar.Controls.Add(layoutActions);
             right.Controls.Add(preview, 0, 1);
             right.Controls.Add(detail, 0, 2);
             var actions = new FlowLayoutPanel
@@ -206,7 +215,26 @@ namespace murumsWiiModStudio
             right.Controls.Add(actions, 0, 3);
 
             split.Panel2.Controls.Add(right);
-            grid.Controls.Add(split, 0, 3);
+            var workspace = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Margin = Padding.Empty };
+            workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            workspace.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+            workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = Padding.Empty };
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
+            filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
+            filters.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            filters.Controls.Add(new Label { Text = L.T("Kategorie", "Category"), AutoSize = true }, 0, 0);
+            filters.Controls.Add(category, 0, 1);
+            filters.Controls.Add(new Label { Text = L.T("Textur suchen (alle Kategorien)", "Find texture (all categories)"), AutoSize = true }, 1, 0);
+            filters.Controls.Add(search, 1, 1);
+            filters.ColumnStyles[0].SizeType = SizeType.Absolute;
+            Action alignFilters = delegate { filters.ColumnStyles[0].Width = split.SplitterDistance + split.SplitterWidth + 3; };
+            split.SplitterMoved += delegate { alignFilters(); };
+            workspace.SizeChanged += delegate { alignFilters(); };
+            workspace.Controls.Add(filters, 0, 0);
+            workspace.Controls.Add(split, 0, 1);
+            grid.Controls.Add(workspace, 0, 3);
             textures.SelectedIndexChanged += delegate
             {
                 if (!refreshingTextures)
@@ -232,10 +260,11 @@ namespace murumsWiiModStudio
                 Dock = DockStyle.Fill,
                 ColumnCount = 4
             };
+            export.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             export.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));
             export.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            export.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
-            export.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            export.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            export.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             export.Controls.Add(new Label { Text = "Save copies to", AutoSize = true }, 0, 0);
             export.Controls.Add(output, 1, 0);
             export.Controls.Add(Button("Browse…", delegate
@@ -254,6 +283,8 @@ namespace murumsWiiModStudio
             export.Controls.Add(save, 3, 0);
             grid.Controls.Add(ToolStatus.Wrap(this, status), 0, 7);
             grid.Controls.Add(export, 0, 6);
+            foreach (Control control in export.Controls) control.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            output.Dock = DockStyle.None;
             PackSelection.Attach(this, delegate(CustomPack pack) { output.Text = Path.Combine(pack.FilesFolder, "MUR_EDITED"); });
             DarkTheme.Apply(this);
             StudioUx.Attach(this);

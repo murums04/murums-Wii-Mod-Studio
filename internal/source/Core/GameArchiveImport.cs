@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,11 +34,11 @@ namespace murumsWiiModStudio
             return tool;
         }
 
-        internal static string[] List(string imagePath)
+        internal static string[] List(string imagePath, bool allSzs = false)
         {
             string output, error;
             string arguments = "files " + ToolchainManager.QuoteArgument(Path.GetFullPath(imagePath))
-                + " --psel data --files " + ToolchainManager.QuoteArgument(Selection);
+                + " --psel data --files " + ToolchainManager.QuoteArgument(allSzs ? "+/files/**.szs;+/files/contents/globe.arc;-*" : Selection);
             if (!ToolchainManager.RunCapture(RequireTool(), arguments, out output, out error))
                 throw new IOException(error ?? output);
             var paths = new List<string>();
@@ -47,7 +47,7 @@ namespace murumsWiiModStudio
                 string path = line.Trim();
                 if (path.StartsWith("./", StringComparison.Ordinal))
                     path = path.Substring(2);
-                if (IsSupportedPath(path))
+                if (allSzs ? (IsSzsPath(path) || path == "files/contents/globe.arc") : IsSupportedPath(path))
                     paths.Add(path);
             }
             if (paths.Count == 0)
@@ -55,6 +55,15 @@ namespace murumsWiiModStudio
                     "Keine passenden Menüarchive gefunden. Bitte dein Mario-Kart-Wii-Spielabbild auswählen.",
                     "No matching menu archives found. Please choose your Mario Kart Wii game image."));
             return paths.Distinct(StringComparer.Ordinal).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        internal static bool IsSzsPath(string path)
+        {
+            if (String.IsNullOrWhiteSpace(path) || !path.StartsWith("files/", StringComparison.Ordinal)
+                || !path.EndsWith(".szs", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return path.Split('/').All(part => part.Length > 0 && part != "." && part != ".."
+                && part.IndexOfAny(new[] { '\\', ';', '*', '?', ':', '\r', '\n', '\0' }) < 0);
         }
 
         internal static bool IsSupportedPath(string path)
@@ -87,9 +96,9 @@ namespace murumsWiiModStudio
             return selectedPaths.ToArray();
         }
 
-        internal static string Extract(string imagePath, string[] paths, string destination)
+        internal static string Extract(string imagePath, string[] paths, string destination, bool allSzs = false)
         {
-            if (paths == null || paths.Length == 0 || paths.Any(path => !IsSupportedPath(path)))
+            if (paths == null || paths.Length == 0 || paths.Any(path => !(allSzs ? (IsSzsPath(path) || path == "files/contents/globe.arc") : IsSupportedPath(path))))
                 throw new InvalidDataException("Invalid archive selection.");
             destination = Path.GetFullPath(destination);
             string[] names = paths.Select(Path.GetFileName).ToArray();
