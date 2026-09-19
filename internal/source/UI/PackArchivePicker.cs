@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -11,6 +11,7 @@ namespace murumsWiiModStudio
     internal sealed class PackArchivePicker : Form
     {
         readonly string imagePath;
+        readonly string[] rrNames;
         readonly ListView archives = new ListView {
             Dock = DockStyle.Fill, View = View.Details, CheckBoxes = true,
             FullRowSelect = true, HideSelection = false, MultiSelect = false, BackColor = DarkTheme.Panel
@@ -24,8 +25,10 @@ namespace murumsWiiModStudio
         bool busy;
         internal string[] ImportedPaths { get; private set; }
 
-        internal PackArchivePicker(string path)
+        internal PackArchivePicker(string path) : this(path, null) { }
+        internal PackArchivePicker(string path, string[] suppliedByRr)
         {
+            rrNames = suppliedByRr;
             imagePath = path;
             Text = L.T("Archive aus ISO/WBFS auswählen", "Choose archives from ISO/WBFS");
             Font = new Font("Segoe UI", 10F);
@@ -44,10 +47,10 @@ namespace murumsWiiModStudio
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             grid.RowStyles.Insert(0, new RowStyle(SizeType.Absolute, 118));
             grid.Controls.Add(StudioChrome.Header(L.T("Archive auswählen", "Choose archives"),
-                L.T("Empfohlene Menü-/HUD-Dateien • Englische Varianten vorausgewählt • Frei anpassbar", "Recommended menu/HUD files • English variants preselected • Adjust your selection")), 0, 0);
+                L.T("Fehlende Originaldateien ergänzen • RR-Dateien bleiben erhalten", "Add missing original files • Keep RR files intact")), 0, 0);
             grid.Controls.Add(new Label { AutoSize = true, Text = L.T(
-                "Suche in Name, Pfad und Erklärung. Zusätzliche Mod-Dateien sind nicht in der ISO enthalten.",
-                "Search names, paths and descriptions. Extra mod files are not included in the ISO.") }, 0, 1);
+                "Nur fehlende Earth.szs, BackModel.szs und globe.arc. Menü-, HUD- und Schriftdateien kommen aus RR.",
+                "Only missing Earth.szs, BackModel.szs and globe.arc are offered. All menu, HUD and font files come from RR.") }, 0, 1);
             grid.Controls.Add(search, 0, 2);
             archives.Columns.Add(L.T("Datei", "File"), 200);
             archives.Columns.Add(L.T("Verwendung", "Purpose"), 270);
@@ -92,6 +95,7 @@ namespace murumsWiiModStudio
                 try
                 {
                     available = await Task.Run(() => GameArchiveImport.List(imagePath, true));
+                    if (rrNames != null) available = available.Where(p => RetroRewindSource.AllowIso(p, rrNames)).ToArray();
                     foreach (string entry in available.Where(IsRecommended)) selected.Add(entry);
                     RefreshFiles();
                 }
@@ -175,6 +179,8 @@ namespace murumsWiiModStudio
         void UpdateCount()
         {
             add.Enabled = !busy && selected.Count > 0;
+            if (!busy && rrNames != null && available.Length == 0)
+                status.Text = L.T("Keine fehlenden Modellressourcen gefunden. RR-Dateien werden nicht ersetzt.", "No missing model resources found. RR files will not be replaced.");
             if (available.Length > 0)
                 status.Text = archives.Items.Count + " / " + available.Length + L.T(" Dateien • Ausgewählt: ", " files • Selected: ") + selected.Count;
         }

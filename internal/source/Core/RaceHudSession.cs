@@ -34,6 +34,9 @@ namespace murumsWiiModStudio
             string assets = HudAssetSource.Find(path);
             if (File.Exists(assets) && !loaded.Any(a => string.Equals(a.Source, Path.GetFullPath(assets), StringComparison.OrdinalIgnoreCase)))
                 loaded.Add(new RaceHudArchive(assets));
+            string replacements = HudAssetSource.Find(path, "ReplacedAssets.szs");
+            if (File.Exists(replacements) && !loaded.Any(a => String.Equals(a.Source, Path.GetFullPath(replacements), StringComparison.OrdinalIgnoreCase)))
+                loaded.Add(new RaceHudArchive(replacements));
             Archives.Clear();
             Archives.AddRange(loaded);
         }
@@ -52,7 +55,13 @@ namespace murumsWiiModStudio
                 && !Path.GetFullPath(assets).Equals(full, StringComparison.OrdinalIgnoreCase)
                 && !Archives.Any(a => Path.GetFileName(a.Source).Equals("RaceAssets.szs", StringComparison.OrdinalIgnoreCase)))
                 supplementary = new RaceHudArchive(assets);
+            string replacements = HudAssetSource.Find(full, "ReplacedAssets.szs");
+            RaceHudArchive replacementArchive = null;
+            if (File.Exists(replacements) && !Path.GetFullPath(replacements).Equals(full, StringComparison.OrdinalIgnoreCase)
+                && !Archives.Any(a => Path.GetFileName(a.Source).Equals("ReplacedAssets.szs", StringComparison.OrdinalIgnoreCase)))
+                replacementArchive = new RaceHudArchive(replacements);
             Archives.Add(added);
+            if (replacementArchive != null) Archives.Add(replacementArchive);
             if (supplementary != null)
                 Archives.Add(supplementary);
         }

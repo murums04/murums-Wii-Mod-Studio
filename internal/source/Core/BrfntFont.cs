@@ -67,8 +67,8 @@ namespace murumsWiiModStudio
                     TextureOffset = U32(bytes, p + 28);
                     if (Columns < 1 || Rows < 1 || Sheets < 1 || CellWidth < 1 || CellHeight < 1 || Width > 4096 || Height > 4096 || Columns * (CellWidth + 1) > Width || Rows * (CellHeight + 1) > Height || TextureOffset < p + 32 || (long)TextureOffset + (long)SheetSize * Sheets > end)
                         throw new InvalidDataException("Invalid BRFNT atlas dimensions.");
-                    if (Format != 2 && Format != 3 && Format != 5 && Format != 6)
-                        throw new NotSupportedException("Font import supports IA4, IA8, RGB5A3 and RGBA32 atlases.");
+                    if (Format != 0 && Format != 1 && Format != 2 && Format != 3 && Format != 5 && Format != 6)
+                        throw new NotSupportedException("Font import supports I4, I8, IA4, IA8, RGB5A3 and RGBA32 atlases.");
                 }
 
                 if (tag == "CWDH")
@@ -157,7 +157,14 @@ namespace murumsWiiModStudio
             if (!TexturePreview.TryDecode("font.tpl", SheetTpl(sheet), 0, out result, out error))
                 throw new InvalidDataException(error);
             using (result)
-                return new Bitmap(result.Bitmap);
+            {
+                var bitmap = new Bitmap(result.Bitmap);
+                if (Format == 0 || Format == 1)
+                    for (int y = 0; y < bitmap.Height; y++)
+                        for (int x = 0; x < bitmap.Width; x++)
+                            bitmap.SetPixel(x, y, Color.FromArgb(bitmap.GetPixel(x, y).R, 255, 255, 255));
+                return bitmap;
+            }
         }
 
         public Bitmap Sample(string text)
@@ -224,6 +231,12 @@ namespace murumsWiiModStudio
         {
             if (float.IsNaN(outlineWidth) || outlineWidth < 0 || outlineWidth > 4)
                 throw new ArgumentOutOfRangeException("outlineWidth");
+            // I4/I8-Schriften speichern Deckung; die Farbe kommt aus dem Spielmaterial.
+            if (Format == 0 || Format == 1)
+            {
+                fill = Color.White;
+                outlineColor = Color.White;
+            }
             byte[] output = (byte[])data.Clone();
             replaced = 0;
             var supported = TtfCoverage.Latin(ttf);
@@ -330,6 +343,13 @@ namespace murumsWiiModStudio
 
                         if (changed)
                         {
+                            if (Format == 0 || Format == 1)
+                                for (int y = 0; y < atlas.Height; y++)
+                                    for (int x = 0; x < atlas.Width; x++)
+                                    {
+                                        int coverage = atlas.GetPixel(x, y).A;
+                                        atlas.SetPixel(x, y, Color.FromArgb(255, coverage, coverage, coverage));
+                                    }
                             byte[] encoded = TplTextureEditor.ReplaceFirstImage(SheetTpl(sheet), atlas, false);
                             Buffer.BlockCopy(encoded, 64, output, TextureOffset + sheet * SheetSize, SheetSize);
                         }

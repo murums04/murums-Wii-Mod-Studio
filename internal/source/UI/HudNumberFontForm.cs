@@ -129,7 +129,7 @@ namespace murumsWiiModStudio
             Actions.Controls.Add(hint);
             Actions.SetFlowBreak(Actions.Controls[Actions.Controls.Count - 1], true);
             scope.Items.AddRange(new object[] { "Selected texture only", "Same filename in all loaded archives", "Complete digit set + separators" });
-            scope.SelectedIndex = 0;
+            scope.SelectedIndex = current != null && SetCharacter(key) != null ? 2 : 0;
             scope.Enabled = available != null;
             Actions.Controls.Add(scope);
             StudioUx.SetHelp(scope, "Preview lists every affected path before Apply. Complete set includes recognized tt_d_number_3d / som_d_number_3d digits, slash and punctuation across loaded archives.");
@@ -222,6 +222,13 @@ namespace murumsWiiModStudio
             }
 
             : available.Where(t => scope.SelectedIndex == 1 ? string.Equals(Path.GetFileName(t.Key), Path.GetFileName(selected.Key), StringComparison.OrdinalIgnoreCase) : SetCharacter(t.Key) != null).ToList();
+            if (selected != null && available != null)
+            {
+                var names = new HashSet<string>(targets.Select(t => Path.GetFileName(t.Key)), StringComparer.OrdinalIgnoreCase);
+                foreach (var replacement in available.Where(t => Path.GetFileName(t.Archive.Source).Equals("ReplacedAssets.szs", StringComparison.OrdinalIgnoreCase)
+                    && names.Contains(Path.GetFileName(t.Key))))
+                    if (!targets.Contains(replacement)) targets.Add(replacement);
+            }
             if (selected != null && targets.Count == 0)
                 throw new InvalidOperationException("No recognized digit textures in the loaded archives.");
             var pending = new Dictionary<HudTexture, byte[]>();

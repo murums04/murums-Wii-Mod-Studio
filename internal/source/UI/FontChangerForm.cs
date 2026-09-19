@@ -262,7 +262,9 @@ namespace murumsWiiModStudio
         {
             if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard the pending fonts and open another source?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes)
                 return;
-            string p = OpenPath("Wii fonts|*.szs;*.arc;*.brfnt");
+            string p;
+            using (var picker = new FontSourcePicker(RetroRewindSource.Discover()))
+                p = picker.ShowDialog(this) == DialogResult.OK ? picker.SelectedPath : null;
             if (p == null)
                 return;
             StudioArchiveCopy next = Path.GetExtension(p).Equals(".brfnt", StringComparison.OrdinalIgnoreCase) ? null : new StudioArchiveCopy(p);
@@ -294,12 +296,13 @@ namespace murumsWiiModStudio
             if (original != null)
             {
                 var f = new BrfntFont(pending ?? original);
+                fillButton.Enabled = outlineButton.Enabled = f.Format != 0 && f.Format != 1;
                 sheet.Value = 1;
                 sheet.Maximum = f.Sheets;
                 Render();
             }
 
-            Status.Text = original == null ? "Choose your pack's Font.szs to begin." : Path.GetFileName(source) + " • " + (ttf == null ? "Choose a TTF." : Path.GetFileName(ttf)) + "\nLatin characters only; Japanese text and game symbols are preserved. Existing spacing is retained; wide fonts may be compressed. IA4/IA8: grayscale colours.";
+            Status.Text = original == null ? "Choose your pack's Font.szs to begin." : Path.GetFileName(source) + " • " + fonts.Items.Count + " fonts • " + (ttf == null ? "Choose a TTF." : Path.GetFileName(ttf)) + "\nLatin characters only; Japanese text and game symbols are preserved. Existing spacing is retained; wide fonts may be compressed. I4/I8: coverage mask, game-defined colour. IA4/IA8: grayscale colours.";
         }
 
         void Render()

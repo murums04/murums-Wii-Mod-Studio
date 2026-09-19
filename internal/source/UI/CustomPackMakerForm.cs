@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -21,28 +21,34 @@ namespace murumsWiiModStudio
         readonly Label preview = new Label { Dock = DockStyle.Fill, AutoSize = true, UseMnemonic = false };
         readonly Button create;
         string rememberedFolder;
-        readonly PackSelectionStrip sourceBar = new PackSelectionStrip { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(4), ColumnCount = 5 };
+        string rrFolder;
+        string[] rrFiles = new string[0];
+        readonly TextBox rrPath = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
+        readonly PackSelectionStrip sourceBar = new PackSelectionStrip { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(4), ColumnCount = 6 };
         readonly Label sourceHint = new Label
         {
             Name = "PackFilesHint", TextAlign = ContentAlignment.MiddleCenter,
             BackColor = DarkTheme.AccentSoft, ForeColor = DarkTheme.Fore, Padding = new Padding(12),
-            Text = L.T("Open ISO/WBFS: Originaldateien aus deinem Spiel auswählen.\nAdd files: vorhandene .szs-Dateien oder globe.arc hinzufügen.\nAdd existing pack: einen bestehenden Pack-Ordner merken.",
-                "Open ISO/WBFS: select original files from your game.\nAdd files: add existing .szs files or globe.arc.\nAdd existing pack: remember an existing pack folder.")
+            Text = L.T("Wähle zuerst deinen Retro-Rewind-Ordner.\nRR-Dateien bilden die Grundlage deines Packs.\nErgänze danach nur fehlende Dateien aus deiner ISO/WBFS.",
+                "Select your Retro Rewind folder first.\nRR files form the base of your pack.\nThen add only missing files from your ISO/WBFS.")
         };
 
         internal CustomPackMakerForm() : base("MKWii Custom Pack Maker",
-            L.T("ISO/WBFS empfohlen • Pack benennen • Dateien wählen", "ISO/WBFS recommended • Name your pack • Select files"))
+            L.T("RR-Ordner wählen • Fehlende Dateien ergänzen • Pack erstellen", "Choose RR folder • Add missing files • Create pack"))
         {
-            Action("Open ISO/WBFS…", "ISO/WBFS recommended: choose archives from the complete game file list.", delegate
+            Action(L.T("RR-Ordner wählen…", "Choose RR folder…"), "Select your installed Retro Rewind version as the pack base.", ChooseRrFolder);
+            Action(L.T("ISO ergänzen…", "Add missing from ISO…"), "Only files absent from RR are offered. RR menu backgrounds are never replaced.", delegate
             {
-                using (var picker = new OpenFileDialog { Filter = "ISO / WBFS (recommended)|*.iso;*.wbfs;*.wia;*.ciso;*.wdf" })
+                RequireRrFolder();
+                using (var picker = new OpenFileDialog { Filter = "ISO / WBFS|*.iso;*.wbfs;*.wia;*.ciso;*.wdf" })
                     if (picker.ShowDialog(this) == DialogResult.OK)
-                        using (var dialog = new PackArchivePicker(picker.FileName))
+                        using (var dialog = new PackArchivePicker(picker.FileName, rrFiles.Select(Path.GetFileName).ToArray()))
                             if (dialog.ShowDialog(this) == DialogResult.OK)
                                 AddFiles(dialog.ImportedPaths);
             });
             Action(L.T("Dateien hinzufügen…", "Add files…"), "Add existing .szs files or globe.arc. Originals are kept.", delegate
             {
+                RequireRrFolder();
                 using (var picker = new OpenFileDialog { Filter = "SZS / globe archives|*.szs;globe.arc", Multiselect = true })
                     if (picker.ShowDialog(this) == DialogResult.OK)
                         AddFiles(picker.FileNames);
@@ -165,6 +171,12 @@ namespace murumsWiiModStudio
             StudioUx.SetHelp(modId, L.T("-1 für ein eigenes lokales Pack beibehalten, sofern keine ModID vorliegt.", "Keep -1 for a local custom pack unless you have a ModID."));
             StudioUx.SetHelp(priority, L.T("Prioritätswert in der Pack-INI. Standard: 0.", "Priority value written to the pack INI. Default: 0."));
             StudioUx.SetHelp(enabled, L.T("Pack in der INI als aktiviert markieren.", "Mark the pack as enabled in its INI."));
+            grid.RowCount++;
+            foreach (Control control in grid.Controls.Cast<Control>().OrderByDescending(c => grid.GetRow(c)).ToArray())
+                grid.SetRow(control, grid.GetRow(control) + 1);
+            grid.RowStyles.Insert(0, new RowStyle(SizeType.AutoSize));
+            AddRow(grid, 0, L.T("RR-Quelle", "RR source"), rrPath);
+            grid.SetColumnSpan(rrPath, 2);
             Body.Controls.Add(grid);
             create = ExportAction(L.T("Pack erstellen", "Create pack"), "Create a new pack without overwriting existing files.", Create);
             template.SelectedIndexChanged += delegate
@@ -181,6 +193,13 @@ namespace murumsWiiModStudio
             StudioUx.DisableHover(destination);
             MinimumSize = new Size(950, 870);
             Size = new Size(1140, 900);
+            files.FormattingEnabled = true;
+            files.Format += delegate(object sender, ListControlConvertEventArgs e)
+            {
+                string path = e.ListItem as string;
+                if (path != null)
+                    e.Value = Path.GetFileName(path) + (rrFiles.Contains(path) ? " — Retro Rewind" : " — " + Path.GetDirectoryName(path));
+            };
             RefreshPacks();
             Finish();
             Controls.Add(sourceHint);
@@ -188,11 +207,70 @@ namespace murumsWiiModStudio
             UpdateSourceHint();
         }
 
+        void RequireRrFolder()
+        {
+            if (String.IsNullOrEmpty(rrFolder))
+                throw new InvalidOperationException(L.T("Zuerst RR-Ordner wählen.", "Choose your RR folder first."));
+        }
+
+        void ChooseRrFolder()
+        {
+            string[] found = RetroRewindSource.Discover();
+            using (var dialog = new Form { Text = L.T("Retro-Rewind-Quelle", "Retro Rewind source"), Font = new Font("Segoe UI", 9), ClientSize = new Size(820, 240),
+                MinimumSize = new Size(700, 280), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false })
+            {
+                var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 2, RowCount = 3 };
+                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                var help = new Label { Dock = DockStyle.Fill, AutoSize = true, Text = L.T(
+                    "Wähle die RR-Version, die du spielst. Erkannte Installationen stehen in der Liste.\nBei eigener/portabler Installation: Browse. Wähle RetroRewind6, nicht Mods/Patches.",
+                    "Choose the RR version you play. Detected installations are listed below.\nFor a custom/portable installation use Browse. Select RetroRewind6, not Mods/Patches.") };
+                layout.Controls.Add(help, 0, 0); layout.SetColumnSpan(help, 2);
+                var paths = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+                paths.Items.AddRange(found);
+                if (found.Length > 0) paths.SelectedIndex = 0;
+                var browse = new Button { Text = "Browse", AutoSize = true, Height = 32 };
+                browse.Click += delegate {
+                    using (var picker = new FolderPickerDialog { Description = "Select RetroRewind6 (contains UI and Assets)", SelectedPath = paths.Text })
+                        if (picker.ShowDialog(dialog) == DialogResult.OK) {
+                            paths.Items.Add(picker.SelectedPath); paths.SelectedIndex = paths.Items.Count - 1;
+                        }
+                };
+                layout.Controls.Add(paths, 0, 1); layout.Controls.Add(browse, 1, 1);
+                var use = new Button { Text = L.T("RR-Dateien übernehmen", "Use RR files"), AutoSize = true, Height = 34, Anchor = AnchorStyles.Right, Enabled = paths.SelectedIndex >= 0 };
+                paths.SelectedIndexChanged += delegate { use.Enabled = paths.SelectedIndex >= 0; };
+                use.Click += delegate {
+                    try { LoadRrFolder(paths.Text); dialog.DialogResult = DialogResult.OK; }
+                    catch (Exception error) { StudioMessageBox.Show(dialog, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                };
+                layout.Controls.Add(use, 0, 2); layout.SetColumnSpan(use, 2);
+                dialog.Controls.Add(layout); DarkTheme.Apply(dialog); dialog.ShowDialog(this);
+            }
+        }
+
+        void LoadRrFolder(string folder)
+        {
+            string[] staged = RetroRewindSource.Stage(folder);
+            // Ein Wechsel der RR-Version verwirft nur die vorgemerkte Auswahl.
+            files.Items.Clear();
+            rrFolder = RetroRewindSource.Resolve(folder);
+            rrFiles = staged;
+            rrPath.Text = rrFolder;
+            files.Items.AddRange(staged);
+            Status.Text = staged.Length + L.T(" RR-Dateien bereit. ISO ergänzt nur fehlende Dateien.", " RR files ready. ISO adds missing files only.");
+            UpdateSourceHint();
+        }
+
         void AddFiles(string[] paths)
         {
+            RequireRrFolder();
             foreach (string path in paths)
-                if (!files.Items.Cast<string>().Any(p => String.Equals(p, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                string name = Path.GetFileName(path);
+                if (rrFiles.Any(p => Path.GetFileName(p).Equals(name, StringComparison.OrdinalIgnoreCase)) || RetroRewindSource.IsBackgroundArchive(name)) continue;
+                if (!files.Items.Cast<string>().Any(p => Path.GetFileName(p).Equals(name, StringComparison.OrdinalIgnoreCase)))
                     files.Items.Add(path);
+            }
             Status.Text = files.Items.Count + L.T(" Dateien ausgewählt.", " files selected.");
             UpdateSourceHint();
         }
@@ -269,6 +347,8 @@ namespace murumsWiiModStudio
 
         void Create()
         {
+            RequireRrFolder();
+            if (files.Items.Count == 0) throw new InvalidOperationException("Select at least one file for the new pack.");
             var pack = CustomPacks.Create(destination.Text, packName.Text, description.Text,
                 template.SelectedIndex == 0, files.Items.Cast<string>(), author.Text,
                 template.SelectedIndex == 0 ? (int)modId.Value : -1,

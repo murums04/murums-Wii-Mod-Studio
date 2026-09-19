@@ -176,6 +176,7 @@ namespace murumsWiiModStudio
         public static byte[] Build(byte[] input, string picture)
         {
             var a = U8Archive.Load(input);
+            RetroRewindSource.RequireBackground(a);
             var layout = PathEntry(a.Root, "message_window/blyt/common_w017_message.brlyt");
             layout.Data = AddPicture(layout.Data);
             var images = PathEntry(a.Root, "message_window/timg");

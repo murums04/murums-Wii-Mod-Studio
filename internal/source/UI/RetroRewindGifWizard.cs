@@ -1517,6 +1517,8 @@ namespace murumsWiiModStudio
             progress(2, L.T("Archive werden geladen...", "Loading archives..."));
             U8Archive common = U8Archive.Load(File.ReadAllBytes(options.CommonTitlePath));
             U8Archive language = U8Archive.Load(File.ReadAllBytes(options.LanguageTitlePath));
+            RetroRewindSource.RequireBackground(common);
+            RetroRewindSource.RequireBackground(language);
             ArchiveEntry langTitle = FindEntry(language.Root, "title");
             ArchiveEntry langAnim = FindEntry(language.Root, "title", "anim");
             ArchiveEntry langBlyt = FindEntry(language.Root, "title", "blyt");
@@ -3383,6 +3385,9 @@ namespace murumsWiiModStudio
                 throw new FileNotFoundException("Background source not found.", options.SourcePath);
             if (String.IsNullOrWhiteSpace(options.OutputFolder))
                 throw new InvalidDataException("Output folder is empty.");
+            RetroRewindSource.RequireBackground(U8Archive.Load(File.ReadAllBytes(options.CommonArchivePath)));
+            if (File.Exists(options.LanguageArchivePath))
+                RetroRewindSource.RequireBackground(U8Archive.Load(File.ReadAllBytes(options.LanguageArchivePath)));
             string ext = Path.GetExtension(options.SourcePath ?? "").ToLowerInvariant();
             if (ext != ".gif" && ext != ".png" && ext != ".jpg" && ext != ".jpeg")
                 throw new InvalidDataException(L.T("Unterstützte Hintergrundformate: GIF, PNG, JPG und JPEG.", "Supported background formats: GIF, PNG, JPG and JPEG."));
