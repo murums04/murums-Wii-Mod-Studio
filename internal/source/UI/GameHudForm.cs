@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -78,7 +78,7 @@ namespace murumsWiiModStudio
             AutoSize = true,
             MaximumSize = new Size(220, 0)
         };
-        Button tint, replace, recolour, undo, redo, save, restore;
+        Button tint, replace, recolour, undo, redo, save, restore, clearReference;
         CheckBox advanced;
         readonly CheckBox moveWhole = new CheckBox
         {
@@ -92,7 +92,7 @@ namespace murumsWiiModStudio
         {
         }
 
-        internal GameHudForm(IEnumerable<StudioArchiveCopy> archives) : base(archives == null ? "MKWii Game HUD Tool" : "MKWii Race HUD Tool – Layout", L.T("Layout auswählen • Elemente auf der Arbeitsfläche verschieben • Farben und Texturen bearbeiten", "Choose a layout • Drag elements on the canvas • Edit colours and textures"), archives == null ? "MenuSingle.szs · MenuMulti.szs · Title.szs · Common.szs → *.brlyt / *.tpl" : "Race.szs · Race_E.szs → *.brlyt / *.tpl")
+        internal GameHudForm(IEnumerable<StudioArchiveCopy> archives) : base(archives == null ? "MKWii Game HUD Tool" : "MKWii Race HUD Tool – Layout", L.T("Layout auswählen • Elemente auf der Arbeitsfläche verschieben • Farben und Texturen bearbeiten", "Choose a layout • Drag elements on the canvas • Edit colours and textures"), archives == null ? "MenuSingle.szs · MenuMulti.szs · Title_E.szs / Title_U.szs / Title_J.szs → *.brlyt / *.tpl" : "Race.szs · Race_E.szs → *.brlyt / *.tpl", false)
         {
             embedded = archives != null;
             Size = new Size(1380, 900);
@@ -101,11 +101,11 @@ namespace murumsWiiModStudio
             Status.AutoEllipsis = false;
             if (!embedded)
             {
-                Action(L.T("ISO/WBFS auswählen…", "Browse ISO/WBFS…"), "MenuSingle.szs, MenuMulti.szs, Title.szs, Common.szs…", delegate
+                Action(L.T("Datei öffnen…", "Open file…"), "MenuSingle.szs, MenuMulti.szs, Title.szs, Common.szs…", delegate
                 {
                     OpenArchive(false);
                 });
-                Action(L.T("Archiv / ISO hinzufügen…", "Add archive / ISO…"), "Add archives with shared textures or language resources.", delegate
+                Action(L.T("Datei hinzufügen…", "Add file…"), "Add archives with shared textures or language resources.", delegate
                 {
                     OpenArchive(true);
                 });
@@ -133,13 +133,15 @@ namespace murumsWiiModStudio
                 canvas.ResetView();
             });
             Action(L.T("Referenzbild…", "Reference image…"), "Optional screenshot behind this layout. Visual reference only; never exported.", ReferenceImage);
-            Action(L.T("Referenz entfernen", "Clear reference"), "Remove the reference screenshot.", delegate
+            clearReference = Action(L.T("Referenz entfernen", "Clear reference"), "Remove the reference screenshot.", delegate
             {
                 if (canvas.Reference != null)
                     canvas.Reference.Dispose();
                 canvas.Reference = null;
+                clearReference.Visible = false;
                 canvas.Invalidate();
             });
+            clearReference.Visible = false;
             moveWhole.Text = embedded ? L.T("Ganzes HUD-Layout verschieben", "Move whole HUD layout") : L.T("Ganzes Layout verschieben", "Move whole layout");
             moveWhole.Checked = embedded;
             moveWhole.Margin = new Padding(8, 14, 4, 0);
@@ -207,7 +209,7 @@ namespace murumsWiiModStudio
             root.SetColumnSpan(archiveHeader, 2);
             root.Controls.Add(FieldHeader(L.T("1  Layouts suchen", "1  Search layouts"), search), 0, 1);
             root.Controls.Add(FieldHeader(L.T("2  Layout auswählen", "2  Choose a layout"), layouts), 1, 1);
-            moveWhole.Margin = new Padding(0, 2, 0, 6);
+            moveWhole.Margin = new Padding(8, 14, 4, 0);
             root.Controls.Add(tree, 0, 3);
             root.Controls.Add(canvas, 1, 3);
             root.Controls.Add(properties, 2, 0);
@@ -235,7 +237,11 @@ namespace murumsWiiModStudio
             };
             StudioUx.SetHelp(moveWhole, L.T("Zieht die oberste Gruppe mit allen Kindern. Gilt für das gewählte Teillayout, nicht für andere Dateien.", "Drags the top-level group with all children. Affects this component layout, not other files."));
             StudioUx.SetHelp(search, L.T("Layouts nach Dateiname filtern, z. B. button, select, position, map oder inputviewer.", "Filter layout filenames, e.g. button, select, position, map or inputviewer."));
-            properties.Controls.Add(moveWhole);
+            Actions.Controls.Add(moveWhole);
+            properties.BackColor = DarkTheme.Panel;
+            properties.Padding = new Padding(10);
+            selectedLabel.Margin = new Padding(0, 0, 0, 8);
+            visible.Margin = new Padding(0, 6, 0, 6);
             properties.Controls.Add(selectedLabel);
             AddNumber("X", -100000, 100000, 2);
             AddNumber("Y", -100000, 100000, 2);
@@ -249,9 +255,10 @@ namespace murumsWiiModStudio
             advanced = new CheckBox
             {
                 AutoSize = true,
-                Text = L.T("Skalierung, Drehung und Details", "Scale, rotation and details"),
-                Margin = new Padding(0, 5, 0, 5)
+                Text = L.T("Weitere Eigenschaften", "More properties"),
+                Margin = new Padding(0, 6, 0, 6)
             };
+            StudioUx.SetHelp(advanced, L.T("Skalierung, Drehung und Details anzeigen.", "Show scale, rotation and layout details."));
             properties.Controls.Add(advanced);
             for (int i = 4; i <= 6; i++)
                 values[i].Parent.Visible = false;
@@ -346,6 +353,7 @@ namespace murumsWiiModStudio
                 foreach (var a in archives)
                     Session.Add(a);
             Finish();
+            if (Session.Archives.Count > 0) PackSelection.SourceLoaded(this);
             search.Height = layouts.Height;
             RefreshLayouts();
             Sync();
@@ -435,7 +443,14 @@ namespace murumsWiiModStudio
 
         void OpenArchive(bool add)
         {
-            var path = OpenPath("SZS / U8 archives|*.szs;*.arc;*.u8");
+            string path;
+            using (var picker = new OpenFileDialog
+            {
+                Title = L.T("HUD-Archiv öffnen", "Open HUD archive"),
+                Filter = "SZS / U8 archives|*.szs;*.arc;*.u8",
+                InitialDirectory = PackSelection.Folder(this)
+            })
+                path = picker.ShowDialog(this) == DialogResult.OK ? picker.FileName : null;
             if (path == null)
                 return;
             var archive = new StudioArchiveCopy(path);
@@ -450,6 +465,7 @@ namespace murumsWiiModStudio
             }
 
             Session.Add(archive);
+            PackSelection.SourceLoaded(this);
             search.Clear();
             RefreshLayouts();
         }
@@ -726,6 +742,7 @@ namespace murumsWiiModStudio
                 if (selected == placementPane && selected != null)
                     values[6].Enabled = false;
                 restore.Text = selected != null && selected == placementPane ? L.T("Bildschirmposition zurücksetzen", "Restore screen placement") : L.T("Layout zurücksetzen", "Restore opened layout");
+                restore.Enabled = current != null;
                 visible.Enabled = selected != null && selected != placementPane;
                 visible.Checked = selected != null && selected.Visible;
                 tint.Enabled = selected != null && (selected.Magic == "pic1" || selected.Magic == "txt1");
@@ -865,6 +882,7 @@ namespace murumsWiiModStudio
                 if (canvas.Reference != null)
                     canvas.Reference.Dispose();
                 canvas.Reference = new Bitmap(b);
+                clearReference.Visible = true;
             }
 
             canvas.Invalidate();

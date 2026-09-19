@@ -103,7 +103,7 @@ namespace murumsWiiModStudio
             )
                 grid.RowStyles.Add(new RowStyle(height < 0 ? SizeType.Percent : SizeType.Absolute, height < 0 ? 100 : height));
             Controls.Add(grid);
-            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("MKWii Race HUD Tool", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs · Race_E.szs · RaceAssets.szs (Retro Rewind) · *.png / *.jpg"), 0, 0);
+            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("MKWii Race HUD Tool", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs + Race_E.szs / Race_U.szs / Race_J.szs · PNG / JPG replacements"), 0, 0);
             grid.RowStyles[1].SizeType = SizeType.AutoSize;
             var bar = new FlowLayoutPanel
             {
@@ -111,8 +111,8 @@ namespace murumsWiiModStudio
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
-            bar.Controls.Add(Button("Browse ISO / WBFS…", Open, "Choose ISO/WBFS (recommended) to import original archives. Alternatively, choose your existing Race archive in the file type list to keep pack changes. Mod-only HUD assets require the mod archive."));
-            bar.Controls.Add(Button("Add archive / ISO…", Add, "Add Race.szs, a language archive or Retro Rewind RaceAssets.szs without losing current selections."));
+            bar.Controls.Add(Button("Open file…", Open, "Open Race.szs or a language archive from your pack. Add mod-specific HUD files separately."));
+            bar.Controls.Add(Button("Add file…", Add, "Add Race.szs, a language archive or Retro Rewind RaceAssets.szs without losing current selections."));
             import = Button("Import matching pictures…", Match, "Scan a picture folder and its subfolders. Exact filename matches become pending replacements; no archive is saved yet.");
             bar.Controls.Add(import);
             category.Items.AddRange(new object[] { "Placement numbers", "Timer / laps / score", "Items / minimap", "Pending replacements", "All textures", "Countdown / start / finish", "Player names / warnings", "Results", "Input viewer", "Minimap / icons", "Speedometer", "Item box / glass" });
@@ -346,6 +346,7 @@ namespace murumsWiiModStudio
             if (path == null)
                 return;
             session.Open(path);
+            PackSelection.SourceLoaded(this);
             output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
             shadows.Checked = false;
             dirty = false;
@@ -359,6 +360,7 @@ namespace murumsWiiModStudio
             if (path == null)
                 return;
             session.Add(path);
+            PackSelection.SourceLoaded(this);
             if (output.Text.Length == 0)
                 output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
             RefreshList();
@@ -467,7 +469,7 @@ namespace murumsWiiModStudio
             numberFont.Enabled = choose.Enabled && category.SelectedIndex != 8;
             colours.Enabled = choose.Enabled;
             mapColours.Enabled = session.Archives.Any(a => a.Files.Keys.Any(HudMapColours.IsLayout));
-            sources.Text = loaded ? "Loaded: " + string.Join(" + ", session.Archives.Select(a => Path.GetFileName(a.Source)).ToArray()) + "   •   " + session.SelectedCount + " resource changes\n" + Path.GetDirectoryName(session.Archives[0].Source) : "Open Race_E.szs (or your game's language archive) for numbers. Race.szs in the same folder is added for items and minimap.";
+            sources.Text = loaded ? "Loaded: " + string.Join(" + ", session.Archives.Select(a => Path.GetFileName(a.Source)).ToArray()) + "   •   " + session.SelectedCount + " resource changes\n" + Path.GetDirectoryName(session.Archives[0].Source) : "Open Race.szs for items/minimap, plus Race_E.szs (English PAL), Race_U.szs (English USA) or Race_J.szs (Japanese) for numbers, timer and laps.";
         }
 
         void SetImage(Image image)

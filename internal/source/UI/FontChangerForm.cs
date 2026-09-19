@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -16,7 +16,7 @@ namespace murumsWiiModStudio
         bool dirty;
         readonly ComboBox fonts = new ComboBox
         {
-            Width = 320,
+            Width = 260,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
         readonly NumericUpDown sheet = new NumericUpDown
@@ -61,7 +61,7 @@ namespace murumsWiiModStudio
         };
         public FontChangerForm() : base("MKWii Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy", "Font.szs · *.brfnt · *.ttf")
         {
-            Action("Browse ISO/WBFS…", "Read your pack's font archive or one Wii BRFNT font.", Open);
+            Action("Open file…", "Read your pack's font archive or one Wii BRFNT font.", Open);
             Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Click Preview to apply it.", delegate
             {
                 string p = OpenPath("TrueType font|*.ttf");
@@ -128,7 +128,7 @@ namespace murumsWiiModStudio
             };
             atlasTools.Controls.Add(new Label { Text = "Atlas page", AutoSize = true, Margin = new Padding(4, 6, 8, 0) });
             atlasTools.Controls.Add(sheet);
-            Actions.SetFlowBreak(fonts, true);
+            Actions.SetFlowBreak(fonts, false);
             sheet.ValueChanged += delegate
             {
                 Guard(Render);
@@ -210,6 +210,7 @@ namespace murumsWiiModStudio
             // Validate before replacing the current document.
             new BrfntFont(next == null ? File.ReadAllBytes(p) : next.Files[names[0]].Data);
             source = p;
+            PackSelection.SourceLoaded(this);
             archive = next;
             pending = null;
             changes.Clear();

@@ -20,11 +20,20 @@ namespace murumsWiiModStudio
         readonly ListBox packs = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true, IntegralHeight = false };
         readonly Label preview = new Label { Dock = DockStyle.Fill, AutoSize = true, UseMnemonic = false };
         readonly Button create;
+        string rememberedFolder;
+        readonly PackSelectionStrip sourceBar = new PackSelectionStrip { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(4), ColumnCount = 5 };
+        readonly Label sourceHint = new Label
+        {
+            Name = "PackFilesHint", TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = DarkTheme.AccentSoft, ForeColor = DarkTheme.Fore, Padding = new Padding(12),
+            Text = L.T("Open ISO/WBFS: Originaldateien aus deinem Spiel auswählen.\nAdd files: vorhandene .szs-Dateien oder globe.arc hinzufügen.\nAdd existing pack: einen bestehenden Pack-Ordner merken.",
+                "Open ISO/WBFS: select original files from your game.\nAdd files: add existing .szs files or globe.arc.\nAdd existing pack: remember an existing pack folder.")
+        };
 
         internal CustomPackMakerForm() : base("MKWii Custom Pack Maker",
             L.T("ISO/WBFS empfohlen • Pack benennen • Dateien wählen", "ISO/WBFS recommended • Name your pack • Select files"))
         {
-            Action("Browse ISO/WBFS…", "ISO/WBFS recommended: choose archives from the complete game file list.", delegate
+            Action("Open ISO/WBFS…", "ISO/WBFS recommended: choose archives from the complete game file list.", delegate
             {
                 using (var picker = new OpenFileDialog { Filter = "ISO / WBFS (recommended)|*.iso;*.wbfs;*.wia;*.ciso;*.wdf" })
                     if (picker.ShowDialog(this) == DialogResult.OK)
@@ -32,16 +41,46 @@ namespace murumsWiiModStudio
                             if (dialog.ShowDialog(this) == DialogResult.OK)
                                 AddFiles(dialog.ImportedPaths);
             });
-            Action(L.T("Browse archives…", "Browse archives…"), "Add existing .szs files or globe.arc. Originals are kept.", delegate
+            Action(L.T("Dateien hinzufügen…", "Add files…"), "Add existing .szs files or globe.arc. Originals are kept.", delegate
             {
                 using (var picker = new OpenFileDialog { Filter = "SZS / globe archives|*.szs;globe.arc", Multiselect = true })
                     if (picker.ShowDialog(this) == DialogResult.OK)
                         AddFiles(picker.FileNames);
             });
-            Action(L.T("Auswahl entfernen", "Remove selected"), "Remove files from this list only.", delegate
+            Action(L.T("Pack hinzufügen…", "Add existing pack…"), "Add an existing pack to your saved packs.", RememberPack);
+            var removeFiles = Action(L.T("Auswahl entfernen", "Remove selected"), "Remove files from this list only.", delegate
             {
                 foreach (object file in files.SelectedItems.Cast<object>().ToArray()) files.Items.Remove(file);
+                UpdateSourceHint();
             });
+            removeFiles.Enabled = false;
+            files.SelectedIndexChanged += delegate { removeFiles.Enabled = files.SelectedItems.Count > 0; };
+            var actionLayout = (TableLayoutPanel)Actions.Parent;
+            int actionRow = actionLayout.GetRow(Actions);
+            int column = 0;
+            foreach (Button button in Actions.Controls.OfType<Button>().ToArray())
+            {
+                button.Padding = new Padding(4, 0, 4, 0);
+                button.Margin = new Padding(3);
+                button.MinimumSize = new Size(button.MinimumSize.Width, 30);
+                button.MaximumSize = new Size(0, 30);
+                button.Height = 30;
+                button.Anchor = AnchorStyles.Left;
+                button.BackColor = DarkTheme.Panel2;
+                sourceBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                sourceBar.Controls.Add(button, column++, 0);
+            }
+            sourceBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            actionLayout.Controls.Remove(Actions);
+            actionLayout.Controls.Add(sourceBar, 0, actionRow);
+            sourceHint.Font = new Font(Font.FontFamily, 16, FontStyle.Bold);
+            sourceHint.Disposed += delegate { sourceHint.Font.Dispose(); };
+            sourceHint.Paint += delegate(object sender, PaintEventArgs e)
+            {
+                using (var pen = new Pen(Color.FromArgb(92, 94, 104), 2))
+                    e.Graphics.DrawRectangle(pen, 1, 1, Math.Max(0, sourceHint.Width - 3), Math.Max(0, sourceHint.Height - 3));
+            };
+            VisibleChanged += delegate { sourceBar.UpdateAnimation(); };
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 10 };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -73,15 +112,16 @@ namespace murumsWiiModStudio
             var fileHeading = new Label { Text = L.T("Ausgewählte Dateien für das neue Pack", "Selected files for the new pack"), AutoSize = true };
             grid.Controls.Add(fileHeading, 0, 5);
             grid.SetColumnSpan(fileHeading, 3);
-            grid.Controls.Add(files, 0, 6);
-            grid.SetColumnSpan(files, 3);
+            var fileArea = new Panel { Dock = DockStyle.Fill, Margin = files.Margin };
+            fileArea.Controls.Add(files);
+
+            grid.Controls.Add(fileArea, 0, 6);
+            grid.SetColumnSpan(fileArea, 3);
             var note = new Label { AutoSize = true, Dock = DockStyle.Fill, Text = L.T(
                 "Vorlagen sind Vorschläge; portable/eigene Pfade über Browse wählen. Kopiert ausgewählte .szs-Dateien und globe.arc. IsEnabled ist standardmäßig aus.",
                 "Presets are suggestions; use Browse for portable/custom paths. Copies selected .szs files and globe.arc. IsEnabled is off by default.") };
             var packActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
             packActions.Controls.Add(new Label { Text = L.T("Gespeicherte Packs", "Saved packs"), AutoSize = true, Anchor = AnchorStyles.Left });
-            var remember = new Button { Text = L.T("Pack hinzufügen…", "Add existing pack…"), AutoSize = true };
-            remember.Click += delegate { Guard(RememberPack); };
             var remove = new Button { Text = L.T("Aus Liste entfernen", "Remove from list"), AutoSize = true, MinimumSize = new Size(170, 32) };
             remove.Click += delegate
             {
@@ -96,7 +136,7 @@ namespace murumsWiiModStudio
             };
             packs.SelectedIndexChanged += delegate { remove.Enabled = packs.SelectedItem != null; };
             remove.Enabled = false;
-            packActions.Controls.Add(remember);
+
             packActions.Controls.Add(remove);
             grid.Controls.Add(packActions, 0, 7);
             grid.SetColumnSpan(packActions, 3);
@@ -143,6 +183,9 @@ namespace murumsWiiModStudio
             Size = new Size(1140, 900);
             RefreshPacks();
             Finish();
+            Controls.Add(sourceHint);
+            Layout += delegate { if (!sourceHint.IsDisposed) PositionSourceHint(); };
+            UpdateSourceHint();
         }
 
         void AddFiles(string[] paths)
@@ -151,6 +194,30 @@ namespace murumsWiiModStudio
                 if (!files.Items.Cast<string>().Any(p => String.Equals(p, path, StringComparison.OrdinalIgnoreCase)))
                     files.Items.Add(path);
             Status.Text = files.Items.Count + L.T(" Dateien ausgewählt.", " files selected.");
+            UpdateSourceHint();
+        }
+
+        void UpdateSourceHint()
+        {
+            bool available = files.Items.Count > 0 || (!String.IsNullOrEmpty(rememberedFolder) && Directory.Exists(rememberedFolder));
+            Body.Enabled = available;
+            Footer.Enabled = available;
+            sourceHint.Visible = !available;
+            sourceBar.Required = !available;
+            PositionSourceHint();
+            if (sourceHint.Visible) sourceHint.BringToFront();
+        }
+
+        void PositionSourceHint()
+        {
+            if (sourceHint.Parent == null) return;
+            float scale = Font.Size / 9f;
+            int top = PointToClient(sourceBar.PointToScreen(new Point(0, sourceBar.Height))).Y;
+            int width = Math.Max(1, Math.Min((int)(720 * scale), ClientSize.Width - (int)(48 * scale)));
+            int height = Math.Min((int)(132 * scale), Math.Max(1, ClientSize.Height - top - (int)(50 * scale)));
+            sourceHint.Bounds = new Rectangle((ClientSize.Width - width) / 2,
+                top + Math.Max(12, (ClientSize.Height - top - height) / 2), width, height);
+            sourceHint.BringToFront();
         }
 
         void RefreshPacks()
@@ -164,14 +231,22 @@ namespace murumsWiiModStudio
             using (var picker = new FolderPickerDialog { Description = L.T("Ordner mit den Pack-Dateien wählen", "Choose the folder containing the pack files") })
                 if (picker.ShowDialog(this) == DialogResult.OK)
                 {
-                    CustomPacks.Register(new CustomPack {
-                        Name = Path.GetFileName(picker.SelectedPath.TrimEnd(Path.DirectorySeparatorChar)),
-                        Folder = picker.SelectedPath, FilesFolder = picker.SelectedPath,
-                        Description = "", Template = "Existing"
-                    });
-                    RefreshPacks();
-                    Status.Text = L.T("Pack gespeichert. In anderen Tools die Pack-Liste aktualisieren.", "Pack saved. Refresh the pack list in other tools.");
+                    RegisterExistingPack(picker.SelectedPath);
                 }
+        }
+
+        void RegisterExistingPack(string folder)
+        {
+            if (!Directory.Exists(folder)) throw new DirectoryNotFoundException(folder);
+            CustomPacks.Register(new CustomPack {
+                Name = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar)),
+                Folder = folder, FilesFolder = folder,
+                Description = "", Template = "Existing"
+            });
+            rememberedFolder = folder;
+            RefreshPacks();
+            UpdateSourceHint();
+            Status.Text = L.T("Pack gespeichert. In anderen Tools die Pack-Liste aktualisieren.", "Pack saved. Refresh the pack list in other tools.");
         }
 
         static void AddRow(TableLayoutPanel grid, int row, string text, Control field)

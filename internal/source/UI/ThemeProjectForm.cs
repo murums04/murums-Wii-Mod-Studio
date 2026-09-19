@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Windows.Forms;
 
@@ -39,7 +39,7 @@ namespace murumsWiiModStudio
                     RefreshProject();
                 }
             });
-            Action("Open project…", "Load a saved .mtheme file. Replacement files stay linked at their original locations.", delegate
+            Action("Open file…", "Load a saved .mtheme file. Replacement files stay linked at their original locations.", delegate
             {
                 if (!CanDiscard())
                     return;
@@ -146,6 +146,7 @@ namespace murumsWiiModStudio
 
         void RefreshProject()
         {
+            if (project != null) PackSelection.SourceLoaded(this);
             assets.Items.Clear();
             if (project != null)
             {

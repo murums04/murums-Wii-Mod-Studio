@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Drawing;
@@ -31,6 +31,7 @@ namespace murumsWiiModStudio
         }
 
         private readonly List<TargetEditor> _targets = new List<TargetEditor>();
+        private readonly Dictionary<string, MenuModelsForm> _modelEditors = new Dictionary<string, MenuModelsForm>(StringComparer.OrdinalIgnoreCase);
         private TextBox _uiFolder;
         private TextBox _outputFolder;
         private string _lastDefaultOutput = "";
@@ -63,7 +64,7 @@ namespace murumsWiiModStudio
 
         public RetroRewindGifWizard(string currentArchivePath)
         {
-            Text = L.T("MKWii RR-Backgrounds Tool", "MKWii RR-Backgrounds Tool");
+            Text = L.T("MKWii Backgrounds Tool", "MKWii Backgrounds Tool");
             StartPosition = FormStartPosition.CenterParent;
             MinimumSize = new Size(980, 700);
             Size = new Size(1180, Math.Min(950, Screen.FromControl(this).WorkingArea.Height - 40));
@@ -81,17 +82,16 @@ namespace murumsWiiModStudio
 
             BuildUi();
             AutoDetectPaths(currentArchivePath);
-            var openSource = NewButton("Browse ISO/WBFS…");
+            var openSource = NewButton("Open file…");
             openSource.Name = "PackSourceAction";
             openSource.Click += delegate { BrowseMenuSource(); };
             Controls.Add(openSource);
-            var addSource = NewButton("Add archive / ISO…");
-            addSource.Name = "PackSourceAction";
-            addSource.Click += delegate { BrowseMenuSource(); };
-            Controls.Add(addSource);
+
             PackSelection.Attach(this, delegate(CustomPack pack)
             {
                 DetectArchivesInFolder(pack.FilesFolder);
+                if (_targets.Any(t => IsReadableArchive(t.CommonPath.Text) || IsReadableArchive(t.LanguagePath.Text)))
+                    PackSelection.SourceLoaded(this);
                 _outputFolder.Text = Path.Combine(pack.FilesFolder, "MUR_EDITED");
             });
             DarkTheme.Apply(this); ToolStatus.Watch(this);
@@ -285,6 +285,7 @@ namespace murumsWiiModStudio
             tab.AutoScroll = false;
             tab.Padding = new Padding(0);
             MenuModelsForm editor = new MenuModelsForm(archiveName);
+            _modelEditors.Add(archiveName, editor);
             editor.TopLevel = false;
             editor.FormBorderStyle = FormBorderStyle.None;
             editor.MinimumSize = Size.Empty;
@@ -751,7 +752,7 @@ namespace murumsWiiModStudio
             Label fileHint = null;
             if (lines.Length > 1)
             {
-                fileHint = NewLabel((filter.Contains(".szs") ? L.T("ISO/WBFS empfohlen; alternativ ", "ISO/WBFS recommended; alternatively ") : "") + lines[1]);
+                fileHint = NewLabel((filter.Contains(".szs") ? L.T("Datei: ", "File: ") : "") + lines[1]);
                 fileHint.Font = new Font("Segoe UI", 9F);
                 fileHint.Margin = new Padding(0, 0, 8, 6);
                 caption.Controls.Add(fileHint);
@@ -766,11 +767,11 @@ namespace murumsWiiModStudio
             Label fieldLabel = fileHint;
             if (fieldLabel != null && label.Contains(".szs"))
             {
-                string defaultHint = L.T("ISO/WBFS empfohlen; alternativ ", "ISO/WBFS recommended; alternatively ") + lines[1];
+                string defaultHint = L.T("Datei: ", "File: ") + lines[1];
                 captured.TextChanged += delegate
                 {
                     string fileName = Path.GetFileName(captured.Text);
-                    fieldLabel.Text = String.IsNullOrWhiteSpace(fileName) ? defaultHint : L.T("ISO/WBFS empfohlen; alternativ ", "ISO/WBFS recommended; alternatively ") + fileName;
+                    fieldLabel.Text = String.IsNullOrWhiteSpace(fileName) ? defaultHint : L.T("Datei: ", "File: ") + fileName;
                 };
             }
             Button button = NewButton(L.T("Auswählen...", "Browse..."));
@@ -938,20 +939,83 @@ namespace murumsWiiModStudio
             }
         }
 
+        private static bool IsReadableArchive(string path)
+        {
+            if (!File.Exists(path))
+                return false;
+            try
+            {
+                U8Archive.Load(File.ReadAllBytes(path));
+                return true;
+            }
+            catch (InvalidDataException)
+            {
+                return false;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
         private void BrowseMenuSource()
         {
-            string path = GameArchiveImportForm.Select(this, "Menu archives|*.szs", null, _outputFolder.Text);
-            if (path == null) return;
-            string name = Path.GetFileNameWithoutExtension(path);
-            TargetEditor target = _targets.FirstOrDefault(t => name == t.ArchiveBaseName || name.StartsWith(t.ArchiveBaseName + "_", StringComparison.OrdinalIgnoreCase));
-            if (target == null)
+            string path = GameArchiveImportForm.Select(this, "Menu / model archives|*.szs;*.arc", null, _outputFolder.Text);
+            if (path == null)
+                return;
+            try
             {
-                StudioMessageBox.Show(this, L.T("Für Earth, globe und BackModel bitte den passenden Bereich unter Other UI verwenden.",
-                    "For Earth, globe and BackModel, use the matching section under Other UI."), Text);
+                LoadSourceFile(path);
+            }
+            catch (Exception error)
+            {
+                StudioMessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        internal void LoadSourceFile(string path)
+        {
+            string fileName = Path.GetFileName(path);
+            string modelName = String.Equals(fileName, "globe.arc", StringComparison.OrdinalIgnoreCase) ? "Earth.szs" : fileName;
+            MenuModelsForm editor;
+            if (_modelEditors.TryGetValue(modelName, out editor))
+            {
+                if (!String.Equals(fileName, "globe.arc", StringComparison.OrdinalIgnoreCase))
+                    MenuModelSource.Validate(path, _modelEditors.Keys.First(key => String.Equals(key, modelName, StringComparison.OrdinalIgnoreCase)));
+                editor.AddArchives(new[] { path });
+                if (!editor.HasLoadedArchive)
+                {
+                    _status.Text = L.T("globe.arc ausgewählt. Öffne zusätzlich Earth.szs, um Globus und Himmel zu bearbeiten.",
+                        "globe.arc selected. Open Earth.szs as well to edit the globe and sky.");
+                    return;
+                }
+                PackSelection.SourceLoaded(this);
+                for (Control control = editor.Parent; control != null; control = control.Parent)
+                {
+                    var page = control as TabPage;
+                    if (page != null && page.Parent is TabControl)
+                        ((TabControl)page.Parent).SelectedTab = page;
+                }
                 return;
             }
-            if (name == target.ArchiveBaseName) target.CommonPath.Text = path;
-            else { target.LanguagePath.Text = path; target.LanguageFields.Visible = true; }
+
+            string name = Path.GetFileNameWithoutExtension(path);
+            TargetEditor target = _targets.FirstOrDefault(t => String.Equals(name, t.ArchiveBaseName, StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith(t.ArchiveBaseName + "_", StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+                throw new InvalidDataException(L.T("Wähle ein unterstütztes Menü- oder Modellarchiv.", "Choose a supported menu or model archive."));
+            U8Archive.Load(File.ReadAllBytes(path));
+            if (String.Equals(name, target.ArchiveBaseName, StringComparison.OrdinalIgnoreCase))
+                target.CommonPath.Text = path;
+            else
+            {
+                target.LanguagePath.Text = path;
+                target.LanguageFields.Visible = true;
+            }
+            PackSelection.SourceLoaded(this);
             ResetPathViews();
         }
         private void BrowseOutputFolder()
@@ -1254,7 +1318,7 @@ namespace murumsWiiModStudio
 
                 _progress.Value = failures == 0 ? 100 : 0;
                 _status.Text = failures == 0 ? L.T("Fertig. Die Bereiche mit ausgewähltem Bild in diesem Tab wurden verarbeitet.", "Done. The areas with a selected picture in this tab were processed.") : L.F("Fertig mit {0} Fehler(n). Siehe Zusammenfassung.", "Done with {0} error(s). See summary.", failures);
-                murumsWiiModStudio.StudioMessageBox.Show(this, failures == 0 ? ExportHelp.Message(output) + "\n\n" + Summary : Summary, L.T("MKWii RR-Backgrounds Tool", "MKWii RR-Backgrounds Tool"), MessageBoxButtons.OK, failures == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                murumsWiiModStudio.StudioMessageBox.Show(this, failures == 0 ? ExportHelp.Message(output) + "\n\n" + Summary : Summary, L.T("MKWii Backgrounds Tool", "MKWii Backgrounds Tool"), MessageBoxButtons.OK, failures == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {

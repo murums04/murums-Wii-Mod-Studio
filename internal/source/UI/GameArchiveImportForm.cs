@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -26,14 +26,14 @@ namespace murumsWiiModStudio
         {
             using (var picker = new OpenFileDialog
             {
-                Title = L.T("ISO/WBFS wählen (empfohlen) oder Dateityp auf Archiv ändern", "Choose ISO/WBFS (recommended), or change file type to archives"),
-                Filter = GameArchiveImport.WithDiscFilter(filter), InitialDirectory = PackSelection.Folder(owner), FilterIndex = String.IsNullOrEmpty(PackSelection.Folder(owner)) ? 1 : 2,
+                Title = L.T("Datei öffnen", "Open file"),
+                Filter = filter, InitialDirectory = PackSelection.Folder(owner),
                 CheckFileExists = true
             })
             {
                 if (picker.ShowDialog(owner) != DialogResult.OK)
                     return null;
-                return Resolve(owner, picker.FileName, preferred, PackSelection.Output(owner, outputFolder));
+                return picker.FileName;
             }
         }
 

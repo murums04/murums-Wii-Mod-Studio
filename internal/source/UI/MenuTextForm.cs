@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -40,9 +40,10 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical,
             Font = new Font("Segoe UI", 16)
         };
-        public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy", "MenuSingle_E.szs / Title_E.szs · *.bmg")
+        public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy", "Title_E.szs / Title_U.szs / Title_J.szs · MenuSingle_E.szs / MenuSingle_U.szs / MenuSingle_J.szs · *.bmg")
         {
-            Action("Browse ISO/WBFS…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
+            Action("Open file…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
+            Actions.Controls.Add(new Label { Text = L.T("Nachrichten-Datei", "Message resource"), AutoSize = true, Margin = new Padding(3, 8, 4, 0) });
             Actions.Controls.Add(resource);
             resource.SelectedIndexChanged += delegate
             {
@@ -131,6 +132,7 @@ namespace murumsWiiModStudio
             var first = new BmgTextDocument(BmgTextDocument.Decode(next == null ? File.ReadAllBytes(p) : next.Files[names[0]].Data));
             archive = next;
             source = p;
+            PackSelection.SourceLoaded(this);
             dirty = false;
             changed.Clear();
             documents.Clear();

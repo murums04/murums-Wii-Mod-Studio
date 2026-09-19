@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -210,7 +210,7 @@ namespace murumsWiiModStudio
                 using (var hud = new RaceHudForm())
                     hud.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu(L.T("MKWii RR-Backgrounds Tool...", "MKWii RR-Backgrounds Tool..."), Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu(L.T("MKWii Backgrounds Tool...", "MKWii Backgrounds Tool..."), Keys.None, delegate
             {
                 OpenRetroRewindGifWizard();
             }));

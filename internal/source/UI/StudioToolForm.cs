@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -35,7 +35,7 @@ namespace murumsWiiModStudio
             AutoEllipsis = true,
             Padding = new Padding(8)
         };
-        protected StudioToolForm(string title, string subtitle, string fileExamples = null)
+        protected StudioToolForm(string title, string subtitle, string fileExamples = null, bool recommendDisc = false)
         {
             Text = title + " — murums Wii Mod Studio";
             Size = new Size(1120, 800);
@@ -64,7 +64,7 @@ namespace murumsWiiModStudio
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             Control header = StudioChrome.Header(title, subtitle);
-            root.Controls.Add(fileExamples == null ? header : ToolFileHint.Wrap(header, fileExamples), 0, 0);
+            root.Controls.Add(fileExamples == null ? header : ToolFileHint.Wrap(header, fileExamples, recommendDisc), 0, 0);
             root.Controls.Add(Actions, 0, 1);
             root.Controls.Add(Body, 0, 2);
             root.Controls.Add(ToolStatus.Wrap(this, Status), 0, 4);

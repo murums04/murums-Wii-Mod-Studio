@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -122,19 +122,19 @@ namespace murumsWiiModStudio
             return CurrentHeading() + "\n\n" + L.T(
                 "• Custom Pack Maker: ISO-Dateiauswahl mit kurzen Erklärungen, .szs-Import und Beschreibung; Packs erstellen und in allen Tools verwalten.\n\n" + "• Updates: automatische/manuelle Prüfung, geprüfte Downloads; Projekte, Einstellungen und Tools bleiben erhalten.\n\n"
                 + "• Zugeordnete Dateien öffnen per Doppelklick direkt im Studio.\n\n"
-                + "• ISO/WBFS empfohlen: Menü- und Modellarchive importieren, Ziel frei wählen, Originale behalten. Vorhandene Archive bleiben nutzbar; benötigt Wiimms ISO Tools.\n\n"
+                + "• Custom Pack Maker: Originaldateien aus ISO/WBFS importieren. Bearbeitungs-Tools öffnen Dateien direkt, mit klaren Einstiegshinweisen und einheitlichen Bedienelementen.\n\n"
                 + "• Export nach MUR_EDITED, auch beim Font Changer; Hinweise zum Sichern und Ersetzen der Pack-Dateien.\n\n"
                 + "• Race HUD: Teilwortsuche, Scrollvorschau, Itembox-/Glaskategorie sowie Slash, km/h und Input-Texturen in der Texturliste. Verfügbare Mod-Zusatzarchive werden mitgeladen.\n\n"
-                + "• Menüs: Lizenzhintergrund, obere/untere Balken und weitere Wartefenster bearbeitbar.\n\n"
+                + "• Menüs: Lizenzhintergrund, obere/untere Balken und weitere Wartefenster bearbeitbar. Backgrounds öffnet Earth/globe/BackModel direkt; beschädigte Quellen schalten den Editor nicht frei.\n\n"
                 + "• Himmel: vorerst nur Standbilder; bei GIFs das erste Bild. Animationen folgen später.\n\n"
                 + "• Oberfläche: einheitliche Pack-Auswahl und Statusleisten, kompaktere Anordnung, Hover-/Layoutkorrekturen, einheitliche MKWii-Namen und Dateihinweise in allen Tools.\n\n"
                 + "• Changelog mit GitHub-Link; Buttons im Über-Fenster korrigiert.\n\n",
                 "• Custom Pack Maker: ISO file selection with short descriptions, .szs import and pack descriptions; create packs and manage their shared list.\n\n" + "• Updates: automatic/manual checks, verified downloads; projects, settings and tools are preserved.\n\n"
                 + "• Associated files open directly in Studio on double-click.\n\n"
-                + "• ISO/WBFS recommended: import menu/model archives, choose a destination and keep originals. Existing archives remain supported; requires Wiimms ISO Tools.\n\n"
+                + "• Custom Pack Maker: import original files from ISO/WBFS. Editing tools open files directly, with clear entry hints and consistent controls.\n\n"
                 + "• MUR_EDITED exports, including Font Changer; guidance for backing up and replacing pack files.\n\n"
                 + "• Race HUD: substring search, scrolling preview, item box/glass category; slash, km/h and input textures in the texture list. Available supplementary mod archives load alongside them.\n\n"
-                + "• Menus: edit license backgrounds, top/bottom bars and additional waiting screens.\n\n"
+                + "• Menus: edit license backgrounds, top/bottom bars and additional waiting screens. Backgrounds opens Earth/globe/BackModel directly; damaged sources do not unlock the editor.\n\n"
                 + "• Sky: still images only for now; GIFs use the first frame. Animation will follow later.\n\n"
                 + "• Interface: consistent pack selection and status bars, simpler layout, hover/layout fixes, consistent MKWii names and file hints in all tools.\n\n"
                 + "• Changelog with GitHub link; corrected About buttons.\n\n")

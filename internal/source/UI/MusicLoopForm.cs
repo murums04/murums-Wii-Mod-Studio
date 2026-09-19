@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Media;
@@ -37,7 +37,7 @@ namespace murumsWiiModStudio
         float[] peaks;
         public MusicLoopForm() : base("MKWii Music & Loops Tool", "Choose audio • Set and preview a loop • Export a WAV with loop markers for BRSTM conversion", "*.wav · *.mp3 / *.flac / *.ogg (FFmpeg) → *.wav → *.brstm")
         {
-            Action("Open PCM WAV…", "Read a mono or stereo WAV. Loop positions count audio samples, not bytes.", delegate
+            Action("Open file…", "Read a mono or stereo WAV. Loop positions count audio samples, not bytes.", delegate
             {
                 string p = OpenPath("PCM WAV|*.wav");
                 if (p != null)
@@ -64,22 +64,34 @@ namespace murumsWiiModStudio
                     using (var form = new FormatInspectorForm(p))
                         form.ShowDialog(this);
             });
-            var flow = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                AutoScroll = true,
-                Padding = new Padding(14)
-            };
-            flow.Controls.Add(waveform);
-            flow.Controls.Add(new Label { Text = "Loop start — sample index (inclusive)", AutoSize = true });
-            flow.Controls.Add(start);
-            flow.Controls.Add(new Label { Text = "Loop end — sample index (exclusive)", AutoSize = true });
-            flow.Controls.Add(end);
-            flow.Controls.Add(info);
-            flow.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(900, 0), Margin = new Padding(0, 25, 0, 0), Text = "1. Open or convert audio, then set the loop range.\n2. Preview the seam and save the looped WAV.\n3. Open BRSTM converter, add this WAV, choose BRSTM and keep the embedded loop.\n4. Save under the music filename your pack uses. Add the converted file to a Theme Project.\n\nLooping Audio Converter is a separate specialist program, connected through Tools > Toolchain status. Course music may also need a separate final-lap version." });
-            Body.Controls.Add(flow);
+            var workspace = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(3) };
+            workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            waveform.Dock = DockStyle.Fill;
+            waveform.MinimumSize = new Size(0, 60);
+            waveform.BackColor = DarkTheme.Panel;
+            waveform.SizeMode = PictureBoxSizeMode.StretchImage;
+            workspace.Controls.Add(waveform, 0, 0);
+            var range = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, RowCount = 2, Margin = new Padding(0, 8, 0, 6) };
+            range.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            range.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            range.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            range.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            range.Controls.Add(new Label { Text = "Loop start — sample index (inclusive)", AutoSize = true }, 0, 0);
+            range.Controls.Add(new Label { Text = "Loop end — sample index (exclusive)", AutoSize = true }, 1, 0);
+            start.Dock = end.Dock = DockStyle.Fill;
+            range.Controls.Add(start, 0, 1);
+            range.Controls.Add(end, 1, 1);
+            workspace.Controls.Add(range, 0, 1);
+            info.Dock = DockStyle.Fill;
+            workspace.Controls.Add(info, 0, 2);
+            var guide = new Label { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(3, 8, 3, 0),
+                Text = "Set the loop range, preview the seam, then save the looped WAV. In BRSTM converter, keep its loop markers.\nSave using your pack's music filename; add the result to a Theme Project. Final-lap music may need a separate file.\nLooping Audio Converter is connected through Tools > Toolchain status." };
+            workspace.Controls.Add(guide, 0, 3);
+            Body.Controls.Add(workspace);
             start.ValueChanged += delegate
             {
                 UpdateInfo();
@@ -113,6 +125,7 @@ namespace murumsWiiModStudio
             Stop();
             source = path;
             wave = next;
+            PackSelection.SourceLoaded(this);
             peaks = wave.Peaks(790);
             start.Maximum = int.MaxValue;
             end.Maximum = int.MaxValue;

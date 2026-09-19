@@ -25,6 +25,7 @@ namespace murumsWiiModStudio
                 {
                     var a = new StudioArchiveCopy(p);
                     target = a;
+                    PackSelection.SourceLoaded(this);
                     Reset();
                 }
             });
@@ -35,6 +36,7 @@ namespace murumsWiiModStudio
                 {
                     var a = new StudioArchiveCopy(p);
                     donor = a;
+                    PackSelection.SourceLoaded(this);
                     Reset();
                 }
             });

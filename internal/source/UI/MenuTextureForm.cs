@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -16,14 +16,15 @@ namespace murumsWiiModStudio
         readonly TextBox output = new TextBox { Width = 430 };
         readonly Button replace, colours, save;
 
-        public MenuTextureForm() : base("MKWii Menu Textures",
+        public MenuTextureForm() : base("MKWii Menu Textures Tool",
             "License settings • Top / bottom bars • Shared menu textures",
-            "Title.szs / Title_E.szs · MenuSingle.szs · PNG / JPG")
+            "Title_E.szs / Title_U.szs / Title_J.szs · Title.szs / MenuSingle.szs · PNG / JPG")
         {
-            Action("Browse ISO/WBFS...", "Choose ISO/WBFS (recommended), or select an existing menu archive in the file type list.", Open);
+            Action("Open file…", "Open an existing menu archive from your pack.", Open);
             area.Items.AddRange(new object[] { "Top bar", "Bottom bar", "Menu background", "All textures" });
             area.SelectedIndex = 0;
             area.SelectedIndexChanged += delegate { RefreshTextures(); };
+            Actions.Controls.Add(new Label { Text = L.T("Kategorie", "Category"), AutoSize = true, Margin = new Padding(3, 8, 4, 0) });
             Actions.Controls.Add(area);
             replace = Action("Replace picture...", "Replace this texture; all layouts using it are affected.", Replace);
             colours = Action("Colours...", "Recolour the selected texture.", Recolour);
@@ -89,6 +90,7 @@ namespace murumsWiiModStudio
             var archive = new RaceHudArchive(path);
             session.Archives.Clear();
             session.Archives.Add(archive);
+            PackSelection.SourceLoaded(this);
             output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
             RefreshTextures();
         }

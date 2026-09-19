@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -69,7 +69,7 @@ namespace murumsWiiModStudio
             this.archiveName = archiveName;
             Font = new Font("Segoe UI", 10F);
             AutoScaleMode = AutoScaleMode.Font;
-            Text = L.T("3D-Menühintergründe", "3D menu backgrounds");
+            Text = "MKWii Menu Models Tool";
             Size = new Size(880, 590);
             MinimumSize = new Size(780, 540);
             StartPosition = FormStartPosition.CenterParent;
@@ -118,9 +118,9 @@ namespace murumsWiiModStudio
                 Text = L.T("Quelle wählen…", "Choose source…"),
                 Dock = DockStyle.Fill
             };
-            browse.Text = "Browse ISO/WBFS…";
+            browse.Text = "Open file…";
             browse.Name = "PackSourceAction";
-            browse.Click += delegate { ImportGameModels(); };
+            browse.Click += delegate { ChooseModelArchive(); };
             grid.Controls.Remove(source);
             var sourcePanel = new TableLayoutPanel
             {
@@ -135,20 +135,13 @@ namespace murumsWiiModStudio
             sourcePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             sourcePanel.Controls.Add(new Label
             {
-                Text = L.T("Spielabbild: ISO / WBFS", "Game image: ISO / WBFS"),
+                Text = L.T("Quelldatei", "Source file"),
                 AutoSize = true,
                 Anchor = AnchorStyles.Left
             }, 0, 0);
             sourcePanel.Controls.Add(browse, 1, 0);
             sourcePanel.Controls.Add(source, 0, 1);
-            var addArchive = new Button
-            {
-                Name = "PackSourceAction",
-                Text = L.T("Archiv hinzufügen...", "Add archive..."),
-                Dock = DockStyle.Fill
-            };
-            addArchive.Click += delegate { ChooseModelArchive(); };
-            sourcePanel.Controls.Add(addArchive, 1, 1);
+            sourcePanel.SetColumnSpan(source, 2);
             grid.Controls.Add(sourcePanel, 0, 1);
             grid.SetColumnSpan(sourcePanel, 2);
             grid.RowStyles[1].Height = 70;            models.Dock = DockStyle.Fill;
@@ -363,14 +356,14 @@ namespace murumsWiiModStudio
                     LoadArchive(available);
             };
             appearance.Visible = false;
-            help.Text = L.T("ISO/WBFS empfohlen: Originaldateien importieren und Speicherort wählen. Vorhandene Archive alternativ hinzufügen.", "ISO/WBFS recommended: import original files and choose where to save them. Alternatively, add existing archives.");
-            help.Text += "\n" + L.T("ISO/WBFS (empfohlen) oder ", "ISO/WBFS (recommended) or ") + (archiveName == "Earth.szs" ? "Earth.szs / globe.arc" : "BackModel.szs");
+            help.Text = L.T("Modelldateien aus deinem Pack öffnen. Fehlende Originaldateien im Custom Pack Maker aus einer ISO importieren.", "Open model files from your pack. Import missing original files from an ISO in Custom Pack Maker.");
+            help.Text += "\n" + L.T("Dateien: ", "Files: ") + (archiveName == "Earth.szs" ? "Earth.szs / globe.arc" : "BackModel.szs");
             layout.RowStyles[0].Height = 64;
             string cached = MenuModelSource.FindCached(archiveName);
             if (cached != null)
                 LoadArchive(cached);
             else
-                status.Text = L.T("Spielquelle wählen: ISO/WBFS oder ", "Choose a game source: ISO/WBFS or ") + archiveName + L.T(". Nicht im RR-Download enthalten.", ". Not included in the RR download.");
+                status.Text = L.T("Quelldatei wählen: ", "Choose a source file: ") + archiveName + L.T(". Nicht im RR-Download enthalten.", ". Not included in the RR download.");
         }
 
         void ImportGameModels()
@@ -551,6 +544,11 @@ namespace murumsWiiModStudio
             status.Text = L.T("Farben tönen die bestehenden Oberflächen. Weiß = unveränderte Originalfarben. Vorschau: Farbfelder, keine Spielansicht.", "Colours tint the existing surfaces. White = unchanged original colours. Preview: colour swatches, not an in-game view.");
         }
 
+        internal bool HasLoadedArchive
+        {
+            get { return source.Text.Length > 0 && switches.Count > 0; }
+        }
+
         public void LoadArchive(string path)
         {
             try
@@ -575,6 +573,7 @@ namespace murumsWiiModStudio
                 if (switches.Count == 0)
                     throw new InvalidDataException("No supported menu models in this archive.");
                 source.Text = path;
+                PackSelection.SourceLoaded(this);
                 isEarth = switches.ContainsKey("earth_with_dummy_tex.brres");
                 appearance.Visible = isEarth;
                 layout.RowStyles[2].SizeType = isEarth ? SizeType.Absolute : SizeType.Percent;

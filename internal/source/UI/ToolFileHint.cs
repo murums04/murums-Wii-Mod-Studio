@@ -1,11 +1,11 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
 {
     internal static class ToolFileHint
     {
-        internal static Control Wrap(Control header, string examples)
+        internal static Control Wrap(Control header, string examples, bool recommendDisc = false)
         {
             var panel = new TableLayoutPanel
             {
@@ -21,7 +21,7 @@ namespace murumsWiiModStudio
             var hint = new Label
             {
                 Name = "ToolFileExamples",
-                Text = (examples.Contains(".szs") ? L.T("ISO/WBFS empfohlen · ", "ISO/WBFS recommended · ") : L.T("Dateien / Beispiele: ", "Files / examples: ")) + examples,
+                Text = (recommendDisc && examples.Contains(".szs") ? L.T("ISO/WBFS empfohlen · ", "ISO/WBFS recommended · ") : L.T("Dateien / Beispiele: ", "Files / examples: ")) + examples,
                 Font = new Font("Segoe UI", 9F),
                 AutoSize = true,
                 Dock = DockStyle.Fill,
