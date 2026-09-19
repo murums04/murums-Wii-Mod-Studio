@@ -15,30 +15,24 @@ namespace murumsWiiModStudio
             HorizontalScrollbar = true,
             IntegralHeight = false
         };
-        readonly Button compare, save;
+        readonly Button compare, save, openBase, openEdited;
+        readonly ResourcePreviewPanel before = new ResourcePreviewPanel(), after = new ResourcePreviewPanel();
         public ArchiveCompareForm() : base("MKWii Archive Compare Tool", "Compare resource contents • Select changed entries • Save a combined archive copy", "MenuSingle.szs ↔ MUR_EDITED/MenuSingle.szs · *.szs / *.arc / *.u8")
         {
-            Action("Open base archive…", "This archive supplies all unchanged files in the combined copy.", delegate
+            openBase = Action("Open base archive…", "Step 1: choose the original archive.", delegate
             {
-                string p = OpenPath("Wii archive|*.szs;*.arc;*.u8");
-                if (p != null)
-                {
-                    var a = new StudioArchiveCopy(p);
-                    target = a;
-                    PackSelection.SourceLoaded(this);
-                    Reset();
-                }
+                string path = OpenPath("Wii archive|*.szs;*.arc;*.u8");
+                if (path != null) LoadBase(path);
             });
-            Action("Open edited archive…", "Select another version of the same archive as the source of selected changes.", delegate
+            openEdited = Action("Open edited archive…", "Step 2: choose the edited copy with exactly the same filename.", delegate
             {
-                string p = OpenPath("Wii archive|*.szs;*.arc;*.u8");
-                if (p != null)
-                {
-                    var a = new StudioArchiveCopy(p);
-                    donor = a;
-                    PackSelection.SourceLoaded(this);
-                    Reset();
-                }
+                if (target == null) return;
+                string folder = Path.Combine(Path.GetDirectoryName(target.Source), "MUR_EDITED");
+                using (var picker = new OpenFileDialog {
+                    Title = "Open edited " + Path.GetFileName(target.Source),
+                    Filter = EditedFilter(), FileName = Path.GetFileName(target.Source), CheckFileExists = true,
+                    InitialDirectory = Directory.Exists(folder) ? folder : Path.GetDirectoryName(target.Source) })
+                    if (ToolArchiveFilters.Show(picker, this) == DialogResult.OK) LoadEdited(picker.FileName);
             });
             compare = Action("Compare entries", "Compare uncompressed entry bytes. Archive compression and file order do not create false differences.", Compare);
             save = ExportAction("Save selected changes…", "Replace checked resources in a copy of the base archive. BRLYT and BRLAN resources are copied as complete files.", Save);
@@ -56,8 +50,8 @@ namespace murumsWiiModStudio
             views.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             views.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             views.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            var before = new ResourcePreviewPanel();
-            var after = new ResourcePreviewPanel();
+
+
             views.Controls.Add(before, 0, 0);
             views.Controls.Add(after, 1, 0);
             var split = new SplitContainer
@@ -85,16 +79,49 @@ namespace murumsWiiModStudio
             Reset();
         }
 
+        string EditedFilter()
+        {
+            if (target == null) throw new InvalidOperationException("Open the base archive first.");
+            string name = Path.GetFileName(target.Source);
+            return name + " (edited copy)|" + name;
+        }
+
+        void LoadBase(string path)
+        {
+            var loaded = new StudioArchiveCopy(path);
+            target = loaded;
+            donor = null;
+            Reset();
+        }
+
+        void LoadEdited(string path)
+        {
+            if (target == null) throw new InvalidOperationException("Open the base archive first.");
+            if (!Path.GetFileName(path).Equals(Path.GetFileName(target.Source), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Choose the edited copy named " + Path.GetFileName(target.Source) + ". Different archive names or regions cannot be compared.");
+            if (Path.GetFullPath(path).Equals(target.Source, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Choose a separate edited copy, for example from MUR_EDITED.");
+            var loaded = new StudioArchiveCopy(path);
+            donor = loaded;
+            Reset();
+        }
         void Reset()
         {
             files.Items.Clear();
-            compare.Enabled = target != null && donor != null;
+            before.ShowResource("Base archive", null);
+            after.ShowResource("Edited archive", null);
+            openEdited.Enabled = target != null;
+            bool ready = target != null && donor != null;
+            PackSelection.SourceStep(this, target == null ? openBase.Text : openEdited.Text,
+                target == null ? "1. Open base archive: choose the original file.\n2. Open edited archive: choose a separate copy with the same filename.\nThe comparison unlocks after both files are loaded."
+                : "Open edited archive: choose " + Path.GetFileName(target.Source) + ".\nThe file dialog starts in MUR_EDITED when available.\nThe comparison unlocks after the edited copy is loaded.", ready);
+            compare.Enabled = ready;
             save.Enabled = false;
             Status.Text = "Base: " + (target == null ? "not selected" : target.Source) + "\nEdited: " + (donor == null ? "not selected" : donor.Source);
         }
-
         void Compare()
         {
+            if (target == null || donor == null) throw new InvalidOperationException("Load both matching archives first.");
             files.Items.Clear();
             int same = 0;
             foreach (string key in target.Files.Keys.OrderBy(k => k))

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -88,7 +88,7 @@ namespace murumsWiiModStudio
             bar.Items.Add(_next);
             Controls.Add(bar);
             DarkTheme.StyleToolStrip(bar, new MurumsDarkToolStripRenderer());
-            _picture = new PictureBox();
+            _picture = new murumsWiiModStudio.ZoomPanPictureBox();
             _picture.Dock = DockStyle.Fill;
             _picture.SizeMode = PictureBoxSizeMode.Zoom;
             _picture.BackColor = DarkTheme.Back;

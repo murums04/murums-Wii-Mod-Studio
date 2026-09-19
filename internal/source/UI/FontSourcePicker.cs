@@ -75,7 +75,7 @@ namespace murumsWiiModStudio
             if (list.Items.Count > 0) list.SelectedIndex = 0;
             AcceptButton = open;
             browse.Click += delegate {
-                using (var picker = new OpenFileDialog { Filter = "Wii fonts|*.szs;*.arc;*.brfnt", InitialDirectory = packFolder ?? "" })
+                using (var picker = new OpenFileDialog { Filter = ToolArchiveFilters.Fonts, InitialDirectory = packFolder ?? "" })
                     if (picker.ShowDialog(this) == DialogResult.OK) { SelectedPath = picker.FileName; DialogResult = DialogResult.OK; }
             };
             buttons.Controls.Add(cancel); buttons.Controls.Add(open); buttons.Controls.Add(browse);

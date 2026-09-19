@@ -12,7 +12,7 @@ namespace murumsWiiModStudio
         readonly RaceHudSession session = new RaceHudSession();
         readonly ComboBox area = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
         readonly ListBox textures = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true };
-        readonly PictureBox preview = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
+        readonly PictureBox preview = new murumsWiiModStudio.ZoomPanPictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
         readonly TextBox output = new TextBox { Width = 430 };
         readonly Button replace, colours, save;
 
@@ -20,7 +20,11 @@ namespace murumsWiiModStudio
             "License settings • Top / bottom bars • Shared menu textures",
             "Title_E.szs / Title_U.szs / Title_J.szs · Title.szs / MenuSingle.szs · PNG / JPG")
         {
-            Action("Open file…", "Open an existing menu archive from your pack.", Open);
+            Action("Add archive…", "Add multiple menu archives without discarding current edits.", Open).Name = "PackSourceAction";
+            Action("Clear selection", "Clear loaded archives.", delegate {
+                if (session.SelectedCount > 0 && StudioMessageBox.Show(this, "Discard pending changes?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                session.Archives.Clear(); RefreshTextures(); PackSelection.SourceCleared(this);
+            });
             area.Items.AddRange(new object[] { "Top bar", "Bottom bar", "Menu background", "All textures" });
             area.SelectedIndex = 0;
             area.SelectedIndexChanged += delegate { RefreshTextures(); };
@@ -82,19 +86,25 @@ namespace murumsWiiModStudio
 
         void Open()
         {
-            if (session.SelectedCount > 0 && StudioMessageBox.Show(this, "Discard pending changes?", Text,
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                return;
-            string path = GameArchiveImportForm.Select(this, "Menu archives|*.szs", "Title.szs");
-            if (path == null) return;
-            var archive = new RaceHudArchive(path);
-            session.Archives.Clear();
-            session.Archives.Add(archive);
-            PackSelection.SourceLoaded(this);
-            output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
-            RefreshTextures();
+            AddSelectedPaths(GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Menus));
         }
 
+        void AddSelectedPaths(string[] paths)
+        {
+            var loaded = new System.Collections.Generic.List<RaceHudArchive>();
+            foreach (string path in paths)
+            {
+                if (session.Archives.Any(a => a.Source.Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))) continue;
+                if (session.Archives.Concat(loaded).Any(a => Path.GetFileName(a.Source).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException("An archive with this name is already loaded.");
+                loaded.Add(new RaceHudArchive(path));
+            }
+            session.Archives.AddRange(loaded);
+            if (session.Archives.Count == 0) return;
+            PackSelection.SourceLoaded(this);
+            if (output.Text.Length == 0) output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(session.Archives[0].Source), "MUR_EDITED"));
+            RefreshTextures();
+        }
         internal static System.Collections.Generic.List<HudTexture> AreaTextures(RaceHudSession session, int area)
         {
             var all = session.Textures(4);

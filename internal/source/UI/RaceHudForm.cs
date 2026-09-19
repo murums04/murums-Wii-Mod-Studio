@@ -19,7 +19,7 @@ namespace murumsWiiModStudio
             Dock = DockStyle.Fill,
             HorizontalScrollbar = true
         };
-        readonly PictureBox preview = new PictureBox
+        readonly PictureBox preview = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom,
@@ -111,8 +111,14 @@ namespace murumsWiiModStudio
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
-            bar.Controls.Add(Button("Open file…", Open, "Open Race.szs or a language archive from your pack. Add mod-specific HUD files separately."));
-            bar.Controls.Add(Button("Add file…", Add, "Add Race.szs, a language archive or Retro Rewind RaceAssets.szs without losing current selections."));
+            var addArchives = Button("Add archive…", Add, "Select several Race / RR HUD archives; existing edits are kept.");
+            addArchives.Name = "PackSourceAction";
+            bar.Controls.Add(addArchives);
+            bar.Controls.Add(Button("Clear selection", delegate {
+                if (dirty && StudioMessageBox.Show(this, "Discard unsaved changes and clear loaded archives?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                session.Archives.Clear(); dirty = false; shadows.Checked = false;
+                RefreshList(); UpdateState(); PackSelection.SourceCleared(this);
+            }, "Clear all loaded archives."));
             import = Button("Import matching pictures…", Match, "Scan a picture folder and its subfolders. Exact filename matches become pending replacements; no archive is saved yet.");
             bar.Controls.Add(import);
             category.Items.AddRange(new object[] { "Placement numbers", "Timer / laps / score", "Items / minimap", "Pending replacements", "All textures", "Countdown / start / finish", "Player names / warnings", "Results", "Input viewer", "Minimap / icons", "Speedometer", "Item box / glass" });
@@ -342,7 +348,7 @@ namespace murumsWiiModStudio
             if (dirty && StudioMessageBox.Show(this, "Discard pending changes and open another pack?", Text,
                 MessageBoxButtons.YesNo) != DialogResult.Yes)
                 return;
-            string path = GameArchiveImportForm.Select(this, "Race archives (*.szs)|*.szs", "Race.szs");
+            string path = GameArchiveImportForm.Select(this, ToolArchiveFilters.Race, "Race.szs");
             if (path == null)
                 return;
             session.Open(path);
@@ -356,17 +362,17 @@ namespace murumsWiiModStudio
 
         void Add()
         {
-            string path = GameArchiveImportForm.Select(this, "Race archives (*.szs)|*.szs", "Race.szs");
-            if (path == null)
-                return;
-            session.Add(path);
+            string[] paths = GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Race);
+            if (paths.Length == 0) return;
+            var next = new RaceHudSession();
+            next.Archives.AddRange(session.Archives);
+            foreach (string path in paths) next.Add(path);
+            session.Archives.Clear();
+            session.Archives.AddRange(next.Archives);
             PackSelection.SourceLoaded(this);
-            if (output.Text.Length == 0)
-                output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(path), "MUR_EDITED"));
-            RefreshList();
-            UpdateState();
+            if (output.Text.Length == 0) output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(paths[0]), "MUR_EDITED"));
+            RefreshList(); UpdateState();
         }
-
         void Match()
         {
             using (var d = new FolderPickerDialog

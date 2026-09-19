@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -92,7 +92,7 @@ namespace murumsWiiModStudio
 
             using (var headingFont = new Font(Font, FontStyle.Bold))
             {
-                foreach (string heading in new[] { CurrentHeading(), "2.1.0-beta1 — Release" })
+                foreach (string heading in new[] { CurrentHeading(), "2.1.0-beta2 — Release", "2.1.0-beta1 — Release" })
                 {
                     int index = history.Text.IndexOf(heading, StringComparison.Ordinal);
                     if (index < 0)
@@ -114,12 +114,23 @@ namespace murumsWiiModStudio
 
         private static string CurrentHeading()
         {
-            return L.T("2.1.0-beta2 — Aktueller Stand", "2.1.0-beta2 — Current version");
+            return L.T("2.1.0-beta3 — Release", "2.1.0-beta3 — Release");
         }
 
         internal static string HistoryText()
         {
             return CurrentHeading() + "\n\n" + L.T(
+                "• Font Tool: Menü-/HUD-Schriften wählbar, mehr Unicode-Zeichen, Symbolbearbeitung und bessere Vorschau. Positionsnummern bleiben erhalten; Ingame-Prüfung offen.\n\n"
+                + "• Vorschauen: Mausrad zoomt, gedrückt ziehen verschiebt, Mausrad-Doppelklick setzt zurück.\n\n"
+                + "• Archive: Mehrfachauswahl, passende Dateifilter und sicheres Leeren.\n\n"
+                + "• Menütexte: RR-Unterstützung und Import korrigiert.\n\n"
+                + "• Archivvergleich: geführte Auswahl zusammenpassender Dateien.\n\n",
+                "• Font Tool: selectable menu/HUD fonts, more Unicode characters, symbol editing and improved previews. Position numbers preserved; in-game checks pending.\n\n"
+                + "• Previews: wheel to zoom, middle-drag to pan, middle-double-click to reset.\n\n"
+                + "• Archives: multi-select, matching file filters and safe clearing.\n\n"
+                + "• Menu Text: improved RR support and import.\n\n"
+                + "• Archive Compare: guided selection of matching files.\n\n")
+                + "2.1.0-beta2 — Release\n\n" + L.T(
                 "• Custom Pack Maker: ISO-Dateiauswahl mit kurzen Erklärungen, .szs-Import und Beschreibung; Packs erstellen und in allen Tools verwalten.\n\n" + "• Updates: automatische/manuelle Prüfung, geprüfte Downloads; Projekte, Einstellungen und Tools bleiben erhalten.\n\n"
                 + "• Zugeordnete Dateien öffnen per Doppelklick direkt im Studio.\n\n"
                 + "• Custom Pack Maker: RR-Ordner erkennen oder auswählen, mit Standardpfaden für WheelWizard/Dolphin und Browse; RR-Dateien mit unveränderten Namen übernehmen; keine Sprachkopien erzeugen. ISO ergänzt nur fehlende Earth.szs, BackModel.szs und globe.arc. Bearbeitungs-Tools öffnen Dateien direkt, mit klaren Einstiegshinweisen und einheitlichen Bedienelementen.\n\n"

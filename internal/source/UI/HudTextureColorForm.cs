@@ -10,7 +10,7 @@ namespace murumsWiiModStudio
         readonly byte[] source;
         readonly string key;
         Color dark = Color.Black, light = Color.White;
-        readonly PictureBox picture = new PictureBox
+        readonly PictureBox picture = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom,

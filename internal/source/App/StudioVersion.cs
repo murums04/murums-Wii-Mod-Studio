@@ -1,7 +1,7 @@
-﻿namespace murumsWiiModStudio
+namespace murumsWiiModStudio
 {
     internal static class StudioVersion
     {
-        public const string Current = "2.1.0-beta2";
+        public const string Current = "2.1.0-beta3";
     }
 }

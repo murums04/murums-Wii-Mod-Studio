@@ -101,16 +101,12 @@ namespace murumsWiiModStudio
             Status.AutoEllipsis = false;
             if (!embedded)
             {
-                Action(L.T("Datei öffnen…", "Open file…"), "MenuSingle.szs, MenuMulti.szs, Title.szs, Common.szs…", delegate
-                {
-                    OpenArchive(false);
-                });
-                Action(L.T("Datei hinzufügen…", "Add file…"), "Add archives with shared textures or language resources.", delegate
-                {
-                    OpenArchive(true);
+                Action("Add archive…", "Select multiple layout archives; existing changes are kept.", delegate { OpenArchive(true); }).Name = "PackSourceAction";
+                Action("Clear selection", "Clear loaded archives.", delegate {
+                    if (unexported && StudioMessageBox.Show(this, "Discard unsaved changes and clear loaded archives?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                    Session.Clear(); unexported = false; search.Clear(); RefreshLayouts(); PackSelection.SourceCleared(this);
                 });
             }
-
             archiveChoice.AccessibleName = L.T("Layout-Archiv auswählen", "Choose layout archive");
             archiveChoice.SelectedIndexChanged += delegate
             {
@@ -443,33 +439,23 @@ namespace murumsWiiModStudio
 
         void OpenArchive(bool add)
         {
-            string path;
-            using (var picker = new OpenFileDialog
+            string[] paths = GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Layouts);
+            var loaded = new List<StudioArchiveCopy>();
+            foreach (string path in paths)
             {
-                Title = L.T("HUD-Archiv öffnen", "Open HUD archive"),
-                Filter = "SZS / U8 archives|*.szs;*.arc;*.u8",
-                InitialDirectory = PackSelection.Folder(this)
-            })
-                path = picker.ShowDialog(this) == DialogResult.OK ? picker.FileName : null;
-            if (path == null)
-                return;
-            var archive = new StudioArchiveCopy(path);
-            if (!archive.Files.Keys.Any(k => k.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidDataException(L.T("Dieses Archiv enthält keine BRLYT-Layouts.", "This archive contains no BRLYT layouts."));
-            if (!add && Session.Archives.Count > 0)
-            {
-                if (unexported && StudioMessageBox.Show(this, L.T("Ungespeicherte Änderungen verwerfen und ein anderes Archiv öffnen?", "Discard unsaved changes and open another archive?"), Text, MessageBoxButtons.YesNo) != DialogResult.Yes)
-                    return;
-                Session.Clear();
-                unexported = false;
+                if (Session.Archives.Any(a => a.Source.Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))) continue;
+                if (Session.Archives.Concat(loaded).Any(a => Path.GetFileName(a.Source).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException("An archive with this name is already loaded.");
+                var archive = new StudioArchiveCopy(path);
+                if (!archive.Files.Keys.Any(k => k.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidDataException("This archive contains no layouts: " + Path.GetFileName(path));
+                loaded.Add(archive);
             }
-
-            Session.Add(archive);
+            foreach (var archive in loaded) Session.Add(archive);
+            if (Session.Archives.Count == 0) return;
             PackSelection.SourceLoaded(this);
-            search.Clear();
-            RefreshLayouts();
+            search.Clear(); RefreshLayouts();
         }
-
         void RefreshLayouts()
         {
             string archive = archiveChoice.SelectedItem as string;

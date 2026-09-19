@@ -29,7 +29,7 @@ namespace murumsWiiModStudio
             MaximumSize = new Size(900, 0)
         };
         readonly Button export, play;
-        readonly PictureBox waveform = new PictureBox
+        readonly PictureBox waveform = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Width = 790,
             Height = 155

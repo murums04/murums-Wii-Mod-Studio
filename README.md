@@ -1,14 +1,14 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
 A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta2**. Developed by murums with AI assistance.
+Current release: **2.1.0-beta3**. Developed by murums with AI assistance.
 
 ## Features
 
 - MKWii Race HUD Tool and MKWii Game HUD Tool: visual movement, resizing, colours and texture replacement.
 - Custom Pack Maker: start from your Retro Rewind installation; copy only supplied RR files. Choose PAL, USA or Japan to name Title/Race/Common region files correctly. ISO/WBFS adds only missing Earth.szs, BackModel.szs and globe.arc; required sources must be complete before creating a pack.
 - Archives and textures: open, inspect, edit, replace and export supported resources.
-- Fonts and messages: RR base/language/HOME fonts, including I4/I8 font masks, and game text editing.
+- Fonts and messages: selectable menu/HUD fonts, Unicode character checks, symbol editing and RR game text support.
 - Backgrounds and animation: menu backgrounds, GIF import and BRLAN editing.
 - Audio and projects: WAV loop preview, theme projects and supporting workflows.
 - Integrated help, previews and optional external tools.

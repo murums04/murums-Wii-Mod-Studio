@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -406,7 +406,7 @@ namespace murumsWiiModStudio.Brlan
             previewLayout.ColumnCount = 1;
             previewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             previewLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            _preview = new PictureBox();
+            _preview = new murumsWiiModStudio.ZoomPanPictureBox();
             _preview.Dock = DockStyle.Fill;
             _preview.BackColor = Color.FromArgb(12, 13, 17);
             _preview.SizeMode = PictureBoxSizeMode.Zoom;

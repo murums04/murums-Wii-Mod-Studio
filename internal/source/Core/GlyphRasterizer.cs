@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
@@ -35,7 +35,7 @@ namespace murumsWiiModStudio
                 else
                 {
                     float scale = target.Height / bounds.Height;
-                    int pad = 4;
+                    int pad = Math.Max(16, (int)Math.Ceiling(em * scale));
                     int w = Math.Max(1, (int)Math.Ceiling(bounds.Width * scale) + pad * 2), h = Math.Max(1, (int)Math.Ceiling(bounds.Height * scale) + pad * 2);
                     using (var raw = new Bitmap(w, h))
                     using (var rg = Graphics.FromImage(raw))
@@ -45,7 +45,16 @@ namespace murumsWiiModStudio
                         rg.TextRenderingHint = hint == GlyphHinting.GridFit ? TextRenderingHint.AntiAliasGridFit : TextRenderingHint.SingleBitPerPixelGridFit;
                         rg.DrawString(text, font, Brushes.White, new PointF(pad - bounds.X * scale, pad - bounds.Y * scale), sf);
                         g.InterpolationMode = hint == GlyphHinting.Monochrome ? InterpolationMode.NearestNeighbor : InterpolationMode.HighQualityBilinear;
-                        g.DrawImage(raw, new RectangleF(target.X - pad * target.Width / (bounds.Width * scale), target.Y - pad, target.Width + 2 * pad * target.Width / (bounds.Width * scale), target.Height + 2 * pad), new RectangleF(0, 0, w, h), GraphicsUnit.Pixel);
+                        int left = w, top = h, right = -1, bottom = -1;
+                        for (int y = 0; y < h; y++)
+                            for (int x = 0; x < w; x++)
+                                if (raw.GetPixel(x, y).A != 0)
+                                {
+                                    left = Math.Min(left, x); top = Math.Min(top, y);
+                                    right = Math.Max(right, x); bottom = Math.Max(bottom, y);
+                                }
+                        if (right >= left && bottom >= top)
+                            g.DrawImage(raw, target, new RectangleF(left, top, right - left + 1, bottom - top + 1), GraphicsUnit.Pixel);
                     }
                 }
             }

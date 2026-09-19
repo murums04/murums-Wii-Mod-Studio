@@ -155,7 +155,7 @@ namespace murumsWiiModStudio
             }
 
             )
-                return d.ShowDialog(this) == DialogResult.OK ? d.FileName : null;
+                return ToolArchiveFilters.Show(d, this) == DialogResult.OK ? d.FileName : null;
         }
 
         protected string SavePath(string name, string filter)

@@ -9,7 +9,9 @@ namespace murumsWiiModStudio
 {
     internal sealed class MenuTextForm : StudioToolForm
     {
-        StudioArchiveCopy archive;
+        readonly Dictionary<string, StudioArchiveCopy> archives = new Dictionary<string, StudioArchiveCopy>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, string> owners = new Dictionary<string, string>();
+        readonly Dictionary<string, string> entryKeys = new Dictionary<string, string>();
         string source, activeKey;
         bool loading, dirty;
         readonly Dictionary<string, BmgTextDocument> documents = new Dictionary<string, BmgTextDocument>();
@@ -40,9 +42,15 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical,
             Font = new Font("Segoe UI", 16)
         };
-        public MenuTextForm() : base("MKWii Menu Text Tool", "Open a language archive or BMG • Search messages • Edit text and save a copy", "Title_E.szs / Title_U.szs / Title_J.szs · MenuSingle_E.szs / MenuSingle_U.szs / MenuSingle_J.szs · *.bmg")
+        public MenuTextForm() : base("MKWii Menu Text Tool", "Add message sources • Search messages • Edit text and save copies", "RR: UIAssets.szs / RaceAssets.szs · Original: language archives (_E / _U / _J) · *.bmg")
         {
-            Action("Open file…", "Open the language archive used by your pack, or an extracted BMG message file.", Open);
+            Action("Add archive…", "Add multiple language archives or BMG files; existing edits are kept.", Open).Name = "PackSourceAction";
+            Action("Clear selection", "Clear loaded files.", delegate {
+                grid.EndEdit();
+                if (dirty && StudioMessageBox.Show(this, "Discard unsaved changes and clear loaded files?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                resource.Items.Clear(); grid.Rows.Clear(); documents.Clear(); changed.Clear(); archives.Clear(); owners.Clear(); entryKeys.Clear();
+                source = activeKey = null; dirty = false; save.Enabled = false; sample.Clear(); PackSelection.SourceCleared(this);
+            });
             Actions.Controls.Add(new Label { Text = L.T("Nachrichten-Datei", "Message resource"), AutoSize = true, Margin = new Padding(3, 8, 4, 0) });
             Actions.Controls.Add(resource);
             resource.SelectedIndexChanged += delegate
@@ -115,42 +123,53 @@ namespace murumsWiiModStudio
         void Open()
         {
             grid.EndEdit();
-            if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard the unsaved text changes and open another file?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes)
-                return;
-            string p = OpenPath("Messages / Wii archive|*.bmg;*.szs;*.arc;*.u8");
-            if (p == null)
-                return;
-            var next = Path.GetExtension(p).Equals(".bmg", StringComparison.OrdinalIgnoreCase) ? null : new StudioArchiveCopy(p);
-            var names = next == null ? new[]
-            {
-                Path.GetFileName(p)
-            }
-
-            : next.Files.Keys.Where(k => k.EndsWith(".bmg", StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (names.Length == 0)
-                throw new InvalidDataException("This archive contains no BMG messages. Open a language archive such as Common_E.szs or Race_E.szs.");
-            var first = new BmgTextDocument(BmgTextDocument.Decode(next == null ? File.ReadAllBytes(p) : next.Files[names[0]].Data));
-            archive = next;
-            source = p;
-            PackSelection.SourceLoaded(this);
-            dirty = false;
-            changed.Clear();
-            documents.Clear();
-            documents.Add(names[0], first);
-            resource.Items.Clear();
-            resource.Items.AddRange(names);
-            resource.SelectedIndex = 0;
-            save.Enabled = true;
+            AddSelectedPaths(GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Messages));
         }
 
+        void AddSelectedPaths(string[] paths)
+        {
+            var skipped = new List<string>();
+            var incoming = new Dictionary<string, StudioArchiveCopy>(StringComparer.OrdinalIgnoreCase);
+            var parsed = new Dictionary<string, BmgTextDocument>();
+            var keys = new Dictionary<string, string>();
+            var files = new Dictionary<string, string>();
+            foreach (string input in paths)
+            {
+                string path = Path.GetFullPath(input);
+                if (archives.ContainsKey(path) || incoming.ContainsKey(path)) continue;
+                if (archives.Keys.Concat(incoming.Keys).Any(p => Path.GetFileName(p).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException("An archive with this name is already loaded.");
+                var next = Path.GetExtension(path).Equals(".bmg", StringComparison.OrdinalIgnoreCase) ? null : new StudioArchiveCopy(path);
+                var names = next == null ? new[] { Path.GetFileName(path) } : next.Files.Keys.Where(k => k.EndsWith(".bmg", StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (names.Length == 0) { skipped.Add(Path.GetFileName(path)); continue; }
+                incoming.Add(path, next);
+                foreach (string name in names)
+                {
+                    string label = Path.GetFileName(path) + " / " + name;
+                    parsed.Add(label, new BmgTextDocument(BmgTextDocument.Decode(next == null ? File.ReadAllBytes(path) : next.Files[name].Data)));
+                    keys.Add(label, name); files.Add(label, path);
+                }
+            }
+            foreach (var item in incoming) archives.Add(item.Key, item.Value);
+            foreach (var item in parsed) { documents.Add(item.Key, item.Value); owners.Add(item.Key, files[item.Key]); entryKeys.Add(item.Key, keys[item.Key]); resource.Items.Add(item.Key); }
+            if (archives.Count == 0)
+            {
+                Status.Text = skipped.Count == 0 ? "No new message sources selected."
+                    : "No BMG messages found. RR: add UIAssets.szs / RaceAssets.szs. Skipped: " + String.Join(", ", skipped);
+                return;
+            }
+            source = archives.Keys.First(); PackSelection.SourceLoaded(this);
+            if (resource.SelectedIndex < 0) resource.SelectedIndex = 0;
+            save.Enabled = true;
+            Status.Text = archives.Count + " message sources loaded." + (skipped.Count == 0 ? "" : " No BMG; skipped: " + String.Join(", ", skipped));
+        }
         void LoadMessages()
         {
             if (resource.SelectedItem == null)
                 return;
             grid.EndEdit();
             string key = (string)resource.SelectedItem;
-            if (!documents.ContainsKey(key))
-                documents.Add(key, new BmgTextDocument(BmgTextDocument.Decode(archive.Files[key].Data)));
+
             activeKey = key;
             loading = true;
             try
@@ -191,23 +210,25 @@ namespace murumsWiiModStudio
             string folder = Folder(Path.Combine(Path.GetDirectoryName(source), "MUR_EDITED"));
             if (folder == null)
                 return;
-            string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source)));
-            if (string.Equals(dest, Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
-                throw new IOException("Choose a separate output folder.");
             var encoded = changed.ToDictionary(k => k, k => documents[k].Encode());
-            Directory.CreateDirectory(folder);
-            if (archive == null)
-                BackupManager.WriteAllBytesSafely(dest, encoded[(string)resource.SelectedItem]);
-            else
+            var outputs = new Dictionary<string, byte[]>();
+            foreach (string path in changed.Select(k => owners[k]).Distinct())
             {
-                var copy = new StudioArchiveCopy(source, archive.Original);
-                foreach (var p in encoded)
-                    copy.Files[p.Key].Data = p.Value;
-                copy.Save(dest);
+                string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(path)));
+                if (dest.Equals(path, StringComparison.OrdinalIgnoreCase)) throw new IOException("Choose a separate output folder.");
+                var archive = archives[path];
+                if (archive == null) outputs.Add(dest, encoded.First(p => owners[p.Key] == path).Value);
+                else
+                {
+                    var copy = new StudioArchiveCopy(path, archive.Original);
+                    foreach (var entry in encoded.Where(p => owners[p.Key] == path)) copy.Files[entryKeys[entry.Key]].Data = entry.Value;
+                    outputs.Add(dest, copy.Build());
+                }
             }
-
+            Directory.CreateDirectory(folder);
+            foreach (var output in outputs) BackupManager.WriteAllBytesSafely(output.Key, output.Value);
             dirty = false;
-            Status.Text = "Saved: " + dest + "\nCheck message lengths in-game; this table does not simulate menu layout wrapping.";
+            Status.Text = "Saved copies: " + folder + "\nCheck message lengths in-game; this table does not simulate menu layout wrapping.";
             ExportHelp.Show(this, folder);
         }
     }

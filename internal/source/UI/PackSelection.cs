@@ -9,7 +9,7 @@ namespace murumsWiiModStudio
 {
     internal static class PackSelection
     {
-        private sealed class State { internal CustomPack Pack; internal bool HasSource; internal Action RefreshGate; }
+        private sealed class State { internal CustomPack Pack; internal bool HasSource; internal string NextSource, SourceHint; internal Action RefreshGate; }
         private static readonly ConditionalWeakTable<Form, State> states = new ConditionalWeakTable<Form, State>();
 
         internal static string Folder(Form form)
@@ -18,6 +18,26 @@ namespace murumsWiiModStudio
             return form != null && states.TryGetValue(form, out state) && state.Pack != null && Directory.Exists(state.Pack.FilesFolder) ? state.Pack.FilesFolder : "";
         }
 
+        internal static void SourceStep(Form form, string nextButton, string hint, bool ready)
+        {
+            State state;
+            if (states.TryGetValue(form, out state))
+            {
+                state.NextSource = nextButton;
+                state.SourceHint = hint;
+                state.HasSource = ready;
+                if (state.RefreshGate != null) state.RefreshGate();
+            }
+        }
+        internal static void SourceCleared(Form form)
+        {
+            State state;
+            if (states.TryGetValue(form, out state))
+            {
+                state.HasSource = false;
+                if (state.RefreshGate != null) state.RefreshGate();
+            }
+        }
         internal static void SourceLoaded(Form form)
         {
             State state;
@@ -57,10 +77,10 @@ namespace murumsWiiModStudio
                 MinimumSize = new Size(170, 30)
             };
             strip.Controls.Add(create, 3, 0);
-            foreach (Button source in Descendants(form).OfType<Button>().Where(b => b.FindForm() == form && IsSourceButton(b)).ToArray())
+            foreach (Button source in Descendants(form).OfType<Button>().Where(b => b.FindForm() == form && (IsSourceButton(b) || b.Name == "PackClearAction")).ToArray())
             {
                 source.Parent.Controls.Remove(source);
-                source.Name = "PackSourceAction";
+                if (source.Name != "PackClearAction") source.Name = "PackSourceAction";
                 source.Dock = DockStyle.None;
                 source.AutoSize = true;
                 source.MinimumSize = new Size(130, 30);
@@ -127,9 +147,10 @@ namespace murumsWiiModStudio
                     if (parent != null && parent != form) hasPack |= !String.IsNullOrEmpty(Folder(parent));
                 }
                 strip.Required = !available && !hasPack;
+                strip.HighlightedSource = state.NextSource;
                 strip.SourceRequired = hasPack && !available;
                 hint.Text = hasPack
-                    ? L.T("2. Dateien öffnen\n", "2. Open your files\n") + EntryHint(form)
+                    ? L.T("2. Dateien öffnen\n", "2. Open your files\n") + (state.SourceHint ?? EntryHint(form))
                     : L.T("1. Wähle dein Custom Pack aus der Liste oben.\nNoch kein Pack? Erstelle eines über Create custom pack.\nDanach wählst du die Dateien für dieses Tool.",
                         "1. Choose your Custom Pack from the list above.\nNo pack yet? Use Create custom pack to set one up.\nThen choose the files you want to edit in this tool.");
                 hint.Visible = !available;
@@ -256,11 +277,11 @@ namespace murumsWiiModStudio
                     return L.T("Öffne Race.szs plus Race_E.szs, Race_U.szs oder Race_J.szs.\nE = Englisch PAL · U = Englisch USA · J = Japanisch.\nRace.szs: Items/Minimap. Sprachdatei: Zahlen/Timer/Runden.\nWähle eine Textur, ersetze sie und speichere eine Archivkopie.",
                         "Open Race.szs plus Race_E.szs, Race_U.szs or Race_J.szs.\nE = English PAL · U = English USA · J = Japanese.\nRace.szs: items/minimap. Language file: numbers/timer/laps.\nSelect a texture, replace it and save an archive copy.");
                 case "FontChangerForm":
-                    return L.T("Font.szs enthält die Spielschriften; .brfnt ist eine Einzelschrift.\nÖffne die Datei und wähle danach über Choose TTF eine .ttf-Datei.\nPrüfe Text/Schriftatlas in der Vorschau und speichere eine Kopie.",
-                        "Font.szs contains game fonts; .brfnt is an individual font.\nOpen the file, then use Choose TTF to select a .ttf replacement.\nCheck the text/font atlas preview and save a copy.");
+                    return L.T("Add archive: Font.szs für Menüschrift und GO/Finish.\nPassende Nachbararchive werden automatisch mitgeladen.\nTimer: MenuSingle.szs, MenuMulti.szs, Globe.szs.\nHUD: Race.szs + Race_E.szs / Race_U.szs / Race_J.szs.\nRR zusätzlich: RaceAssets.szs + ReplacedAssets.szs.\nFehlende Dateien mit Add archive ergänzen; Bereiche und TTF wählen.",
+                        "Add archive: Font.szs for menu text and GO/Finish.\nMatching nearby archives load automatically.\nTimers: MenuSingle.szs, MenuMulti.szs, Globe.szs.\nHUD: Race.szs + Race_E.szs / Race_U.szs / Race_J.szs.\nRR also needs RaceAssets.szs + ReplacedAssets.szs.\nUse Add archive for missing files; choose groups and TTF.");
                 case "MenuTextForm":
-                    return L.T("Title.szs: Basis; Title_E.szs / Title_U.szs / Title_J.szs: Texte.\nMenuSingle.szs: Basis; _E.szs / _U.szs / _J.szs: Menütexte.\nWähle deine Spielvariante oder öffne eine extrahierte .bmg-Datei.\nSuche die Nachricht und ändere den Text in der Tabelle.",
-                        "Title.szs: base; Title_E.szs / Title_U.szs / Title_J.szs: text.\nMenuSingle.szs: base; _E.szs / _U.szs / _J.szs: menu text.\nChoose your game variant or open an extracted .bmg file.\nFind the message and edit its text in the table.");
+                    return L.T("RR: UIAssets.szs für Menütexte, RaceAssets.szs für Renntexte.\nAdd archive: beide Dateien gemeinsam auswählen.\nOriginalspiel: passende Spracharchive (_E / _U / _J) oder .bmg.\nDateien ohne BMG werden übersprungen. Texte bearbeiten und Kopien speichern.",
+                        "RR: UIAssets.szs for menu text, RaceAssets.szs for race text.\nAdd archive: select both files together.\nOriginal game: matching language archives (_E / _U / _J) or .bmg.\nFiles without BMG are skipped. Edit messages and save copies.");
                 case "MenuTextureForm":
                     return L.T("Title_E.szs / Title_U.szs / Title_J.szs: Titel-/Lizenzgrafiken.\nTitle.szs / MenuSingle.szs: gemeinsame Menütexturen.\nÖffne die passende Datei, wähle eine Textur und ersetze das Bild.",
                         "Title_E.szs / Title_U.szs / Title_J.szs: title/license graphics.\nTitle.szs / MenuSingle.szs: shared menu textures.\nOpen the matching file, select a texture and replace its picture.");

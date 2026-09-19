@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -42,7 +42,7 @@ namespace murumsWiiModStudio
             Width = 155,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
-        readonly PictureBox picture = new PictureBox
+        readonly PictureBox picture = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom,
@@ -283,7 +283,8 @@ namespace murumsWiiModStudio
         internal static Bitmap Generate(byte[] source, string ttf, string text, Color fill, Color outline, float stroke, GlyphHinting hint)
         {
             var info = TplTextureEditor.GetFirstImageInfo(source);
-            if (!TtfCoverage.Latin(ttf).Contains(text[0]))
+            var coverage = TtfCoverage.Latin(ttf);
+            if (String.IsNullOrEmpty(text) || text.Any(c => !coverage.Contains(c)))
                 throw new InvalidOperationException("The TTF does not contain this character.");
             using (var fonts = new PrivateFontCollection())
             {

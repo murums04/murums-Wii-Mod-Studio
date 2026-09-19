@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -716,7 +716,7 @@ namespace murumsWiiModStudio.Brlan
             Bitmap bmp = GetTextureByName(texture.Name);
             if (bmp != null)
             {
-                PictureBox pic = new PictureBox();
+                PictureBox pic = new murumsWiiModStudio.ZoomPanPictureBox();
                 pic.Width = 420;
                 pic.Height = 240;
                 pic.SizeMode = PictureBoxSizeMode.Zoom;

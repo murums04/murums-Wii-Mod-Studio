@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -21,6 +21,11 @@ namespace murumsWiiModStudio
 
         // Inspect Unicode cmap entries before rendering, so a missing character never becomes a fallback-font glyph.
         public static HashSet<int> Latin(string path)
+        {
+            return Unicode(path);
+        }
+
+        public static HashSet<int> Unicode(string path)
         {
             byte[] b = File.ReadAllBytes(path);
             var found = new HashSet<int>();
@@ -56,7 +61,7 @@ namespace murumsWiiModStudio
                     int end = checked(p + U16(b, p + 2)), n = U16(b, p + 6) / 2;
                     if (end > limit || n < 1 || p + 16L + n * 8 > end)
                         throw new InvalidDataException("Invalid TTF cmap segments.");
-                    for (int c = 33; c <= 255; c++)
+                    for (int c = 33; c < 65535; c++)
                         for (int s = 0; s < n; s++)
                         {
                             int last = U16(b, p + 14 + s * 2), first = U16(b, p + 16 + n * 2 + s * 2);
@@ -89,7 +94,7 @@ namespace murumsWiiModStudio
                     for (int i = 0; i < groups; i++)
                     {
                         int q = p + 16 + i * 12, first = U32(b, q), last = U32(b, q + 4), start = U32(b, q + 8);
-                        for (int c = Math.Max(33, first); c <= Math.Min(255, last); c++)
+                        for (int c = Math.Max(33, first); c <= Math.Min(65534, last); c++)
                             if ((long)start + c - first > 0)
                                 found.Add(c);
                     }
@@ -97,7 +102,7 @@ namespace murumsWiiModStudio
             }
 
             if (found.Count == 0)
-                throw new NotSupportedException("This TTF has no supported Latin Unicode mapping (cmap format 4 or 12).");
+                throw new NotSupportedException("This TTF has no supported Unicode mapping (cmap format 4 or 12).");
             return found;
         }
     }

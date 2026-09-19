@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -50,7 +50,7 @@ namespace murumsWiiModStudio
                 {
                     using (decoded)
                     {
-                        var picture = new PictureBox
+                        var picture = new murumsWiiModStudio.ZoomPanPictureBox
                         {
                             Dock = DockStyle.Fill,
                             SizeMode = PictureBoxSizeMode.Zoom,

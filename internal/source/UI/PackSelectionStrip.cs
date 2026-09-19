@@ -12,6 +12,7 @@ namespace murumsWiiModStudio
         bool required;
         bool paused;
         bool sourceRequired;
+        internal string HighlightedSource;
         internal bool SourceRequired
         {
             get { return sourceRequired; }
@@ -54,7 +55,7 @@ namespace murumsWiiModStudio
             Color highlight = Color.FromArgb((int)(start.R + (end.R - start.R) * blend),
                 (int)(start.G + (end.G - start.G) * blend), (int)(start.B + (end.B - start.B) * blend));
             foreach (Button button in Controls.OfType<Button>().Where(b => b.Name == "PackSourceAction"))
-                button.BackColor = sourceRequired ? highlight : DarkTheme.Panel2;
+                button.BackColor = sourceRequired && button.Enabled && (HighlightedSource == null || button.Text == HighlightedSource) ? highlight : DarkTheme.Panel2;
         }
 
         protected override void OnPaint(PaintEventArgs e)

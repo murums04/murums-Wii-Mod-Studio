@@ -22,6 +22,12 @@ namespace murumsWiiModStudio
 
         internal string ImportedPath { get; private set; }
 
+        internal static string[] SelectMany(Form owner, string filter)
+        {
+            using (var picker = new OpenFileDialog { Title = "Add archives", Filter = filter,
+                InitialDirectory = PackSelection.Folder(owner), CheckFileExists = true, Multiselect = true })
+                return ToolArchiveFilters.Show(picker, owner) == DialogResult.OK ? picker.FileNames : new string[0];
+        }
         internal static string Select(Form owner, string filter, string preferred = null, string outputFolder = null)
         {
             using (var picker = new OpenFileDialog
@@ -31,7 +37,7 @@ namespace murumsWiiModStudio
                 CheckFileExists = true
             })
             {
-                if (picker.ShowDialog(owner) != DialogResult.OK)
+                if (ToolArchiveFilters.Show(picker, owner) != DialogResult.OK)
                     return null;
                 return picker.FileName;
             }
@@ -54,7 +60,7 @@ namespace murumsWiiModStudio
                 CheckFileExists = true
             })
             {
-                if (picker.ShowDialog(owner) != DialogResult.OK)
+                if (ToolArchiveFilters.Show(picker, owner) != DialogResult.OK)
                     return null;
                 return Resolve(owner, picker.FileName, preferred, PackSelection.Output(owner, outputFolder));
             }

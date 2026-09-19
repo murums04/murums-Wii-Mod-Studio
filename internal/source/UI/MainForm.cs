@@ -535,7 +535,7 @@ namespace murumsWiiModStudio
             imageHost.Margin = new Padding(0);
             imageHost.Padding = new Padding(8);
             imageHost.BackColor = Color.FromArgb(28, 28, 33);
-            _preview = new PictureBox();
+            _preview = new murumsWiiModStudio.ZoomPanPictureBox();
             _preview.Dock = DockStyle.Fill;
             _preview.SizeMode = PictureBoxSizeMode.Zoom;
             _preview.BackColor = Color.FromArgb(38, 38, 44);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Drawing;
@@ -9,7 +9,7 @@ namespace murumsWiiModStudio
 {
     internal sealed class ResourcePreviewPanel : Panel
     {
-        readonly PictureBox image = new PictureBox
+        readonly PictureBox image = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom,

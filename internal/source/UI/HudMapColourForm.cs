@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
@@ -16,7 +16,7 @@ namespace murumsWiiModStudio
             Width = 620,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
-        readonly PictureBox preview = new PictureBox
+        readonly PictureBox preview = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom

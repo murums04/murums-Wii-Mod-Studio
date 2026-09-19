@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -41,7 +41,7 @@ namespace murumsWiiModStudio
             BackColor = Color.FromArgb(37, 38, 46);
             Dock = DockStyle.Fill;
             TabStop = true;
-            SetStyle(ControlStyles.ResizeRedraw, true);
+            SetStyle(ControlStyles.ResizeRedraw | ControlStyles.StandardClick | ControlStyles.StandardDoubleClick, true);
         }
 
         public void ResetView()
@@ -282,6 +282,14 @@ namespace murumsWiiModStudio
             if (e.Button == MouseButtons.Middle && Document != null && !dragging)
             {
                 Focus();
+                if (e.Clicks == 2)
+                {
+                    panning = false;
+                    Capture = false;
+                    Cursor = Cursors.Default;
+                    ResetView();
+                    return;
+                }
                 panning = true;
                 panStart = e.Location;
                 panStartX = panX;

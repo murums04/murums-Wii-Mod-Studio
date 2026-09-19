@@ -131,7 +131,7 @@ namespace murumsWiiModStudio
 
         private void PickTextures()
         {
-            string path = GameArchiveImportForm.Select(this, "Menu archives|*.szs;*.arc;*.u8|All files|*.*");
+            string path = GameArchiveImportForm.Select(this, ToolArchiveFilters.Menus);
             if (path == null)
                 return;
             Hide();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -22,7 +22,7 @@ namespace murumsWiiModStudio
         {
             Dock = DockStyle.Fill
         };
-        readonly PictureBox preview = new PictureBox
+        readonly PictureBox preview = new murumsWiiModStudio.ZoomPanPictureBox
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom,
@@ -128,9 +128,14 @@ namespace murumsWiiModStudio
                 Text = L.T("Quelle wählen…", "Choose source…"),
                 Dock = DockStyle.Fill
             };
-            browse.Text = "Open file…";
+            browse.Text = "Add archive…";
             browse.Name = "PackSourceAction";
             browse.Click += delegate { ChooseModelArchive(); };
+            var clearArchives = new Button { Text = "Clear selection", Name = "PackClearAction", AutoSize = true };
+            clearArchives.Click += delegate {
+                if (StudioMessageBox.Show(this, "Clear loaded sources and model settings?", Text, MessageBoxButtons.YesNo) == DialogResult.Yes) ClearArchives();
+            };
+            Controls.Add(clearArchives);
             grid.Controls.Remove(source);
             var sourcePanel = new TableLayoutPanel
             {
@@ -460,7 +465,7 @@ namespace murumsWiiModStudio
                 CheckFileExists = true
             })
             {
-                if (dialog.ShowDialog(this) != DialogResult.OK)
+                if (ToolArchiveFilters.Show(dialog, this) != DialogResult.OK)
                     return;
                 try
                 {
@@ -473,6 +478,14 @@ namespace murumsWiiModStudio
             }
         }
 
+        internal void ClearArchives()
+        {
+            source.Clear(); selectedGlobe = null;
+            ClearPicture(); starPicture = ""; globeColor = skyColor = glowColor = Color.White;
+            foreach (var item in switches.Values) item.Checked = true;
+            if (isEarth) RefreshColors(); build.Enabled = false; status.Text = "Add archive to begin.";
+            PackSelection.SourceCleared(this);
+        }
         internal void AddArchives(string[] paths)
         {
             foreach (string path in paths)
@@ -482,12 +495,14 @@ namespace murumsWiiModStudio
                     var archive = U8Archive.Load(File.ReadAllBytes(path));
                     if (SceneColorTools.Find(archive.Root, "earth.brres.LZ") == null)
                         throw new InvalidDataException(L.T("globe.arc enthält kein Globusmodell.", "globe.arc contains no globe model."));
+                    if (selectedGlobe != null && !Path.GetFullPath(selectedGlobe).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("globe.arc is already loaded. Clear selection before switching sources.");
                     selectedGlobe = path;
                 }
             }
             foreach (string path in paths)
                 if (String.Equals(Path.GetFileName(path), archiveName, StringComparison.OrdinalIgnoreCase))
-                    LoadArchive(path);
+                    if (!String.Equals(source.Text, path, StringComparison.OrdinalIgnoreCase)) LoadArchive(path);
             status.Text = L.T("Geladene Archive: ", "Loaded archives: ")
                 + (source.Text.Length > 0 ? Path.GetFileName(source.Text) : L.T("Earth.szs fehlt", "Earth.szs missing"))
                 + (selectedGlobe != null ? " + globe.arc" : "");
@@ -686,7 +701,7 @@ namespace murumsWiiModStudio
 
             )
             {
-                var image = new PictureBox
+                var image = new murumsWiiModStudio.ZoomPanPictureBox
                 {
                     Dock = DockStyle.Fill,
                     SizeMode = PictureBoxSizeMode.Zoom
