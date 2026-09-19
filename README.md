@@ -6,7 +6,7 @@ Current release: **2.1.0-beta2**. Developed by murums with AI assistance.
 ## Features
 
 - MKWii Race HUD Tool and MKWii Game HUD Tool: visual movement, resizing, colours and texture replacement.
-- Custom Pack Maker: start from your Retro Rewind installation; preserve RR archives and language mappings. ISO/WBFS adds only missing Earth.szs, BackModel.szs and globe.arc.
+- Custom Pack Maker: start from your Retro Rewind installation; copy only supplied RR files. Choose PAL, USA or Japan to name Title/Race/Common region files correctly. ISO/WBFS adds only missing Earth.szs, BackModel.szs and globe.arc; required sources must be complete before creating a pack.
 - Archives and textures: open, inspect, edit, replace and export supported resources.
 - Fonts and messages: RR base/language/HOME fonts, including I4/I8 font masks, and game text editing.
 - Backgrounds and animation: menu backgrounds, GIF import and BRLAN editing.

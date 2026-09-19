@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Web.Script.Serialization;
-using System.Xml;
+
 
 namespace murumsWiiModStudio
 {
@@ -20,20 +20,41 @@ namespace murumsWiiModStudio
 
         internal static string Resolve(string selected)
         {
-            if (String.IsNullOrWhiteSpace(selected)) return null;
-            string full = Path.GetFullPath(selected);
-            if (String.Equals(Path.GetFileName(full.TrimEnd('\\', '/')), "UI", StringComparison.OrdinalIgnoreCase))
-                full = Path.GetDirectoryName(full.TrimEnd('\\', '/'));
-            foreach (string suffix in new[] { "", "RetroRewind6", @"WheelWizard\RetroRewind6", @"Riivolution\WheelWizard\RetroRewind6", @"Load\Riivolution\WheelWizard\RetroRewind6", @"RetroRewind\RetroRewind6" })
-            {
-                string candidate = Path.Combine(full, suffix);
-                if (File.Exists(Path.Combine(candidate, "UI", "Title.szs"))
-                    && File.Exists(Path.Combine(candidate, "UI", "MenuSingle.szs")))
-                    return candidate;
-            }
-            return null;
+            return ResolveAll(selected).FirstOrDefault();
         }
 
+        internal static string[] ResolveAll(string selected)
+        {
+            if (String.IsNullOrWhiteSpace(selected)) return new string[0];
+            string full = Path.GetFullPath(selected);
+            if (full.Length > Path.GetPathRoot(full).Length)
+                full = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (String.Equals(Path.GetFileName(full), "UI", StringComparison.OrdinalIgnoreCase))
+                full = Path.GetDirectoryName(full);
+            var roots = new List<string> { full, Path.Combine(full, "User") };
+            foreach (string user in roots.ToArray())
+            {
+                string ini = Path.Combine(user, "Config", "Dolphin.ini");
+                if (!File.Exists(ini)) continue;
+                foreach (string line in File.ReadAllLines(ini))
+                {
+                    int equal = line.IndexOf('=');
+                    if (equal < 0 || !line.Substring(0, equal).Trim().Equals("LoadPath", StringComparison.OrdinalIgnoreCase)) continue;
+                    string load = Environment.ExpandEnvironmentVariables(line.Substring(equal + 1).Trim().Trim('"'));
+                    if (load.Length == 0) continue;
+                    roots.Add(Path.IsPathRooted(load) ? load : Path.Combine(user, load));
+                }
+            }
+            string[] suffixes = {
+                "", "RetroRewind6", @"Riivolution\RetroRewind6", @"Load\Riivolution\RetroRewind6",
+                @"WheelWizard\RetroRewind6", @"Riivolution\WheelWizard\RetroRewind6",
+                @"Load\Riivolution\WheelWizard\RetroRewind6", @"RetroRewind\RetroRewind6"
+            };
+            return roots.SelectMany(root => suffixes.Select(suffix => Path.GetFullPath(Path.Combine(root, suffix))))
+                .Where(candidate => File.Exists(Path.Combine(candidate, "UI", "Title.szs"))
+                    && File.Exists(Path.Combine(candidate, "UI", "MenuSingle.szs")))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
         internal static string[] Discover()
         {
             var candidates = new List<string>();
@@ -85,8 +106,7 @@ namespace murumsWiiModStudio
             {
                 try
                 {
-                    string root = Resolve(candidate);
-                    if (root != null) found.Add(root);
+                    found.AddRange(ResolveAll(candidate));
                 }
                 catch (ArgumentException) { }
                 catch (NotSupportedException) { }
@@ -114,31 +134,6 @@ namespace murumsWiiModStudio
                     if (result.ContainsKey(name)) throw new InvalidDataException("Ambiguous RR source: " + name);
                     result.Add(name, file);
                 }
-            }
-            // Sprach-Aliase aus der aktiven RR-Zuordnung übernehmen, niemals aus Patches/Mods.
-            string xmlPath = Path.Combine(Path.GetDirectoryName(root), "riivolution", Path.GetFileName(root) + ".xml");
-            if (!File.Exists(xmlPath)) throw new FileNotFoundException(L.T(
-                "RR-XML fehlt. Wähle die vollständige RR-Installation mit dem benachbarten Ordner riivolution.",
-                "RR XML is missing. Select the complete RR installation with its adjacent riivolution folder."), xmlPath);
-            var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null };
-            var document = new XmlDocument { XmlResolver = null };
-            using (var reader = XmlReader.Create(xmlPath, settings)) document.Load(reader);
-            string prefix = "/" + Path.GetFileName(root) + "/UI/";
-            foreach (XmlElement file in document.SelectNodes("//file[@external][@disc]"))
-            {
-                string external = file.GetAttribute("external").Replace('\\', '/');
-                if (!external.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
-                string name = external.Substring(prefix.Length);
-                if (name.IndexOf('/') >= 0 || !name.EndsWith(".szs", StringComparison.OrdinalIgnoreCase)) continue;
-                string target = Path.GetFileName(file.GetAttribute("disc").Replace('/', Path.DirectorySeparatorChar));
-                if (!target.EndsWith(".szs", StringComparison.OrdinalIgnoreCase)
-                    || !Path.GetFileNameWithoutExtension(target).Split('_')[0].Equals(Path.GetFileNameWithoutExtension(name).Split('_')[0], StringComparison.OrdinalIgnoreCase)) continue;
-                string source = Path.Combine(root, "UI", name);
-                if (!File.Exists(source)) throw new FileNotFoundException("RR source referenced by XML is missing.", source);
-                string previous;
-                if (result.TryGetValue(target, out previous) && !String.Equals(previous, source, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Ambiguous RR mapping: " + target);
-                result[target] = source;
             }
             RequireBackground(U8Archive.Load(File.ReadAllBytes(result["Title.szs"])));
             return result;

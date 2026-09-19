@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -14,6 +14,9 @@ namespace murumsWiiModStudio
         byte[] original, pending;
         readonly Dictionary<string, byte[]> changes = new Dictionary<string, byte[]>();
         bool dirty;
+        bool needsRender;
+        bool selectingFont;
+        string selectedFont;
         readonly ComboBox fonts = new ComboBox
         {
             Width = 260,
@@ -62,52 +65,62 @@ namespace murumsWiiModStudio
         public FontChangerForm() : base("MKWii Font Changer Tool", "Open Font.szs • Choose a text font and a TTF • Preview and save a separate copy", "Font.szs · *.brfnt · *.ttf")
         {
             Action("Open file…", "Read your pack's font archive or one Wii BRFNT font.", Open);
-            Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Click Preview to apply it.", delegate
+            Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Preview is optional; Save applies the current settings.", delegate
             {
                 string p = OpenPath("TrueType font|*.ttf");
                 if (p != null)
                 {
                     ttf = p;
-                    Update();
+                    SettingsChanged();
                 }
             });
             fonts.SelectedIndexChanged += delegate
             {
-                if (fonts.SelectedItem == null)
+                if (fonts.SelectedItem == null || selectingFont)
                     return;
                 Guard(delegate
                 {
-                    changes.TryGetValue((string)fonts.SelectedItem, out pending);
-                    original = archive == null ? File.ReadAllBytes(source) : archive.Files[(string)fonts.SelectedItem].Data;
-                    Update();
+                    string nextFont = (string)fonts.SelectedItem;
+                    try
+                    {
+                        if (needsRender) GenerateReplacement();
+                        byte[] nextOriginal = archive == null ? File.ReadAllBytes(source) : archive.Files[nextFont].Data;
+                        new BrfntFont(nextOriginal);
+                        selectedFont = nextFont;
+                        original = nextOriginal;
+                        changes.TryGetValue(nextFont, out pending);
+                        needsRender = false;
+                        Update();
+                    }
+                    catch
+                    {
+                        selectingFont = true;
+                        fonts.SelectedItem = selectedFont;
+                        selectingFont = false;
+                        throw;
+                    }
                 });
             };
             Actions.Controls.Add(new Label { Text = "Font in archive", AutoSize = true, Margin = new Padding(8, 12, 2, 0) });
             Actions.Controls.Add(fonts);
-            import = Action("Preview Latin replacement", "Render existing Latin letters, punctuation and digits. Preserve special symbols, spacing and the archive's other fonts.", delegate
-            {
-                int count;
-                pending = new BrfntFont(original).ImportLatin(ttf, fillColor, outlineColor, (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex, out count);
-                changes[(string)fonts.SelectedItem] = pending;
-                dirty = true;
-                Update();
-                Status.Text = count + " Latin characters rendered from " + Path.GetFileName(ttf) + ". Review the atlas; game appearance still needs testing.";
-            });
+            import = Action("Preview Latin replacement", "Preview the current TTF and settings. Save can also render them directly.", GenerateReplacement);
             StudioHistorySymbols.Button(Action("Undo selected font", "Remove the pending replacement for this font. Other selected fonts are kept.", delegate
             {
-                if (fonts.SelectedItem != null && changes.Remove((string)fonts.SelectedItem))
+                if (fonts.SelectedItem != null && (needsRender || changes.ContainsKey((string)fonts.SelectedItem)))
                 {
+                    changes.Remove((string)fonts.SelectedItem);
                     pending = null;
+                    needsRender = false;
                     dirty = changes.Count > 0;
                     Update();
                 }
             }), false, L.T("Ausgewählte Schrift zurücksetzen. Andere Schriften bleiben erhalten.", "Undo selected font. Other selected fonts are kept."));
             Actions.SetFlowBreak(Actions.Controls[Actions.Controls.Count - 1], true);
-            fillButton = Action("Fill: #000000…", "Choose the letter's interior colour. IA4/IA8 fonts store colours as grayscale. Click Preview to apply.", delegate
+            fillButton = Action("Fill: #000000…", "Choose the letter's interior colour. IA4/IA8 fonts store colours as grayscale. Preview is optional; Save applies the current settings.", delegate
             {
                 PickColour(true);
             });
-            outlineButton = Action("Outline: #FFFFFF…", "Choose the outline colour. IA4/IA8 fonts store colours as grayscale. Click Preview to apply.", delegate
+            outlineButton = Action("Outline: #FFFFFF…", "Choose the outline colour. IA4/IA8 fonts store colours as grayscale. Preview is optional; Save applies the current settings.", delegate
             {
                 PickColour(false);
             });
@@ -117,9 +130,9 @@ namespace murumsWiiModStudio
             hinting.SelectedIndex = 0;
             Actions.Controls.Add(new Label { Text = "Hinting", AutoSize = true, Margin = new Padding(8, 12, 2, 0) });
             Actions.Controls.Add(hinting);
-            StudioUx.SetHelp(hinting, "None preserves smooth outlines. Hinted modes rasterize TTF strokes against the pixel grid. Sharp uses monochrome rasterization. Click Preview to apply. These are Windows modes, not FreeType's slight/medium/full levels.");
-            StudioUx.SetHelp(outlineSize, "Outline width in font-atlas pixels. Zero disables the outline. Click Preview to apply to the selected font.");
-            save = ExportAction("Save font copy", "Save the previewed result in MUR_EDITED beside the source file, keeping the original filename.", Save);
+            StudioUx.SetHelp(hinting, "None preserves smooth outlines. Hinted modes rasterize TTF strokes against the pixel grid. Sharp uses monochrome rasterization. Preview is optional; Save applies the current settings. These are Windows modes, not FreeType's slight/medium/full levels.");
+            StudioUx.SetHelp(outlineSize, "Outline width in font-atlas pixels. Zero disables the outline. Save applies the current settings to the selected font; Preview is optional.");
+            save = ExportAction("Save font copy", "Render current settings if needed and save a separate copy in MUR_EDITED, keeping the original filename.", Save);
             var atlasTools = new FlowLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -156,6 +169,8 @@ namespace murumsWiiModStudio
             StudioUx.SetHelp(sheet, "Browse the actual encoded font atlas pages, including preserved game symbols.");
             Finish();
             AlignActionRows();
+            outlineSize.ValueChanged += delegate { SettingsChanged(); };
+            hinting.SelectedIndexChanged += delegate { SettingsChanged(); };
             Update();
             FormClosed += delegate
             {
@@ -254,7 +269,7 @@ namespace murumsWiiModStudio
                         outlineColor = picker.Color;
                     fillButton.Text = "Fill: #" + (fillColor.ToArgb() & 0xFFFFFF).ToString("X6") + "…";
                     outlineButton.Text = "Outline: #" + (outlineColor.ToArgb() & 0xFFFFFF).ToString("X6") + "…";
-                    Status.Text = "Click Preview Latin replacement to apply these colours. IA4/IA8 fonts convert colours to grayscale; the preview shows the exported result.";
+                    SettingsChanged();
                 }
         }
 
@@ -263,10 +278,27 @@ namespace murumsWiiModStudio
             if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Discard the pending fonts and open another source?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes)
                 return;
             string p;
-            using (var picker = new FontSourcePicker(RetroRewindSource.Discover()))
-                p = picker.ShowDialog(this) == DialogResult.OK ? picker.SelectedPath : null;
+            string folder = PackSelection.Folder(this);
+            if (String.IsNullOrEmpty(folder) && !String.IsNullOrEmpty(source))
+                folder = Path.GetDirectoryName(source);
+            using (var picker = new OpenFileDialog
+            {
+                Title = L.T("Font.szs oder Schriftdatei öffnen", "Open Font.szs or a font file"),
+                Filter = "Wii fonts (Font.szs, BRFNT)|*.szs;*.arc;*.brfnt",
+                InitialDirectory = folder ?? "",
+                FileName = "Font.szs",
+                CheckFileExists = true,
+                Multiselect = false,
+                RestoreDirectory = true
+            })
+                p = picker.ShowDialog(this) == DialogResult.OK ? picker.FileName : null;
             if (p == null)
                 return;
+            LoadSource(p);
+        }
+
+        void LoadSource(string p)
+        {
             StudioArchiveCopy next = Path.GetExtension(p).Equals(".brfnt", StringComparison.OrdinalIgnoreCase) ? null : new StudioArchiveCopy(p);
             string[] names = next == null ? new[]
             {
@@ -283,6 +315,7 @@ namespace murumsWiiModStudio
             archive = next;
             pending = null;
             changes.Clear();
+            needsRender = false;
             dirty = false;
             fonts.Items.Clear();
             fonts.Items.AddRange(names);
@@ -292,7 +325,7 @@ namespace murumsWiiModStudio
         new void Update()
         {
             import.Enabled = original != null && ttf != null;
-            save.Enabled = changes.Count > 0;
+            save.Enabled = changes.Count > 0 || (needsRender && original != null && ttf != null);
             if (original != null)
             {
                 var f = new BrfntFont(pending ?? original);
@@ -322,9 +355,42 @@ namespace murumsWiiModStudio
                 old.Dispose();
         }
 
+        void SettingsChanged()
+        {
+            needsRender = original != null && ttf != null;
+            if (needsRender) dirty = true;
+            Update();
+            if (needsRender)
+                Status.Text = "Settings changed. Save font copy applies them directly; Preview Latin replacement is optional.";
+        }
+
+        void GenerateReplacement()
+        {
+            if (original == null || ttf == null || fonts.SelectedItem == null)
+                throw new InvalidOperationException("Open a Wii font and choose a TTF first.");
+            int count;
+            byte[] rendered = new BrfntFont(original).ImportLatin(ttf, fillColor, outlineColor,
+                (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex, out count);
+            pending = rendered;
+            changes[selectedFont] = rendered;
+            needsRender = false;
+            dirty = true;
+            Update();
+            Status.Text = count + " Latin characters rendered from " + Path.GetFileName(ttf) + ". Save font copy to export.";
+        }
         void Save()
         {
+            if (String.IsNullOrEmpty(source)) throw new InvalidOperationException("Open a Wii font first.");
             string folder = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(source), "MUR_EDITED"));
+            string dest = SaveCopy(folder);
+            Status.Text = "Saved: " + dest + "\nCopy this file into your test pack to check text spacing in-game.";
+            ExportHelp.Show(this, folder);
+        }
+
+        string SaveCopy(string folder)
+        {
+            if (needsRender) GenerateReplacement();
+            if (changes.Count == 0) throw new InvalidOperationException("Choose a TTF or preview a replacement before saving.");
             string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source)));
             if (string.Equals(dest, Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a separate output folder.");
@@ -343,8 +409,7 @@ namespace murumsWiiModStudio
             }
 
             dirty = false;
-            Status.Text = "Saved: " + dest + "\nCopy this file into your test pack to check text spacing in-game.";
-            ExportHelp.Show(this, folder);
+            return dest;
         }
     }
 }

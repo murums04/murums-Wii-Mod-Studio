@@ -96,7 +96,18 @@ namespace murumsWiiModStudio
                 + "/Files\" recursive=\"false\" resize=\"true\" create=\"false\" /></patch>\n</wiidisc>\n";
         }
 
-        internal static CustomPack Create(string root, string name, string description, bool retroRewind, IEnumerable<string> sources, string author = null, int modId = -1, bool isEnabled = false, int priority = 0)
+        internal static string RegionalFileName(string path, string region)
+        {
+            if (region != null && region != "E" && region != "U" && region != "J")
+                throw new ArgumentException("Choose PAL (E), USA (U) or Japan (J).");
+            string name = Path.GetFileName(path);
+            if (region == null) return name;
+            foreach (string stem in new[] { "Title", "Race", "Common" })
+                if (name.Equals(stem + "_U.szs", StringComparison.OrdinalIgnoreCase))
+                    return stem + "_" + region + ".szs";
+            return name;
+        }
+        internal static CustomPack Create(string root, string name, string description, bool retroRewind, IEnumerable<string> sources, string author = null, int modId = -1, bool isEnabled = false, int priority = 0, string region = null)
         {
             ValidateName(name);
             if (modId < -1) throw new ArgumentOutOfRangeException("modId");
@@ -109,7 +120,7 @@ namespace murumsWiiModStudio
                 throw new IOException(L.T("Dieses Pack existiert bereits. Bitte einen anderen Namen wählen.",
                     "This pack already exists. Please choose another name."));
             string[] files = sources.Select(Path.GetFullPath).ToArray();
-            if (files.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length)
+            if (files.Select(file => RegionalFileName(file, region)).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length)
                 throw new IOException(L.T("Zwei Dateien haben denselben Namen. Bitte nur eine auswählen.", "Two files share the same name. Please select only one."));
             foreach (string file in files)
                 if (!File.Exists(file) || !(Path.GetExtension(file).Equals(".szs", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(file).Equals("globe.arc", StringComparison.OrdinalIgnoreCase)))
@@ -129,7 +140,7 @@ namespace murumsWiiModStudio
                 string content = Path.Combine(stage, retroRewind ? name : "Files");
                 Directory.CreateDirectory(content);
                 foreach (string file in files)
-                    File.Copy(file, Path.Combine(content, Path.GetFileName(file)), false);
+                    File.Copy(file, Path.Combine(content, RegionalFileName(file, region)), false);
                 if (retroRewind)
                 {
                     string summary = Regex.Replace(pack.Description, @"[\r\n\0]+", " ");

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Drawing;
 using System.Windows.Forms;
@@ -18,7 +18,7 @@ namespace murumsWiiModStudio
         };
         readonly Button apply, darkButton, lightButton;
         public byte[] Result;
-        public HudTextureColorForm(string name, byte[] bytes) : base("HUD Texture Colours", "Choose base and outline colours • Preview • Apply to this texture")
+        public HudTextureColorForm(string name, byte[] bytes) : base("HUD Texture Colours", "Choose base and outline colours • Apply directly or preview first")
         {
             source = bytes;
             key = name;
@@ -55,8 +55,8 @@ namespace murumsWiiModStudio
             Action("Preview colours", "Preview the encoded texture in its original format before applying.", Preview);
             apply = ExportAction("Apply colours", "Queue this texture in Race HUD. Save edited archives there to write the copy.", delegate
             {
-                DialogResult = DialogResult.OK;
-                Close();
+                ApplyColours();
+
             });
             Body.Controls.Add(picture);
             Finish();
@@ -68,10 +68,20 @@ namespace murumsWiiModStudio
         {
             Result = null;
             if (apply != null)
-                apply.Enabled = false;
+                apply.Enabled = true;
             darkButton.Text = "Base: #" + (dark.ToArgb() & 0xffffff).ToString("X6");
             lightButton.Text = "Outline: #" + (light.ToArgb() & 0xffffff).ToString("X6");
+            darkButton.FlatAppearance.BorderSize = lightButton.FlatAppearance.BorderSize = 3;
+            darkButton.FlatAppearance.BorderColor = dark;
+            lightButton.FlatAppearance.BorderColor = light;
             Status.Text = "Dark pixels = base; light pixels = outline. Transparency is preserved.\nSelect pressed/released textures separately. Grayscale formats and game tinting can limit colours.";
+        }
+
+        void ApplyColours()
+        {
+            if (Result == null) Preview();
+            DialogResult = DialogResult.OK;
+            Close();
         }
 
         void Preview()

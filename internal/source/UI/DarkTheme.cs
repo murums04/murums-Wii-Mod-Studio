@@ -74,7 +74,7 @@ namespace murumsWiiModStudio
                         e.Graphics.FillRectangle(b, e.Bounds);
                     string text = combo.Text ?? "";
                     if (e.Index >= 0 && e.Index < combo.Items.Count && combo.Items[e.Index] != null)
-                        text = combo.Items[e.Index].ToString();
+                        text = combo.GetItemText(combo.Items[e.Index]);
                     Rectangle textRect = new Rectangle(e.Bounds.Left + 7, e.Bounds.Top, Math.Max(0, e.Bounds.Width - 11), e.Bounds.Height);
                     TextRenderer.DrawText(e.Graphics, text, combo.Font, textRect, fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
                     if ((e.State & DrawItemState.Focus) != 0)
