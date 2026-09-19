@@ -1509,7 +1509,7 @@ namespace murumsWiiModStudio
             ArchiveEntry titleOn = FindEntry(language.Root, "title", "anim", "title_on.brlan");
             ArchiveEntry titleBrlyt = FindEntry(language.Root, "title", "blyt", "title.brlyt");
             if (langTitle == null || langAnim == null || langBlyt == null || langTimg == null || titleOn == null || titleBrlyt == null)
-                throw new InvalidDataException(L.T("Das Sprach-Archiv hat nicht die erwartete Retro-Rewind-Title-Struktur (title/anim/title_on.brlan + title/blyt/title.brlyt + title/timg).", "The language archive does not have the expected Retro Rewind title structure (title/anim/title_on.brlan + title/blyt/title.brlyt + title/timg)."));
+                throw new InvalidDataException(L.T("Das Sprach-Archiv hat nicht die benötigte Title-Struktur (title/anim/title_on.brlan + title/blyt/title.brlyt + title/timg).", "The language archive does not have the required title structure (title/anim/title_on.brlan + title/blyt/title.brlyt + title/timg)."));
             BrlytLayoutMap titleMap = LoadBrlytMap(titleBrlyt.Data, "title.brlyt");
             BrlytTextureBinding topBinding = titleMap.FindFirstByMaterial("title_top");
             BrlytTextureBinding bottomBinding = titleMap.FindFirstByMaterial("title_bottom");
@@ -3072,6 +3072,10 @@ namespace murumsWiiModStudio
         private static ArchiveEntry FindEntry(ArchiveEntry root, params string[] parts)
         {
             ArchiveEntry current = root;
+            // Originalarchive können ihre Inhalte unter einem zusätzlichen Punktordner ablegen.
+            while (current != null && current.IsDirectory && current.Children.Count == 1
+                && current.Children[0].IsDirectory && current.Children[0].Name == ".")
+                current = current.Children[0];
             int i;
             for (i = 0; i < parts.Length; i++)
             {
