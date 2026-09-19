@@ -327,12 +327,23 @@ namespace murumsWiiModStudio
 
         void UpdateSourceHint()
         {
-            bool available = files.Items.Count > 0 || (!String.IsNullOrEmpty(rememberedFolder) && Directory.Exists(rememberedFolder));
-            Body.Enabled = available;
-            Footer.Enabled = available;
-            sourceHint.Visible = !available;
             bool rrReady = String.IsNullOrEmpty(RrProblem());
-            bool ready = String.IsNullOrEmpty(SourceProblem());
+            string[] missing = RequiredModels.Where(name => !files.Items.Cast<string>()
+                .Any(path => File.Exists(path) && Path.GetFileName(path).Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
+            bool ready = rrReady && missing.Length == 0;
+            Body.Enabled = ready;
+            Footer.Enabled = ready;
+            sourceHint.Visible = !ready;
+            sourceHint.Text = rrReady
+                ? L.T("Schritt 2: Fehlende Dateien aus deiner ISO/WBFS ergänzen.",
+                    "Step 2: Add missing files from your ISO/WBFS.") + Environment.NewLine
+                    + L.T("Benötigt: ", "Required: ") + String.Join(", ", missing) + "." + Environment.NewLine
+                    + L.T("Danach werden die Pack-Einstellungen freigeschaltet.",
+                        "Pack settings unlock when these files are ready.")
+                : L.T("Wähle zuerst deinen Retro-Rewind-Ordner.", "Select your Retro Rewind folder first.")
+                    + Environment.NewLine + L.T("RR-Dateien bilden die Grundlage deines Packs.", "RR files form the base of your pack.")
+                    + Environment.NewLine + L.T("Ergänze danach nur fehlende Dateien aus deiner ISO/WBFS.",
+                        "Then add only missing files from your ISO/WBFS.");
             addIso.Enabled = addModels.Enabled = rrReady;
             chooseRr.Name = rrReady ? "" : "PackSourceAction";
             addIso.Name = rrReady && !ready ? "PackSourceAction" : "";
