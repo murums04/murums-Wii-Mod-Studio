@@ -169,6 +169,7 @@ namespace murumsWiiModStudio
             otherTab.Controls.Add(other);
             tabs.TabPages.Add(otherTab);
             AddBuildButton(titleTab);
+            AddBuildButton(licenseTab);
             AddBuildButton(singleTab);
             AddBuildButton(multiTab);
             _outputFolder.TextChanged += delegate
@@ -539,7 +540,7 @@ namespace murumsWiiModStudio
             target.Capability.ForeColor = Color.FromArgb(180, 190, 210);
             target.Capability.Margin = new Padding(0, 6, 0, 8);
             target.Capability.Text = capabilityText;
-            if (!isTitle && archiveBaseName != "MenuSingle" && archiveBaseName != "MenuMulti")
+            if (!isTitle && archiveBaseName != "MenuSingle" && archiveBaseName != "MenuMulti" && archiveBaseName != "Title")
             {
                 target.Capability.Text += L.T("\r\nFür diesen Bereich ist kein geprüfter Bildimport verfügbar. Es werden keine Menürahmen als Hintergrund ersetzt.", "\r\nNo verified picture import is available for this area. Menu borders will not be replaced as backgrounds.");
                 target.SourcePath.Enabled = false;
@@ -666,7 +667,7 @@ namespace murumsWiiModStudio
                     DetectArchivesInFolder(_uiFolder.Text.Trim());
             };
             form.Controls.Add(_uiFolder, 1, row);
-            Button detect = NewButton(L.T("Auswählen...", "Browse..."));
+            Button detect = NewButton(L.T("Auswählen", "Browse"));
             detect.Click += delegate
             {
                 BrowseAndDetectUiFolder();
@@ -678,7 +679,7 @@ namespace murumsWiiModStudio
             _outputFolder.Dock = DockStyle.Fill;
             StylePathBox(_outputFolder);
             form.Controls.Add(_outputFolder, 1, row);
-            Button browseOut = NewButton(L.T("Auswählen...", "Browse..."));
+            Button browseOut = NewButton(L.T("Auswählen", "Browse"));
             browseOut.Click += delegate
             {
                 BrowseOutputFolder();
@@ -774,7 +775,7 @@ namespace murumsWiiModStudio
                     fieldLabel.Text = String.IsNullOrWhiteSpace(fileName) ? defaultHint : L.T("Datei: ", "File: ") + fileName;
                 };
             }
-            Button button = NewButton(L.T("Auswählen...", "Browse..."));
+            Button button = NewButton(L.T("Auswählen", "Browse"));
             button.Click += delegate
             {
                 BrowseFile(captured, filter);
@@ -3401,7 +3402,7 @@ namespace murumsWiiModStudio
                     U8Archive language = U8Archive.Load(File.ReadAllBytes(languagePath));
                     string languageDiagnostic;
                     bool languageAnimated;
-                    bool languagePatched = PatchArchive(language, options, frames, out languageAnimated, out languageDiagnostic);
+                    bool languagePatched = PatchArchive(language, options, frames, out languageAnimated, out languageDiagnostic, true);
                     anyPatched |= languagePatched;
                     anyAnimated |= languageAnimated;
                     string languageOut = SafeOutputPath(options.OutputFolder, languagePath);
@@ -3431,7 +3432,7 @@ namespace murumsWiiModStudio
             }
         }
 
-        private static bool PatchArchive(U8Archive archive, RetroRewindMenuBackgroundBuildOptions options, List<SourceFrame> frames, out bool animated, out string diagnostic)
+        private static bool PatchArchive(U8Archive archive, RetroRewindMenuBackgroundBuildOptions options, List<SourceFrame> frames, out bool animated, out string diagnostic, bool optionalLanguage = false)
         {
             animated = false;
             diagnostic = "";
@@ -3442,6 +3443,12 @@ namespace murumsWiiModStudio
                 FileRef layout = FindExactSuffix(files, "/bg/blyt/bg.brlyt");
                 FileRef loop = FindExactSuffix(files, "/bg/anim/bg_Loop.brlan");
                 FileRef existing = FindExactSuffix(files, "/bg/timg/ht_squareWhite_00.tpl");
+                if (optionalLanguage && layout == null && loop == null && existing == null)
+                {
+                    diagnostic = L.T("Dieses Spracharchiv enthält keinen eigenen Menühintergrund und bleibt unverändert.",
+                        "This language archive contains no separate menu background and remains unchanged.");
+                    return false;
+                }
                 if (layout == null || loop == null || existing == null)
                     throw new InvalidDataException("Required MenuBG layout, animation or texture folder is missing.");
                 layout.Entry.Data = MenuBackgroundLayout.Convert(layout.Entry.Data);
