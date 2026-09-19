@@ -125,7 +125,7 @@ namespace murumsWiiModStudio
                 + "• Custom Pack Maker: Originaldateien aus ISO/WBFS importieren. Bearbeitungs-Tools öffnen Dateien direkt, mit klaren Einstiegshinweisen und einheitlichen Bedienelementen.\n\n"
                 + "• Export nach MUR_EDITED, auch beim Font Changer; Hinweise zum Sichern und Ersetzen der Pack-Dateien.\n\n"
                 + "• Race HUD: Teilwortsuche, Scrollvorschau, Itembox-/Glaskategorie sowie Slash, km/h und Input-Texturen in der Texturliste. Verfügbare Mod-Zusatzarchive werden mitgeladen.\n\n"
-                + "• Menüs: Lizenzhintergrund, obere/untere Balken und weitere Wartefenster bearbeitbar. Backgrounds öffnet Earth/globe/BackModel direkt; beschädigte Quellen schalten den Editor nicht frei. Titel-Export unterstützt auch die Originalarchive aus der ISO. Lizenz-Bildauswahl und Export freigeschaltet; Menü-Spracharchive ohne eigenen Hintergrund bleiben unverändert.\n\n"
+                + "• Menüs: Lizenzhintergrund, obere/untere Balken und weitere Wartefenster bearbeitbar. Backgrounds öffnet Earth/globe/BackModel direkt; beschädigte Quellen schalten den Editor nicht frei. Titel-Export unterstützt auch die Originalarchive aus der ISO. Lizenz-Bildauswahl und Export freigeschaltet; Menü-Spracharchive ohne eigenen Hintergrund bleiben unverändert. Exportknöpfe in allen Hintergrund-Tabs sichtbar; Modell-Tabs übersichtlicher.\n\n"
                 + "• Himmel: vorerst nur Standbilder; bei GIFs das erste Bild. Animationen folgen später.\n\n"
                 + "• Oberfläche: einheitliche Pack-Auswahl und Statusleisten, kompaktere Anordnung, Hover-/Layoutkorrekturen, einheitliche MKWii-Namen und Dateihinweise in allen Tools.\n\n"
                 + "• Changelog mit GitHub-Link; Buttons im Über-Fenster korrigiert.\n\n",
@@ -134,7 +134,7 @@ namespace murumsWiiModStudio
                 + "• Custom Pack Maker: import original files from ISO/WBFS. Editing tools open files directly, with clear entry hints and consistent controls.\n\n"
                 + "• MUR_EDITED exports, including Font Changer; guidance for backing up and replacing pack files.\n\n"
                 + "• Race HUD: substring search, scrolling preview, item box/glass category; slash, km/h and input textures in the texture list. Available supplementary mod archives load alongside them.\n\n"
-                + "• Menus: edit license backgrounds, top/bottom bars and additional waiting screens. Backgrounds opens Earth/globe/BackModel directly; damaged sources do not unlock the editor. Title export also supports original archives extracted from an ISO. License picture selection and export enabled; menu language archives without a background remain unchanged.\n\n"
+                + "• Menus: edit license backgrounds, top/bottom bars and additional waiting screens. Backgrounds opens Earth/globe/BackModel directly; damaged sources do not unlock the editor. Title export also supports original archives extracted from an ISO. License picture selection and export enabled; menu language archives without a background remain unchanged. Export actions stay visible in every background tab; model tabs have a clearer layout.\n\n"
                 + "• Sky: still images only for now; GIFs use the first frame. Animation will follow later.\n\n"
                 + "• Interface: consistent pack selection and status bars, simpler layout, hover/layout fixes, consistent MKWii names and file hints in all tools.\n\n"
                 + "• Changelog with GitHub link; corrected About buttons.\n\n")

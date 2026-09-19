@@ -175,6 +175,7 @@ namespace murumsWiiModStudio
             _outputFolder.TextChanged += delegate
             {
                 UpdateBuildButtons();
+                foreach (var editor in _modelEditors.Values) editor.RefreshSharedOutput();
             };
             Activated += delegate
             {
@@ -206,14 +207,25 @@ namespace murumsWiiModStudio
             buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttons.Padding = new Padding(0, 7, 0, 4);
             buttons.BackColor = Color.Transparent;
-            root.Controls.Add(buttons, 0, 2);
+            var exportRow = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                ColumnCount = 2,
+                Margin = Padding.Empty
+            };
+            exportRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            exportRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            exportRow.Controls.Add(buttons, 0, 0);
+            root.Controls.Add(exportRow, 0, 2);
             _close = NewButton(L.T("Schliessen", "Close"));
             _close.Width = 130;
+            _close.Margin = new Padding(3, 10, 3, 4);
             _close.Click += delegate
             {
                 Close();
             };
-            buttons.Controls.Add(_close);
+            exportRow.Controls.Add(_close, 1, 0);
             foreach (var pair in _exports)
             {
                 var button = pair.Value;
@@ -266,6 +278,8 @@ namespace murumsWiiModStudio
                 }
 
                 pair.Value.Visible = active;
+                var editor = pair.Key.Controls.OfType<MenuModelsForm>().FirstOrDefault();
+                if (active && editor != null) editor.RefreshSharedOutput();
             }
         }
 
@@ -285,7 +299,7 @@ namespace murumsWiiModStudio
         {
             tab.AutoScroll = false;
             tab.Padding = new Padding(0);
-            MenuModelsForm editor = new MenuModelsForm(archiveName);
+            MenuModelsForm editor = new MenuModelsForm(archiveName, true);
             _modelEditors.Add(archiveName, editor);
             editor.TopLevel = false;
             editor.FormBorderStyle = FormBorderStyle.None;
@@ -317,7 +331,7 @@ namespace murumsWiiModStudio
             purpose.Margin = new Padding(8, 8, 8, 18);
             grid.Controls.Add(purpose, 0, row++);
             grid.SetColumnSpan(purpose, 3);
-            AddFileRow(grid, ref row, L.T("Menüarchiv", "Menu archive") + "\nGlobe.szs / Title.szs", out archive, L.T("Aus deinem Custom Pack. Diese Kopie behält deine bisherigen Online-Menüänderungen.", "From your custom pack. This copy preserves your existing online menu edits."), "Menu archives|Globe.szs;Title.szs;MenuSingle.szs;MenuMulti.szs;Channel.szs");
+            AddFileRow(grid, ref row, L.T("Datei öffnen", "Open file") + ": Title.szs / Globe.szs", out archive, L.T("Aus deinem Custom Pack. Diese Kopie behält deine bisherigen Online-Menüänderungen.", "From your custom pack. This copy preserves your existing online menu edits."), "Menu archives|Globe.szs;Title.szs;MenuSingle.szs;MenuMulti.szs;Channel.szs");
             AddFileRow(grid, ref row, L.T("Hintergrundbild", "Background picture") + "\n" + L.T("z. B. hintergrund.png", "e.g. background.png"), out picture, L.T("Zum Beispiel wallpaper.png. Statisch; bei GIF wird das erste Bild verwendet. Betrifft auch andere Online-Dialoge mit demselben Nachrichtenfenster.", "For example wallpaper.png. Static; GIF uses its first frame. Also affects other online dialogs sharing this message window."), "Pictures|*.png;*.jpg;*.jpeg;*.gif");
             var preview = new PictureBox
             {

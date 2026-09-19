@@ -64,7 +64,17 @@ namespace murumsWiiModStudio
         {
             return customOutput || sharedOutput == null ? output.Text.Trim() : sharedOutput();
         }
-        public MenuModelsForm(string archiveName)
+        internal void RefreshSharedOutput()
+        {
+            if (sharedOutput != null && output.Text != sharedOutput())
+                output.Text = sharedOutput();
+        }
+
+        public MenuModelsForm(string archiveName) : this(archiveName, false)
+        {
+        }
+
+        internal MenuModelsForm(string archiveName, bool embedded)
         {
             this.archiveName = archiveName;
             Font = new Font("Segoe UI", 10F);
@@ -97,11 +107,11 @@ namespace murumsWiiModStudio
             };
             Controls.Add(scrollHost);
             grid.Dock = DockStyle.Top;
-            grid.Height = 450;
+            grid.Height = embedded ? 380 : 450;
             scrollHost.Controls.Add(grid);
             scrollHost.SizeChanged += delegate
             {
-                grid.Height = Math.Max(450, scrollHost.ClientSize.Height);
+                grid.Height = Math.Max(embedded ? 380 : 450, scrollHost.ClientSize.Height);
             };
             var help = new Label
             {
@@ -135,7 +145,7 @@ namespace murumsWiiModStudio
             sourcePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             sourcePanel.Controls.Add(new Label
             {
-                Text = L.T("Quelldatei", "Source file"),
+                Text = L.T("Datei öffnen: ", "Open file: ") + (archiveName == "Earth.szs" ? "Earth.szs + globe.arc" : "BackModel.szs"),
                 AutoSize = true,
                 Anchor = AnchorStyles.Left
             }, 0, 0);
@@ -146,7 +156,9 @@ namespace murumsWiiModStudio
             grid.SetColumnSpan(sourcePanel, 2);
             grid.RowStyles[1].Height = 70;            models.Dock = DockStyle.Fill;
             models.AutoScroll = true;
-            models.Padding = new Padding(4, 4, 4, 4);
+            models.Padding = new Padding(8);
+            models.BackColor = DarkTheme.Panel;
+            models.Enabled = false;
             grid.Controls.Add(models, 0, 2);
             grid.SetColumnSpan(models, 2);
             colors.Dock = DockStyle.Fill;
@@ -179,6 +191,7 @@ namespace murumsWiiModStudio
                     }
             };
             colors.Controls.Add(glowButton);
+            colors.SetFlowBreak(glowButton, true);
             var reset = new Button
             {
                 Text = L.T("Originalfarben", "Original colours"),
@@ -225,8 +238,9 @@ namespace murumsWiiModStudio
                 starButton.Text = L.T("Sternmuster wählen…", "Choose star pattern…");
             };
             colors.Controls.Add(resetPattern);
+            colors.SetFlowBreak(resetPattern, true);
             DarkTheme.StyleTabs(appearance);
-            colors.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(940, 0), Margin = new Padding(4, 12, 4, 4), Text = L.T("Sternmuster: kleines helles Muster auf dunklem Grund, das über den 3D-Himmel wiederholt wird. Für ein normales Hintergrundbild den Tab Standbild verwenden.", "Star pattern: a small light pattern on a dark background, repeated across the 3D sky. For a normal background picture, use Still image.") });
+            colors.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(940, 0), Margin = new Padding(4, 4, 4, 4), Text = L.T("Sternmuster: kleines helles Muster auf dunklem Grund, das über den 3D-Himmel wiederholt wird. Für ein normales Hintergrundbild den Tab Standbild verwenden.", "Star pattern: a small light pattern on a dark background, repeated across the 3D sky. For a normal background picture, use Still image.") });
             var originalTab = new TabPage(L.T("Sternenhimmel", "Starry sky"));
             originalTab.Controls.Add(colors);
             appearance.TabPages.Add(originalTab);
@@ -302,8 +316,9 @@ namespace murumsWiiModStudio
             };
             var folder = new Button
             {
-                Text = L.T("Auswählen...", "Browse..."),
-                Dock = DockStyle.Fill
+                Text = L.T("Auswählen", "Browse"),
+                Anchor = AnchorStyles.Right | AnchorStyles.Bottom,
+                Size = new Size(140, 30)
             };
             folder.Click += delegate
             {
@@ -336,7 +351,7 @@ namespace murumsWiiModStudio
             footer.Controls.Add(ToolStatus.Wrap(this, status), 0, 1);
             Controls.Add(footer);
             footer.SendToBack();
-            PackSelection.Attach(this, delegate(CustomPack pack)
+            if (!embedded) PackSelection.Attach(this, delegate(CustomPack pack)
             {
                 output.Text = Path.Combine(pack.FilesFolder, "MUR_EDITED");
                 customOutput = true;
@@ -358,7 +373,8 @@ namespace murumsWiiModStudio
             appearance.Visible = false;
             help.Text = L.T("Modelldateien aus deinem Pack öffnen. Fehlende Originaldateien im Custom Pack Maker aus einer ISO importieren.", "Open model files from your pack. Import missing original files from an ISO in Custom Pack Maker.");
             help.Text += "\n" + L.T("Dateien: ", "Files: ") + (archiveName == "Earth.szs" ? "Earth.szs / globe.arc" : "BackModel.szs");
-            layout.RowStyles[0].Height = 64;
+            help.Visible = !embedded;
+            layout.RowStyles[0].Height = embedded ? 0 : 48;
             string cached = MenuModelSource.FindCached(archiveName);
             if (cached != null)
                 LoadArchive(cached);
@@ -573,13 +589,15 @@ namespace murumsWiiModStudio
                 if (switches.Count == 0)
                     throw new InvalidDataException("No supported menu models in this archive.");
                 source.Text = path;
+                models.Enabled = true;
+                appearance.Enabled = true;
                 PackSelection.SourceLoaded(this);
                 isEarth = switches.ContainsKey("earth_with_dummy_tex.brres");
                 appearance.Visible = isEarth;
-                layout.RowStyles[2].SizeType = isEarth ? SizeType.Absolute : SizeType.Percent;
-                layout.RowStyles[2].Height = isEarth ? 72 : 100;
-                layout.RowStyles[3].SizeType = isEarth ? SizeType.Percent : SizeType.Absolute;
-                layout.RowStyles[3].Height = isEarth ? 100 : 0;
+                layout.RowStyles[2].SizeType = SizeType.Absolute;
+                layout.RowStyles[2].Height = isEarth ? 64 : 112;
+                layout.RowStyles[3].SizeType = SizeType.Percent;
+                layout.RowStyles[3].Height = 100;
                 ClearPicture();
                 globeColor = skyColor = glowColor = Color.White;
                 starPicture = "";
@@ -763,10 +781,10 @@ namespace murumsWiiModStudio
             {
                 Text = label + L.T(" — sichtbar", " — visible"),
                 Checked = true,
-                Appearance = Appearance.Button,
-                TextAlign = ContentAlignment.MiddleCenter,
+                Appearance = Appearance.Normal,
+                TextAlign = ContentAlignment.MiddleLeft,
                 Width = 225,
-                Height = 44,
+                Height = 32,
                 Margin = new Padding(6)
             };
             check.CheckedChanged += delegate
