@@ -1,7 +1,7 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
 A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta4 (Build 187)**. Developed by murums with AI assistance.
+Current release: **2.1.0-beta4**. Developed by murums with AI assistance.
 
 ## Features
 
