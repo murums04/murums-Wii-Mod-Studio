@@ -177,18 +177,14 @@ namespace murumsWiiModStudio
                     return;
                 try
                 {
-                    TplTextureInfo info = TplTextureEditor.GetImageInfo(_data, _index);
+
                     using (Bitmap source = TplTextureEditor.LoadSourceBitmap(d.FileName))
                     {
-                        bool resize = source.Width != info.Width || source.Height != info.Height;
-                        if (resize)
+                        using (var preview = new TextureImportPreviewForm(_data, _index, source))
                         {
-                            DialogResult r = murumsWiiModStudio.StudioMessageBox.Show(this, L.F("Quelle {0}×{1}, Ziel {2}×{3}. Automatisch skalieren?", "Source {0}×{1}, target {2}×{3}. Resize automatically?", source.Width, source.Height, info.Width, info.Height), "TPL", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                            if (r != DialogResult.Yes)
-                                return;
+                            if (preview.ShowDialog(this) != DialogResult.OK) return;
+                            _data = preview.Result;
                         }
-
-                        _data = TplTextureEditor.ReplaceImage(_data, source, resize, _index);
                     }
 
                     _dirty = true;
@@ -279,3 +275,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

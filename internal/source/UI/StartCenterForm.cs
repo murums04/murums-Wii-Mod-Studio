@@ -87,10 +87,10 @@ namespace murumsWiiModStudio
             advanced.Controls.Add(cards);
             TableLayoutPanel actions = new TableLayoutPanel();
             actions.Dock = DockStyle.Fill;
-            actions.RowCount = 3;
+            actions.RowCount = 4;
             actions.ColumnCount = 1;
-            for (int i = 0; i < 3; i++)
-                actions.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+            for (int i = 0; i < 4; i++)
+                actions.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             simple.Controls.Add(actions);
             actions.Controls.Add(Workflow(L.T("Retro-Rewind-Hintergrund ändern", "Change a Retro Rewind background"), L.T("Dein Foto oder GIF für Titel, Einzelspieler oder andere Menüs. Der Assistent führt dich durch die Auswahl.", "Use your photo or GIF for the title screen, single player or other menus. Follow the guided steps."), delegate
             {
@@ -106,6 +106,11 @@ namespace murumsWiiModStudio
             {
                 Pick(ResourceDetector.OpenFilter);
             }), 0, 2);
+            actions.Controls.Add(Workflow(L.T("RR-Charakter erstellen", "Build an RR character"), L.T("Vorhandene Charakterdateien oder eigenes 3D-Modell, Namen und Export prüfen.", "Use existing character files or inspect your own 3D model; manage names and export copies."), delegate
+            {
+                using (var builder = new CharacterBuilderForm())
+                    builder.ShowDialog(this);
+            }), 0, 3);
             Label hint = new Label();
             hint.Dock = DockStyle.Fill;
             hint.TextAlign = ContentAlignment.MiddleLeft;

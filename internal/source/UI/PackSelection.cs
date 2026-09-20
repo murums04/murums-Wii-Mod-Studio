@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -292,8 +292,8 @@ namespace murumsWiiModStudio
                     return L.T("Open file: .wav mit PCM-Audio.\nConvert other audio: .mp3, .flac oder .ogg über FFmpeg.\nLoop-Start/-Ende setzen, Übergang anhören und .wav speichern.\nFür das Spiel anschließend mit BRSTM converter in .brstm umwandeln.",
                         "Open file: a PCM .wav audio file.\nConvert other audio: .mp3, .flac or .ogg via FFmpeg.\nSet loop start/end, preview the seam and save a .wav.\nThen use BRSTM converter to create the game's .brstm file.");
                 case "ThemeProjectForm":
-                    return L.T("New project: Pack-Ordner wählen. Open file: .mtheme-Projekt öffnen.\nAdd edited file: Original im Pack und bearbeitete Ersatzdatei wählen.\nZum Beispiel passende .szs-, .brfnt- oder .brstm-Dateien.\nSave project speichert Verknüpfungen; Build kopiert die Ersatzdateien.",
-                        "New project: choose a pack folder. Open file: load a .mtheme project.\nAdd edited file: choose the pack original and its edited replacement.\nFor example, matching .szs, .brfnt or .brstm files.\nSave project stores links; Build copies the replacement files.");
+                    return L.T("1. Neues Projekt für das gewählte Pack starten.\n2. Bearbeitete Dateien aus MUR_EDITED auswählen.\n3. Als gemeinsamen Theme-Ordner exportieren.\n.mtheme speichert optional deine Zusammenstellung zum Weiterarbeiten.",
+                        "1. Start a new project for the selected pack.\n2. Choose edited files from MUR_EDITED.\n3. Export them together as a theme folder.\n.mtheme optionally saves your selection to continue later.");
                 case "RetroRewindGifWizard":
                     return L.T("Title.szs + Title_E.szs / Title_U.szs / Title_J.szs: Titel/Lizenz.\nMenuSingle.szs / MenuMulti.szs: Einzel-/Mehrspieler-Menüs.\nÖffne die Datei oder wähle dein Pack und den passenden Tab.\nWähle ein Ersatzbild und erstelle die bearbeitete Kopie.",
                         "Title.szs + Title_E.szs / Title_U.szs / Title_J.szs: title/license.\nMenuSingle.szs / MenuMulti.szs: single/multiplayer menus.\nOpen the file or choose your pack, then select its tab.\nChoose a replacement picture and create the edited copy.");
@@ -309,6 +309,7 @@ namespace murumsWiiModStudio
 
         private static bool IsSourceButton(Button button)
         {
+            if (button.Name == "InToolSourceAction") return false;
             if (button.Name == "PackSourceAction") return true;
             string text = button.Text;
             return text.StartsWith("Open file", StringComparison.Ordinal)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -32,7 +32,7 @@ namespace murumsWiiModStudio
                     Title = "Open edited " + Path.GetFileName(target.Source),
                     Filter = EditedFilter(), FileName = Path.GetFileName(target.Source), CheckFileExists = true,
                     InitialDirectory = Directory.Exists(folder) ? folder : Path.GetDirectoryName(target.Source) })
-                    if (ToolArchiveFilters.Show(picker, this) == DialogResult.OK) LoadEdited(picker.FileName);
+                    if (ToolArchiveFilters.Show(picker, this) == DialogResult.OK) LoadEdited(ToolArchiveFilters.SelectedFile(picker));
             });
             compare = Action("Compare entries", "Compare uncompressed entry bytes. Archive compression and file order do not create false differences.", Compare);
             save = ExportAction("Save selected changes…", "Replace checked resources in a copy of the base archive. BRLYT and BRLAN resources are copied as complete files.", Save);

@@ -1,7 +1,7 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
 A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta3**. Developed by murums with AI assistance.
+Current release: **2.1.0-beta4 (Build 187)**. Developed by murums with AI assistance.
 
 ## Features
 
@@ -11,6 +11,9 @@ Current release: **2.1.0-beta3**. Developed by murums with AI assistance.
 - Fonts and messages: selectable menu/HUD fonts, Unicode character checks, symbol editing and RR game text support.
 - Backgrounds and animation: menu backgrounds, GIF import and BRLAN editing.
 - Audio and projects: WAV loop preview, theme projects and supporting workflows.
+- Character Builder: replace installed RR variants, import GLB/glTF/BLEND/USDZ/DAE/OBJ models, review body assignment and edit menu/driving poses. Export a flat Character replacement files folder for your custom pack.
+- Race Effects: grouped categories including slipstream, texture previews and colour editing.
+- Pack Workshop and Mod Merge: inspect pack changes, keep snapshots and resolve archive conflicts.
 - Integrated help, previews and optional external tools.
 
 Some workflows require optional tools or original game resources. Previews approximate the game; runtime code and animations can affect the result. Keep backups and test edited copies in-game.
@@ -33,7 +36,13 @@ Offline or up-to-date startup checks do not interrupt the user. Beta builds also
 Uninstall through Windows Installed Apps or the installed Uninstall.exe.
 
 Requires Windows and .NET Framework 4.x. Optional tools have their own requirements.
-Game files and third-party programs are not included. Optional downloads require internet.
+Game files are not included. The installer bundles the model runtime components and their notices/source packages; additional optional tools require internet. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+## Character models
+
+Choose your custom pack and the installed RR variant to replace. In Character Builder, use **Load model → Pose & movement → Export character**. Open saved `.murcharacter` work with **Open project**.
+Copy the contents of `MUR_EDITED/Character replacement files` into your custom-pack root, then relaunch the enabled pack.
+Automatic binding is a starting point: unusual anatomy, disconnected meshes or strongly posed unrigged models can require manual corrections. Not every model, vehicle or animation has been tested in-game.
 
 ## Build
 
@@ -47,12 +56,13 @@ From the repository root:
 
 The first command builds the editor under internal/build.
 The second builds the downloadable installer/launcher under dist.
-No game assets or optional downloads are needed to compile.
+No game assets are needed. Prepare the model build dependencies described in [internal/model/README.md](internal/model/README.md); third-party binaries are excluded from this repository.
 
 ## Source layout
 
 - internal/source: editor source, manifest and Studio icon.
 - internal/tools: installer and optional tool download scripts.
+- internal/model: model adapter source, build instructions and dependency notices.
 - internal/build.ps1 and internal/build-setup.ps1: builds.
 - THIRD_PARTY.md: external tools and documented research references.
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -26,7 +26,7 @@ namespace murumsWiiModStudio
         {
             using (var picker = new OpenFileDialog { Title = "Add archives", Filter = filter,
                 InitialDirectory = PackSelection.Folder(owner), CheckFileExists = true, Multiselect = true })
-                return ToolArchiveFilters.Show(picker, owner) == DialogResult.OK ? picker.FileNames : new string[0];
+                return ToolArchiveFilters.Show(picker, owner) == DialogResult.OK ? ToolArchiveFilters.SelectedFiles(picker) : new string[0];
         }
         internal static string Select(Form owner, string filter, string preferred = null, string outputFolder = null)
         {
@@ -39,7 +39,7 @@ namespace murumsWiiModStudio
             {
                 if (ToolArchiveFilters.Show(picker, owner) != DialogResult.OK)
                     return null;
-                return picker.FileName;
+                return ToolArchiveFilters.SelectedFile(picker);
             }
         }
 
@@ -62,7 +62,7 @@ namespace murumsWiiModStudio
             {
                 if (ToolArchiveFilters.Show(picker, owner) != DialogResult.OK)
                     return null;
-                return Resolve(owner, picker.FileName, preferred, PackSelection.Output(owner, outputFolder));
+                return Resolve(owner, ToolArchiveFilters.SelectedFile(picker), preferred, PackSelection.Output(owner, outputFolder));
             }
         }
 
@@ -156,7 +156,7 @@ namespace murumsWiiModStudio
                 available = await Task.Run(() => GameArchiveImport.List(imagePath));
                 if (preferredName == "Earth.szs")
                     available = available.Where(path => Path.GetFileName(path) == "Earth.szs" || Path.GetFileName(path) == "globe.arc").ToArray();
-                else if (preferredName == "BackModel.szs" || preferredName == "Font.szs")
+                else if (preferredName == "BackModel.szs" || preferredName == "Font.szs" || preferredName == "MenuOther.szs")
                     available = available.Where(path => Path.GetFileName(path) == preferredName).ToArray();
                 else if (preferredName == "Race.szs")
                     available = available.Where(path => Path.GetFileName(path) == "Race.szs" || Path.GetFileName(path).StartsWith("Race_", StringComparison.OrdinalIgnoreCase)).ToArray();

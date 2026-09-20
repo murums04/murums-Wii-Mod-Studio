@@ -23,7 +23,21 @@ namespace murumsWiiModStudio.Setup
             "internal/tools/SETUP_WORKER.ps1",
             "internal/tools/SETUP_OPTIONS.ps1",
             "internal/tools/INSTALL_TOOLCHAIN.ps1",
-            "internal/tools/UNINSTALL.ps1"
+            "internal/tools/UNINSTALL.ps1",
+            "internal/model/BrawlLib.dll",
+            "internal/model/OpenTK.dll",
+            "internal/model/StudioModelCodec.dll",
+            "internal/model/assimp-vc143-mt.dll",
+            "internal/model/blender-5.2.2-windows-x64.zip",
+            "internal/model/notices/ASSIMP-LICENSE.txt",
+            "internal/model/notices/BLENDER-COPYRIGHT.txt",
+            "internal/model/notices/BRAWLLIB-LGPL-3.0.txt",
+            "internal/model/notices/GPL-2.0-or-later.txt",
+            "internal/model/notices/GPL-3.0-or-later.txt",
+            "internal/model/notices/OPENTK-LICENSE.txt",
+            "internal/model/sources/StudioModelCodec.cs",
+            "internal/model/sources/blender-5.2.2.tar.xz",
+            "internal/model/sources/brawllib-studio-source.zip"
         };
         internal static string ValidateRoot(string directory)
         {
@@ -98,9 +112,11 @@ namespace murumsWiiModStudio.Setup
                 {
                     if (zip.Entries.Count != PackageFiles.Length)
                         throw new InvalidDataException("Unexpected update package contents.");
+                    long unpacked = 0;
                     foreach (var entry in zip.Entries)
                     {
-                        if (!expected.Remove(entry.FullName) || entry.Length > 200L * 1024 * 1024)
+                        unpacked = checked(unpacked + entry.Length);
+                        if (!expected.Remove(entry.FullName) || entry.Length > 512L * 1024 * 1024 || unpacked > 768L * 1024 * 1024)
                             throw new InvalidDataException("Unexpected update package file.");
                         string target = SafePath(stage, entry.FullName);
                         Directory.CreateDirectory(Path.GetDirectoryName(target));

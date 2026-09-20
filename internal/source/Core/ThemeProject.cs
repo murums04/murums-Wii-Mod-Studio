@@ -62,6 +62,27 @@ namespace murumsWiiModStudio
             Assets.Add(new Asset { RelativePath = relative, Replacement = repl, Hash = hash });
         }
 
+        internal void AddEditedFiles(IEnumerable<string> paths)
+        {
+            string editedRoot = Path.GetFullPath(Path.Combine(PackFolder, "MUR_EDITED")).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var pending = new ThemeProject { PackFolder = PackFolder };
+            foreach (string path in paths)
+            {
+                string full = Path.GetFullPath(path);
+                string relative = full.StartsWith(editedRoot, StringComparison.OrdinalIgnoreCase) ? full.Substring(editedRoot.Length) : Path.GetFileName(full);
+                string original = Child(PackFolder, relative);
+                if (!File.Exists(original)) throw new IOException(L.T("Kein passendes Original im Pack: ", "No matching original in the pack: ") + relative
+                    + L.T(". Bei abweichenden Namen die manuelle Zuordnung verwenden.", ". Use manual mapping if filenames differ."));
+                if (full.Equals(original, StringComparison.OrdinalIgnoreCase)) throw new IOException(L.T("Die bearbeitete Kopie aus MUR_EDITED wählen.", "Choose the edited copy from MUR_EDITED."));
+                pending.Add(original, full);
+            }
+            foreach (var item in pending.Assets)
+            {
+                Assets.RemoveAll(a => a.RelativePath.Equals(item.RelativePath, StringComparison.OrdinalIgnoreCase));
+                Assets.Add(item);
+            }
+        }
+
         public void Save(string path)
         {
             string full = Path.GetFullPath(path);
@@ -108,33 +129,105 @@ namespace murumsWiiModStudio
             return p;
         }
 
+        internal static string SuggestedOutput(string pack)
+        {
+            string full = Path.GetFullPath(pack).TrimEnd(Path.DirectorySeparatorChar);
+            return full + "_Theme";
+        }
+
         public void Build()
         {
+            BuildTransaction(null);
+        }
+
+        internal void BuildTransaction(Action<int> afterWrite)
+        {
             if (Assets.Count == 0)
-                throw new InvalidOperationException("Add edited files to the theme first.");
+                throw new InvalidOperationException(L.T("Zuerst bearbeitete Dateien hinzufügen.", "Add edited files to the theme first."));
             if (string.IsNullOrWhiteSpace(OutputFolder))
-                throw new IOException("Choose an output folder.");
+                throw new IOException(L.T("Ausgabeordner wählen.", "Choose an output folder."));
+            string output = Path.GetFullPath(OutputFolder).TrimEnd(Path.DirectorySeparatorChar);
+            string pack = Path.GetFullPath(PackFolder).TrimEnd(Path.DirectorySeparatorChar);
+            if (output.Equals(pack, StringComparison.OrdinalIgnoreCase)
+                || output.StartsWith(pack + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                throw new IOException(L.T("Der Ausgabeordner muss außerhalb des Originalpacks liegen.", "The output folder must be outside the original pack."));
+
             // Validate every asset before writing any output. Linked files must still match the reviewed version.
             var writes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
             foreach (var a in Assets)
             {
                 if (Hash(a.Replacement) != a.Hash)
-                    throw new IOException("Replacement changed since it was added: " + a.Replacement + ". Remove and add it again to review the new version.");
-                string dest = Child(OutputFolder, a.RelativePath);
-                if (Assets.Any(s => string.Equals(dest, s.Replacement, StringComparison.OrdinalIgnoreCase) || string.Equals(dest, Child(PackFolder, s.RelativePath), StringComparison.OrdinalIgnoreCase)))
-                    throw new IOException("The build would overwrite a source. Choose a separate output folder.");
+                    throw new IOException(L.T("Ersatzdatei wurde geändert. Entferne sie und füge sie erneut hinzu: ", "Replacement changed. Remove and add it again: ") + a.Replacement);
+                string dest = Child(output, a.RelativePath);
+                if (Assets.Any(s => string.Equals(dest, s.Replacement, StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException(L.T("Die Ausgabe würde eine Quelldatei überschreiben. Separaten Ordner wählen.", "The build would overwrite a source. Choose a separate output folder."));
+                if (Directory.Exists(dest))
+                    throw new IOException(L.T("Am Dateiziel liegt bereits ein Ordner: ", "A folder already exists at the file destination: ") + dest);
                 for (string parent = Path.GetDirectoryName(dest); !string.IsNullOrEmpty(parent); parent = Path.GetDirectoryName(parent))
+                {
+                    if (File.Exists(parent))
+                        throw new IOException(L.T("Ein Dateiname blockiert den Ausgabeordner: ", "A file blocks the output folder: ") + parent);
                     if (Directory.Exists(parent) && (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
-                        throw new IOException("Choose an output path without linked folders.");
+                        throw new IOException(L.T("Ausgabeordner ohne Ordnerverknüpfungen wählen.", "Choose an output path without linked folders."));
+                }
                 if (File.Exists(dest) && (File.GetAttributes(dest) & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException("The output is a linked file.");
+                    throw new IOException(L.T("Die Ausgabedatei ist eine Verknüpfung.", "The output is a linked file."));
                 writes.Add(dest, File.ReadAllBytes(a.Replacement));
             }
+            foreach (string dest in writes.Keys)
+                if (writes.Keys.Any(other => other.StartsWith(dest + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException(L.T("Die Ausgabe enthält widersprüchliche Datei- und Ordnerpfade.", "The output contains conflicting file and folder paths."));
 
-            foreach (var item in writes)
+            string recovery = Path.Combine(Path.GetTempPath(), "murums-theme-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(recovery);
+            var originals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var completed = new List<string>();
+            bool keepRecovery = false;
+            try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(item.Key));
-                BackupManager.WriteAllBytesSafely(item.Key, item.Value);
+                foreach (string dest in writes.Keys)
+                {
+                    string backup = null;
+                    if (File.Exists(dest))
+                    {
+                        backup = Path.Combine(recovery, originals.Count + ".bak");
+                        File.Copy(dest, backup);
+                    }
+                    originals.Add(dest, backup);
+                }
+                foreach (var item in writes)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(item.Key));
+                    BackupManager.WriteAllBytesSafely(item.Key, item.Value);
+                    completed.Add(item.Key);
+                    if (afterWrite != null) afterWrite(completed.Count);
+                }
+            }
+            catch (Exception error)
+            {
+                var failures = new List<Exception>();
+                // Bereits geschriebene Dateien rückwärts wiederherstellen.
+                foreach (string dest in completed.AsEnumerable().Reverse())
+                {
+                    try
+                    {
+                        if (originals[dest] == null) File.Delete(dest);
+                        else BackupManager.WriteAllBytesSafely(dest, File.ReadAllBytes(originals[dest]));
+                    }
+                    catch (Exception rollbackError) { failures.Add(rollbackError); }
+                }
+                if (failures.Count > 0)
+                {
+                    keepRecovery = true;
+                    File.WriteAllLines(Path.Combine(recovery, "paths.txt"), originals.Select(p => p.Value + "\t" + p.Key));
+                    throw new IOException(L.T("Wiederherstellung unvollständig. Sicherungen: ", "Recovery incomplete. Backups: ") + recovery, error);
+                }
+                throw;
+            }
+            finally
+            {
+                if (!keepRecovery)
+                    try { Directory.Delete(recovery, true); } catch (IOException) { }
             }
         }
     }

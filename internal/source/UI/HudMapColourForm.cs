@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
@@ -31,6 +31,7 @@ namespace murumsWiiModStudio
             Width = 170,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
+        readonly Button chooseColour, uniformColour;
         Color[] colours;
         Color foreground;
         bool loading;
@@ -52,7 +53,7 @@ namespace murumsWiiModStudio
             Actions.SetFlowBreak(targets, true);
             channel.Items.AddRange(new object[] { "Map base", "Top left", "Top right", "Bottom left", "Bottom right" });
             Actions.Controls.Add(channel);
-            Action("Choose colour…", "Edit the map material or one gradient corner.", delegate
+            chooseColour = Action("Choose colour…", "Edit the map material or one gradient corner.", delegate
             {
                 if (colours == null)
                     return;
@@ -72,8 +73,9 @@ namespace murumsWiiModStudio
             });
             Actions.Controls.Add(new Label { Text = "Opacity (0–255)", AutoSize = true, Margin = new Padding(8, 12, 0, 0) });
             Actions.Controls.Add(alpha);
-            Action("Uniform colour…", "Choose one base colour and clear the corner gradient to white.", delegate
+            uniformColour = Action("Uniform colour…", "Choose one base colour and clear the corner gradient to white.", delegate
             {
+                if (colours == null) return;
                 using (var d = new ColorDialog
                 {
                     FullOpen = true,
@@ -119,6 +121,7 @@ namespace murumsWiiModStudio
             };
             channel.SelectedIndex = 0;
             Finish();
+            RefreshColourButtons();
             if (entries.Count > 0)
                 targets.SelectedIndex = 0;
         }
@@ -137,8 +140,15 @@ namespace murumsWiiModStudio
             DrawPreview();
         }
 
+        void RefreshColourButtons()
+        {
+            ColourButton.SetColor(chooseColour, colours != null && channel.SelectedIndex >= 0 ? colours[channel.SelectedIndex] : Color.White);
+            ColourButton.SetColor(uniformColour, colours == null ? Color.White : colours[0]);
+        }
+
         void LoadChannel()
         {
+            RefreshColourButtons();
             if (colours == null || channel.SelectedIndex < 0)
                 return;
             loading = true;
@@ -148,6 +158,7 @@ namespace murumsWiiModStudio
 
         void Changed()
         {
+            RefreshColourButtons();
             var t = (HudTexture)targets.SelectedItem;
             byte[] b;
             if (!pending.TryGetValue(t, out b) && !t.Archive.Generated.TryGetValue(t.Key, out b))
@@ -174,16 +185,7 @@ namespace murumsWiiModStudio
                             mg.DrawPath(pen, path);
                         }
 
-                        for (int y = 0; y < 380; y++)
-                            for (int x = 0; x < 720; x++)
-                            {
-                                int a = mask.GetPixel(x, y).A;
-                                if (a == 0)
-                                    continue;
-                                float u = x / 719f, v = y / 379f;
-                                Color top = Blend(colours[1], colours[2], u), bottom = Blend(colours[3], colours[4], u), c = Blend(top, bottom, v), b = Blend(colours[0], foreground, 0.35f);
-                                mask.SetPixel(x, y, Color.FromArgb(a * c.A / 255 * b.A / 255, c.R * b.R / 255, c.G * b.G / 255, c.B * b.B / 255));
-                            }
+                        ColourGradient.Apply(mask, colours, foreground);
 
                         g.DrawImageUnscaled(mask, 0, 0);
                     }
@@ -214,3 +216,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

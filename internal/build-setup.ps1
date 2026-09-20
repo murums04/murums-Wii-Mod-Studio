@@ -26,9 +26,14 @@ if($LASTEXITCODE -ne 0){throw 'Uninstaller compilation failed'}
 $files['Uninstall.exe']=$uninstaller
 $files['internal/tools/SETUP_CHROME.dll']=$chrome
 foreach($name in @('UNINSTALL.ps1','SETUP_GUI.ps1','SETUP_WORKER.ps1','SETUP_OPTIONS.ps1','INSTALL_TOOLCHAIN.ps1')){$files['internal/tools/'+$name]=Join-Path $PSScriptRoot ('tools/'+$name)}
+$modelRoot = Join-Path $PSScriptRoot 'build/next/internal/model'
+foreach ($file in Get-ChildItem -LiteralPath $modelRoot -File -Recurse) {
+    $relative = $file.FullName.Substring($modelRoot.Length).TrimStart('\').Replace('\','/')
+    $files['internal/model/' + $relative] = $file.FullName
+}
 $stream=[IO.File]::Open($payload,[IO.FileMode]::Create)
 $zip=New-Object IO.Compression.ZipArchive($stream,[IO.Compression.ZipArchiveMode]::Create)
-try{foreach($name in ($files.Keys | Sort-Object)){[void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$files[$name],$name,[IO.Compression.CompressionLevel]::Optimal)}}finally{$zip.Dispose();$stream.Dispose()}
+try{foreach($name in ($files.Keys | Sort-Object)){[void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$files[$name],$name,$(if ($name.EndsWith(".zip") -or $name.EndsWith(".xz")) { [IO.Compression.CompressionLevel]::NoCompression } else { [IO.Compression.CompressionLevel]::Optimal }))}}finally{$zip.Dispose();$stream.Dispose()}
 $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 & $csc /nologo /target:winexe /define:SETUP_BUNDLE /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.IO.Compression.dll "/resource:$payload,studio.zip" "/resource:$catalogPath,tools.tsv" "/win32icon:$PSScriptRoot/source/App/murums.ico" "/win32manifest:$PSScriptRoot/source/App/app.manifest" "/out:$OutputPath" (Join-Path $PSScriptRoot 'tools/SETUP_BUNDLE.cs') (Join-Path $PSScriptRoot 'tools/SETUP_PAGE.cs') (Join-Path $PSScriptRoot 'tools/UPDATE_INSTALLER.cs') (Join-Path $PSScriptRoot 'source/App/AssemblyInfo.cs') (Join-Path $PSScriptRoot 'source/UI/FolderPickerDialog.cs') (Join-Path $PSScriptRoot 'tools/SETUP_CHROME.cs')
 if($LASTEXITCODE -ne 0){throw 'Setup bundle compilation failed'}

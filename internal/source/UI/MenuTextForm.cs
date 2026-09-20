@@ -42,7 +42,7 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical,
             Font = new Font("Segoe UI", 16)
         };
-        public MenuTextForm() : base("MKWii Menu Text Tool", "Add message sources • Search messages • Edit text and save copies", "RR: UIAssets.szs / RaceAssets.szs · Original: language archives (_E / _U / _J) · *.bmg")
+        public MenuTextForm() : base("RR-MKWii Menu Text Tool", "Add message sources • Search messages • Edit text and save copies", "RR: UIAssets.szs / RaceAssets.szs · Original: language archives (_E / _U / _J) · *.bmg")
         {
             Action("Add archive…", "Add multiple language archives or BMG files; existing edits are kept.", Open).Name = "PackSourceAction";
             Action("Clear selection", "Clear loaded files.", delegate {

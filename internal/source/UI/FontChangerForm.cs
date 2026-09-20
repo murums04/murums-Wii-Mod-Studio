@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -15,13 +15,19 @@ namespace murumsWiiModStudio
         Button characterCheck;
         readonly List<string> additionalArchives = new List<string>();
         readonly Label archiveInfo = new Label { AutoSize = true, MaximumSize = new Size(980, 0), ForeColor = Color.FromArgb(190, 166, 255) };
-        string source, ttf;
+        string source, ttf, japaneseTtf, otherTtf;
+        int mainScript;
+        FontScriptSources ScriptSources
+        {
+            get { return new FontScriptSources { Latin = ttf, Japanese = japaneseTtf, Other = otherTtf, MainScript = mainScript }; }
+        }
+        string MainTtf { get { return ScriptSources.MainPath; } }
         byte[] original, pending;
         readonly Dictionary<string, byte[]> changes = new Dictionary<string, byte[]>();
         readonly Dictionary<string, byte[]> menuCopies = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         readonly CheckBox includeRaceMessages = new CheckBox { Text = "GO / Finish (shared font)", AutoSize = true, Checked = true, Anchor = AnchorStyles.Left };
 
-        readonly CheckBox includeHud = new CheckBox { Text = "Race HUD: numbers / km/h / slash", Checked = true, AutoSize = true, Anchor = AnchorStyles.Left };
+        readonly CheckBox includeHud = new CheckBox { Text = "Race HUD: TIME / LAP / numbers / km/h", Checked = true, AutoSize = true, Anchor = AnchorStyles.Left };
         readonly CheckBox includeMenu = new CheckBox { Text = "Menu text", Checked = true, AutoSize = true };
         readonly CheckBox includeTimers = new CheckBox { Text = "Menu timers", Checked = true, AutoSize = true };
         readonly Dictionary<string, byte[]> symbolChanges = new Dictionary<string, byte[]>();
@@ -77,18 +83,21 @@ namespace murumsWiiModStudio
             Value = 2,
             Width = 65
         };
-        public FontChangerForm() : base("MKWii Font Changer Tool", "1. Load archives  •  2. Choose font groups and TTF  •  3. Preview and save copies", "Font.szs · MenuSingle.szs / MenuMulti.szs / Globe.szs · Race.szs + Race_E/U/J.szs · RaceAssets.szs / ReplacedAssets.szs")
+        public FontChangerForm() : base("RR-MKWii Font Changer Tool", "1. Load archives  •  2. Choose font groups and TTF  •  3. Preview and save copies", "Font.szs · MenuSingle.szs / MenuMulti.szs / Globe.szs · Race.szs + Race_E/U/J.szs · RaceAssets.szs / ReplacedAssets.szs")
         {
             Action("Add archive…", "Select Font.szs together with menu/HUD archives. Later selections append to the loaded files.", AddArchives).Name = "PackSourceAction";
             Action("Clear selection", "Clear loaded files; asks before discarding unsaved changes.", ClearSelection);
-            Action("Choose TTF…", "Load a TrueType font privately for this conversion. It is not installed in Windows. Preview is optional; Save applies the current settings.", delegate
+            Action(L.T("Schriften wählen…", "Choose fonts…"), L.T("Hauptschrift wählen; Japanisch und weitere Alphabete sind optional.", "Choose your main font; Japanese and more alphabets are optional."), delegate
             {
-                string p = OpenPath("TrueType font|*.ttf");
-                if (p != null)
-                {
-                    ttf = p;
-                    SettingsChanged();
-                }
+                using (var dialog = new FontScriptForm(ScriptSources))
+                    if (dialog.ShowDialog(this) == DialogResult.OK)
+                    {
+                        ttf = dialog.Selection.Latin;
+                        japaneseTtf = dialog.Selection.Japanese;
+                        otherTtf = dialog.Selection.Other;
+                        mainScript = dialog.Selection.MainScript;
+                        SettingsChanged();
+                    }
             });
             fonts.SelectedIndexChanged += delegate
             {
@@ -159,6 +168,14 @@ namespace murumsWiiModStudio
             var archiveButton = new Button { Text = "Archive overview…", AutoSize = true };
             archiveButton.Click += delegate { using (var overview = new FontArchiveInfoForm(archiveDetails)) overview.ShowDialog(this); };
             scopes.Controls.Add(archiveButton);
+            var layoutPreview = new Button { Text = L.T("Textfelder prüfen…", "Check text fields…"), AutoSize = true };
+            layoutPreview.Click += delegate { Guard(delegate {
+                if (archive == null) throw new InvalidOperationException(L.T("Font.szs und Menü-/HUD-Archive laden.", "Load Font.szs and menu/HUD archives."));
+                if (needsRender) GenerateReplacement();
+                var originals = archive.Files.Where(e => e.Key.EndsWith(".brfnt", StringComparison.OrdinalIgnoreCase)).ToDictionary(e => e.Key, e => e.Value.Data);
+                using (var form = new FontLayoutPreviewForm(additionalArchives, originals, changes)) form.ShowDialog(this);
+            }); };
+            scopes.Controls.Add(layoutPreview);
             scopes.SizeChanged += delegate { archiveInfo.MaximumSize = new Size(Math.Max(200, scopes.ClientSize.Width - 12), 0); };
             Body.Controls.Add(scopes);
             scopes.BringToFront();
@@ -210,6 +227,7 @@ namespace murumsWiiModStudio
             StudioUx.SetHelp(fonts, "Select a font for preview. The checkboxes choose which font groups are exported. Position numbers and game symbols are preserved by TTF import.");
             StudioUx.SetHelp(sheet, "Browse the actual encoded font atlas pages, including preserved game symbols.");
             Finish();
+            RefreshColourButtons();
             AlignActionRows();
             outlineSize.ValueChanged += delegate { SettingsChanged(); };
             hinting.SelectedIndexChanged += delegate { SettingsChanged(); };
@@ -294,6 +312,14 @@ namespace murumsWiiModStudio
                 row.Width = Math.Max(1, Actions.ClientSize.Width - Actions.Padding.Horizontal);
             Actions.ResumeLayout(true);
         }
+        void RefreshColourButtons()
+        {
+            fillButton.Text = "Fill: #" + (fillColor.ToArgb() & 0xFFFFFF).ToString("X6") + "…";
+            outlineButton.Text = "Outline: #" + (outlineColor.ToArgb() & 0xFFFFFF).ToString("X6") + "…";
+            ColourButton.SetColor(fillButton, fillColor);
+            ColourButton.SetColor(outlineButton, outlineColor);
+        }
+
         void PickColour(bool interior)
         {
             using (var picker = new ColorDialog
@@ -309,8 +335,7 @@ namespace murumsWiiModStudio
                         fillColor = picker.Color;
                     else
                         outlineColor = picker.Color;
-                    fillButton.Text = "Fill: #" + (fillColor.ToArgb() & 0xFFFFFF).ToString("X6") + "…";
-                    outlineButton.Text = "Outline: #" + (outlineColor.ToArgb() & 0xFFFFFF).ToString("X6") + "…";
+                    RefreshColourButtons();
                     SettingsChanged();
                 }
         }
@@ -318,7 +343,7 @@ namespace murumsWiiModStudio
         static bool IsCompanion(string path)
         {
             string stem = Path.GetFileNameWithoutExtension(path).Split('_')[0];
-            return new[] { "Title", "MenuSingle", "MenuMulti", "Globe", "Channel", "Award", "Race", "RaceAssets", "ReplacedAssets" }
+            return new[] { "Title", "MenuSingle", "MenuMulti", "MenuOther", "Globe", "Channel", "Award", "Race", "RaceAssets", "ReplacedAssets" }
                 .Contains(stem, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -453,7 +478,7 @@ namespace murumsWiiModStudio
                 Multiselect = false,
                 RestoreDirectory = true
             })
-                p = ToolArchiveFilters.Show(picker, this) == DialogResult.OK ? picker.FileName : null;
+                p = ToolArchiveFilters.Show(picker, this) == DialogResult.OK ? ToolArchiveFilters.SelectedFile(picker) : null;
             if (p == null)
                 return;
             LoadSource(p);
@@ -493,12 +518,12 @@ namespace murumsWiiModStudio
         {
             RefreshArchiveInfo();
             RefreshSheetNavigation();
-            characterCheck.Enabled = original != null && ttf != null;
+            characterCheck.Enabled = original != null && MainTtf != null;
             symbolsButton.Enabled = original != null;
             includeMenu.Enabled = true; includeTimers.Enabled = includeRaceMessages.Enabled = includeHud.Enabled = archive != null;
             save.Text = (includeRaceMessages.Checked || includeHud.Checked) && archive != null ? "Save font / HUD copies" : "Save font copy";
-            import.Enabled = original != null && ttf != null;
-            save.Enabled = changes.Count > 0 || menuCopies.Count > 0 || (needsRender && original != null && ttf != null);
+            import.Enabled = original != null && MainTtf != null;
+            save.Enabled = changes.Count > 0 || menuCopies.Count > 0 || (needsRender && original != null && MainTtf != null);
             if (original != null)
             {
                 var f = new BrfntFont(pending ?? original);
@@ -509,7 +534,7 @@ namespace murumsWiiModStudio
                 Render();
             }
 
-            Status.Text = original == null ? "Choose your pack's Font.szs to begin." : Path.GetFileName(source) + " • " + fonts.Items.Count + " fonts • " + (ttf == null ? "Choose a TTF." : Path.GetFileName(ttf)) + "\nLetters supported by the TTF are replaced; missing characters and game symbols stay original. Existing spacing is retained; wide fonts may be compressed. I4/I8: coverage mask, game-defined colour. IA4/IA8: grayscale colours.";
+            Status.Text = original == null ? "Choose your pack's Font.szs to begin." : Path.GetFileName(source) + " • " + fonts.Items.Count + " fonts • " + (MainTtf == null ? "Choose a TTF." : "Main: " + Path.GetFileName(MainTtf) + (japaneseTtf == null ? "" : " / JP: " + Path.GetFileName(japaneseTtf)) + (otherTtf == null ? "" : " / Other: " + Path.GetFileName(otherTtf))) + "\nLetters supported by their assigned TTF are replaced; missing characters and game symbols stay original. Existing spacing is retained; wide fonts may be compressed. I4/I8: coverage mask, game-defined colour. IA4/IA8: grayscale colours.";
         }
 
         void RefreshSheetNavigation()
@@ -551,7 +576,7 @@ namespace murumsWiiModStudio
         }
         void SettingsChanged()
         {
-            needsRender = original != null && ttf != null;
+            needsRender = original != null && MainTtf != null;
             if (needsRender) dirty = true;
             Update();
             if (needsRender)
@@ -560,7 +585,7 @@ namespace murumsWiiModStudio
 
         void GenerateReplacement()
         {
-            if (original == null || ttf == null || fonts.SelectedItem == null)
+            if (original == null || MainTtf == null || fonts.SelectedItem == null)
                 throw new InvalidOperationException("Open a Wii font and choose a TTF first.");
             var generated = new Dictionary<string, byte[]>();
             var reports = new Dictionary<string, Dictionary<int, string>>();
@@ -574,16 +599,16 @@ namespace murumsWiiModStudio
                 var font = new BrfntFont(bytes);
                 int count;
                 var report = new Dictionary<int, string>();
-                byte[] converted = font.ImportLatin(ttf, fillColor, outlineColor, (float)outlineSize.Value,
+                byte[] converted = font.ImportFonts(ScriptSources, fillColor, outlineColor, (float)outlineSize.Value,
                     (GlyphHinting)hinting.SelectedIndex, out count, BrfntFont.HasGameNumbers(key), report);
                 reports.Add(key, report);
                 if (count > 0) generated.Add(key, converted);
             }
 
-            var menus = includeTimers.Checked && archive != null ? MenuTimerFonts.Generate(additionalArchives, ttf, fillColor, outlineColor,
+            var menus = includeTimers.Checked && archive != null ? MenuTimerFonts.Generate(additionalArchives, ScriptSources.ForCharacter('0'), fillColor, outlineColor,
                 (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex) : new Dictionary<string, byte[]>();
             if (includeHud.Checked && archive != null)
-                foreach (var entry in HudFontTextures.Generate(additionalArchives, ttf, fillColor, outlineColor,
+                foreach (var entry in HudFontTextures.Generate(additionalArchives, ScriptSources.ForCharacter('0'), fillColor, outlineColor,
                     (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex))
                     menus.Add(entry.Key, entry.Value);
             changes.Clear();
@@ -641,3 +666,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

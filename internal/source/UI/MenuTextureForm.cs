@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -86,24 +86,38 @@ namespace murumsWiiModStudio
 
         void Open()
         {
-            AddSelectedPaths(GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Menus));
+            AddSelectedPaths(GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.MenuTextures));
         }
 
         void AddSelectedPaths(string[] paths)
         {
+            if (paths == null || paths.Length == 0)
+                return;
             var loaded = new System.Collections.Generic.List<RaceHudArchive>();
-            foreach (string path in paths)
+            var skipped = new System.Collections.Generic.List<string>();
+            foreach (string path in paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (session.Archives.Any(a => a.Source.Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))) continue;
+                if (session.Archives.Any(a => a.Source.Equals(path, StringComparison.OrdinalIgnoreCase)))
+                    continue;
                 if (session.Archives.Concat(loaded).Any(a => Path.GetFileName(a.Source).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)))
                     throw new IOException("An archive with this name is already loaded.");
-                loaded.Add(new RaceHudArchive(path));
+                var archive = new RaceHudArchive(path);
+                if (archive.Files.Keys.Any(k => k.EndsWith(".tpl", StringComparison.OrdinalIgnoreCase)))
+                    loaded.Add(archive);
+                else
+                    skipped.Add(Path.GetFileName(path));
             }
-            session.Archives.AddRange(loaded);
-            if (session.Archives.Count == 0) return;
-            PackSelection.SourceLoaded(this);
-            if (output.Text.Length == 0) output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(session.Archives[0].Source), "MUR_EDITED"));
-            RefreshTextures();
+            if (loaded.Count > 0)
+            {
+                session.Archives.AddRange(loaded);
+                PackSelection.SourceLoaded(this);
+                if (output.Text.Length == 0)
+                    output.Text = PackSelection.Output(this, Path.Combine(Path.GetDirectoryName(session.Archives[0].Source), "MUR_EDITED"));
+                RefreshTextures();
+            }
+            if (skipped.Count > 0)
+                Status.Text = L.T("Ohne Texturen übersprungen: ", "Skipped without textures: ") + string.Join(", ", skipped)
+                    + "\n" + L.T("Menütexturen aus Title.szs, MenuSingle.szs oder MenuMulti.szs hinzufügen.", "Add menu textures from Title.szs, MenuSingle.szs or MenuMulti.szs.");
         }
         internal static System.Collections.Generic.List<HudTexture> AreaTextures(RaceHudSession session, int area)
         {

@@ -67,7 +67,7 @@ namespace murumsWiiModStudio
 
         public RaceHudForm()
         {
-            Text = "MKWii Race HUD Tool — murums Wii Mod Studio";
+            Text = "RR-MKWii Race HUD Tool — murums Wii Mod Studio";
             Size = new Size(1180, 910);
             MinimumSize = new Size(1100, 860);
             StartPosition = FormStartPosition.CenterParent;
@@ -103,7 +103,7 @@ namespace murumsWiiModStudio
             )
                 grid.RowStyles.Add(new RowStyle(height < 0 ? SizeType.Percent : SizeType.Absolute, height < 0 ? 100 : height));
             Controls.Add(grid);
-            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("MKWii Race HUD Tool", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs + Race_E.szs / Race_U.szs / Race_J.szs · PNG / JPG replacements"), 0, 0);
+            grid.Controls.Add(ToolFileHint.Wrap(StudioChrome.Header("RR-MKWii Race HUD Tool", "1  Open your pack's archives     2  Select replacements     3  Save copies to MUR_EDITED"), "Race.szs + Race_E.szs / Race_U.szs / Race_J.szs · PNG / JPG replacements"), 0, 0);
             grid.RowStyles[1].SizeType = SizeType.AutoSize;
             var bar = new FlowLayoutPanel
             {
@@ -306,7 +306,7 @@ namespace murumsWiiModStudio
             RefreshList();
             FormClosing += delegate (object sender, FormClosingEventArgs e)
             {
-                if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Close without saving the current selection changes?", "MKWii Race HUD Tool", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                if (dirty && murumsWiiModStudio.StudioMessageBox.Show(this, "Close without saving the current selection changes?", "RR-MKWii Race HUD Tool", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                     e.Cancel = true;
             };
         }
@@ -333,7 +333,7 @@ namespace murumsWiiModStudio
                 catch (Exception ex)
                 {
                     status.Text = "Action failed; source archives unchanged.";
-                    murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, "MKWii Race HUD Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, "RR-MKWii Race HUD Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 finally
                 {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -39,7 +39,7 @@ namespace murumsWiiModStudio
                 "Select your Retro Rewind folder first.\nRR files form the base of your pack.\nThen add only missing files from your ISO/WBFS.")
         };
 
-        internal CustomPackMakerForm() : base("MKWii Custom Pack Maker",
+        internal CustomPackMakerForm() : base("RR-MKWii Custom Pack Maker Tool",
             L.T("RR-Ordner wählen • Fehlende Dateien ergänzen • Pack erstellen", "Choose RR folder • Add missing files • Create pack"))
         {
             chooseRr = Action(L.T("1. RR-Ordner wählen…", "1. Choose RR folder…"), "Select your installed Retro Rewind version as the pack base.", ChooseRrFolder);
@@ -124,7 +124,7 @@ namespace murumsWiiModStudio
             var fileHeading = new Label { Text = L.T("Ausgewählte Dateien für das neue Pack", "Selected files for the new pack"), AutoSize = true };
             grid.Controls.Add(fileHeading, 0, 5);
             grid.SetColumnSpan(fileHeading, 3);
-            var fileArea = new Panel { Dock = DockStyle.Fill, Margin = files.Margin };
+            var fileArea = new Panel { Dock = DockStyle.Fill, Margin = files.Margin, MinimumSize = new Size(0, 100) };
             fileArea.Controls.Add(files);
 
             grid.Controls.Add(fileArea, 0, 6);
@@ -152,6 +152,7 @@ namespace murumsWiiModStudio
             packActions.Controls.Add(remove);
             grid.Controls.Add(packActions, 0, 7);
             grid.SetColumnSpan(packActions, 3);
+            packs.MinimumSize = new Size(0, 80);
             grid.Controls.Add(packs, 0, 8);
             grid.SetColumnSpan(packs, 3);
             grid.Controls.Add(note, 0, 9);
@@ -226,6 +227,7 @@ namespace murumsWiiModStudio
                 }
             };
             RefreshPacks();
+            CompactWorkspace(760);
             Finish();
             Controls.Add(sourceHint);
             Layout += delegate { if (!sourceHint.IsDisposed) PositionSourceHint(); };

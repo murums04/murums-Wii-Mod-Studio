@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -48,7 +48,7 @@ namespace murumsWiiModStudio
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.FromArgb(50, 50, 55)
         };
-        readonly Button apply;
+        readonly Button apply, fillButton, outlineButton;
         byte[] candidate;
         public byte[] Result;
         readonly HudFontSettings settings;
@@ -93,7 +93,7 @@ namespace murumsWiiModStudio
             });
             Actions.Controls.Add(new Label { Text = "Character", AutoSize = true, Margin = new Padding(8, 12, 2, 0) });
             Actions.Controls.Add(character);
-            Action("Fill colour…", "Choose the inside colour; default black.", delegate
+            fillButton = Action("Fill colour…", "Choose the inside colour; default black.", delegate
             {
                 using (var d = new ColorDialog
                 {
@@ -108,7 +108,7 @@ namespace murumsWiiModStudio
                         InvalidatePreview();
                     }
             });
-            Action("Outline colour…", "Choose the contour colour; default white.", delegate
+            outlineButton = Action("Outline colour…", "Choose the contour colour; default white.", delegate
             {
                 using (var d = new ColorDialog
                 {
@@ -202,6 +202,8 @@ namespace murumsWiiModStudio
 
         void InvalidatePreview()
         {
+            ColourButton.SetColor(fillButton, fill);
+            ColourButton.SetColor(outlineButton, outline);
             candidate = null;
             Results.Clear();
             review.Items.Clear();
@@ -295,21 +297,43 @@ namespace murumsWiiModStudio
                 var style = family.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular : FontStyle.Bold;
                 using (var sf = (StringFormat)StringFormat.GenericTypographic.Clone())
                 using (var path = new GraphicsPath())
-                using (var reference = new GraphicsPath())
                 {
                     path.AddString(text, family, (int)style, 64, PointF.Empty, sf);
-                    reference.AddString("0123456789", family, (int)style, 64, PointF.Empty, sf);
                     var bounds = path.GetBounds();
-                    var digits = reference.GetBounds();
                     if (bounds.Width <= 0 || bounds.Height <= 0)
                         throw new InvalidOperationException("Character has no visible outline.");
                     float margin = 2 + stroke / 2;
-                    float scale = Math.Min((info.Width - 2 * margin) / Math.Max(bounds.Width, 32), (info.Height - 2 * margin) / Math.Max(digits.Height, bounds.Height));
+                    float commonWidth = 0, digitTop = Single.MaxValue, digitBottom = Single.MinValue;
+                    float allTop = Single.MaxValue, allBottom = Single.MinValue;
+                    foreach (char c in "0123456789.,:")
+                    {
+                        if (!coverage.Contains(c)) continue;
+                        using (var glyph = new GraphicsPath())
+                        {
+                            glyph.AddString(c.ToString(), family, (int)style, 64, PointF.Empty, sf);
+                            var cell = glyph.GetBounds();
+                            commonWidth = Math.Max(commonWidth, cell.Width);
+                            allTop = Math.Min(allTop, cell.Top);
+                            allBottom = Math.Max(allBottom, cell.Bottom);
+                            if (c >= '0' && c <= '9')
+                            {
+                                digitTop = Math.Min(digitTop, cell.Top);
+                                digitBottom = Math.Max(digitBottom, cell.Bottom);
+                            }
+                        }
+                    }
+                    if (digitTop == Single.MaxValue) { digitTop = bounds.Top; digitBottom = bounds.Bottom; }
+                    float center = (digitTop + digitBottom) / 2;
+                    bool singleHudGlyph = text.Length == 1 && "0123456789.,:".Contains(text);
+                    float width = singleHudGlyph ? commonWidth : Math.Max(commonWidth, bounds.Width);
+                    float extent = Math.Max(center - Math.Min(allTop, bounds.Top), Math.Max(allBottom, bounds.Bottom) - center);
+                    float scale = Math.Min((info.Width - 2 * margin) / Math.Max(width, 1), (info.Height - 2 * margin) / Math.Max(2 * extent, 1));
                     if (scale <= 0)
                         throw new InvalidOperationException("Texture is too small for this outline.");
-                    float y = margin + (bounds.Y - digits.Y) * scale;
-                    y = Math.Max(margin, Math.Min(y, info.Height - margin - bounds.Height * scale));
-                    return GlyphRasterizer.Render(text, family, style, 64, bounds, new Size(info.Width, info.Height), new RectangleF((info.Width - bounds.Width * scale) / 2, y, bounds.Width * scale, bounds.Height * scale), fill, outline, stroke, hint);
+                    // Alle HUD-Zeichen teilen dieselbe Größe und Grundlinie; schmale Ziffern werden nicht aufgeblasen.
+                    float y = info.Height / 2f + (bounds.Y - center) * scale;
+                    return GlyphRasterizer.Render(text, family, style, 64, bounds, new Size(info.Width, info.Height),
+                        new RectangleF((info.Width - bounds.Width * scale) / 2, y, bounds.Width * scale, bounds.Height * scale), fill, outline, stroke, hint);
                 }
             }
         }

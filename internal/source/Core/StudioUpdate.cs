@@ -78,7 +78,7 @@ namespace murumsWiiModStudio
     {
         internal const string Repository = "murums04/murums-Wii-Mod-Studio";
         internal const string ReleasesUrl = "https://github.com/" + Repository + "/releases";
-        internal const long MaximumDownload = 200L * 1024 * 1024;
+        internal const long MaximumDownload = 768L * 1024 * 1024;
         internal static string InstallationRoot
         {
             get

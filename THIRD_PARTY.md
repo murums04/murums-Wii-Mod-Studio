@@ -7,8 +7,36 @@ https://github.com/murums04/murums-Wii-Mod-Studio
 
 Studio's own code in this distribution is offered under PolyForm Noncommercial 1.0.0. External programs, their dependencies,
 game resources and referenced projects retain their own licenses.
-No external editor binaries or game resources are embedded in Studio's installer.
+The installer includes internal model components listed below. No user game resources are included.
 The editor build references Microsoft .NET Framework system assemblies.
+
+## Included internal model components (Build 177)
+
+Assimp 6.0.5 — assimp team. BSD 3-Clause; `internal/model/notices/ASSIMP-LICENSE.txt`.
+https://github.com/assimp/assimp/tree/v6.0.5
+
+BrawlLib v0.42h1 — BrawlCrate/BrawlBox contributors. LGPL-3.0.
+Dynamically loaded from `internal/model/BrawlLib.dll`, with OpenTK 1.0 (MIT).
+Studio's small adapter is `StudioModelCodec.dll`; its source and build instructions are included.
+The modified BrawlLib corresponding source is `internal/model/sources/brawllib-studio-source.zip`.
+Modifications replace modal importer errors with exceptions, remove an unused destructive pre-build command,
+and normalize scaled Collada joint bases before extracting rotation angles (Build 183).
+https://github.com/soopercool101/BrawlCrate/tree/v0.42h1
+https://github.com/opentk/opentk
+
+Blender 5.2.2 LTS — Blender Foundation and contributors. GPL-3.0-or-later for the complete binary distribution.
+Studio invokes the bundled, unmodified executable in a separate background process; no Blender installation is needed.
+The original binary archive retains its copyright notices, licenses and dependency notices.
+Blender source is included in `internal/model/sources/blender-5.2.2.tar.xz`.
+Additional build/dependency source locations are documented by upstream:
+https://download.blender.org/source/
+https://projects.blender.org/blender/blender/src/tag/v5.2.2/build_files/build_environment
+https://svn.blender.org/svnroot/bf-blender/trunk/lib/packages/
+
+Studio's noncommercial restriction does not apply to these components or limit their license grants.
+You may replace the LGPL libraries with modified compatible versions. To the extent required by LGPL-3.0,
+modification for your own use and reverse engineering to debug modifications to the LGPL components are permitted.
+Copies of the applicable notices accompany the modules. All other Studio license terms remain unchanged.
 
 ## Optional external tools
 

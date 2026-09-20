@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -78,7 +78,13 @@ namespace murumsWiiModStudio
                 using (var picker = new OpenFileDialog { Filter = ToolArchiveFilters.Fonts, InitialDirectory = packFolder ?? "" })
                     if (picker.ShowDialog(this) == DialogResult.OK) { SelectedPath = picker.FileName; DialogResult = DialogResult.OK; }
             };
-            buttons.Controls.Add(cancel); buttons.Controls.Add(open); buttons.Controls.Add(browse);
+            var recover = new Button { Text = L.T("Fehlende RR-Schrift ergänzen…", "Add missing RR font…"), AutoSize = true, Enabled = Directory.Exists(packFolder) };
+            recover.Click += delegate {
+                using (var dialog = new RrMissingFilesForm(packFolder, "Font.szs", roots.Length == 1 ? roots[0] : null, null, 0, false))
+                    if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedPaths.Length == 1)
+                    { SelectedPath = dialog.SelectedPaths[0]; DialogResult = DialogResult.OK; }
+            };
+            buttons.Controls.Add(cancel); buttons.Controls.Add(open); buttons.Controls.Add(browse); buttons.Controls.Add(recover);
             layout.Controls.Add(buttons, 0, 3);
             Controls.Add(layout); CancelButton = cancel; DarkTheme.Apply(this);
         }

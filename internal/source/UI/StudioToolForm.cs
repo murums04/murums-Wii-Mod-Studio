@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -72,9 +72,43 @@ namespace murumsWiiModStudio
             Controls.Add(root);
         }
 
+        protected void CompactWorkspace(int contentHeight)
+        {
+            var content = new Panel { Padding = Body.Padding, Dock = DockStyle.Top, Margin = new Padding(0) };
+            var controls = new Control[Body.Controls.Count];
+            Body.Controls.CopyTo(controls, 0);
+            Body.Controls.Clear();
+            content.Controls.AddRange(controls);
+            Body.Padding = new Padding(0);
+            Body.AutoScroll = true;
+            Body.Controls.Add(content);
+            bool fitting = false;
+            EventHandler fit = delegate
+            {
+                if (fitting) return;
+                fitting = true;
+                try
+                {
+                    int height = Math.Max(contentHeight, Body.ClientSize.Height);
+                    content.Height = height;
+                    Body.AutoScrollMinSize = new Size(0, height);
+                }
+                finally { fitting = false; }
+            };
+            Body.SizeChanged += fit;
+            Body.Layout += delegate { fit(null, EventArgs.Empty); };
+            fit(null, EventArgs.Empty);
+            MinimumSize = new Size(950, 680);
+            Shown += delegate
+            {
+                Rectangle work = Screen.FromControl(this).WorkingArea;
+                MinimumSize = new Size(Math.Min(MinimumSize.Width, work.Width), Math.Min(MinimumSize.Height, work.Height));
+                Size = new Size(Math.Min(Width, work.Width), Math.Min(Height, work.Height));
+            };
+        }
         protected void Finish()
         {
-            string[] packTools = { "FontChangerForm", "GameHudForm", "ThemeProjectForm", "ArchiveCompareForm", "MenuTextForm", "MusicLoopForm", "MenuTextureForm" };
+            string[] packTools = { "ArchiveMergeForm", "RaceEffectsForm", "PackWorkbenchForm", "CharacterBuilderForm", "FontChangerForm", "GameHudForm", "ThemeProjectForm", "ArchiveCompareForm", "MenuTextForm", "MusicLoopForm", "MenuTextureForm" };
             if (Array.IndexOf(packTools, GetType().Name) >= 0)
                 PackSelection.Attach(this, OnPackSelected);
             DarkTheme.Apply(this);
@@ -155,7 +189,7 @@ namespace murumsWiiModStudio
             }
 
             )
-                return ToolArchiveFilters.Show(d, this) == DialogResult.OK ? d.FileName : null;
+                return ToolArchiveFilters.Show(d, this) == DialogResult.OK ? ToolArchiveFilters.SelectedFile(d) : null;
         }
 
         protected string SavePath(string name, string filter)

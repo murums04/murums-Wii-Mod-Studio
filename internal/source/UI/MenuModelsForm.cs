@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
@@ -18,7 +19,8 @@ namespace murumsWiiModStudio
         string starPicture = "";
         Button starButton;
         Button globeButton, skyButton, glowButton;
-        readonly TabControl appearance = new TabControl
+        readonly ComboBox skyMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+        readonly Panel appearance = new Panel
         {
             Dock = DockStyle.Fill
         };
@@ -45,6 +47,7 @@ namespace murumsWiiModStudio
         };
         string fullPicture = "";
         bool isEarth;
+        readonly bool embedded;
         readonly string archiveName;
         TableLayoutPanel layout;
         Func<string> sharedOutput;
@@ -77,11 +80,12 @@ namespace murumsWiiModStudio
         internal MenuModelsForm(string archiveName, bool embedded)
         {
             this.archiveName = archiveName;
+            this.embedded = embedded;
             Font = new Font("Segoe UI", 10F);
             AutoScaleMode = AutoScaleMode.Font;
             Text = "MKWii Menu Models Tool";
-            Size = new Size(880, 590);
-            MinimumSize = new Size(780, 540);
+            Size = new Size(1050, 830);
+            MinimumSize = new Size(980, 760);
             StartPosition = FormStartPosition.CenterParent;
             var grid = new TableLayoutPanel
             {
@@ -107,11 +111,11 @@ namespace murumsWiiModStudio
             };
             Controls.Add(scrollHost);
             grid.Dock = DockStyle.Top;
-            grid.Height = embedded ? 380 : 450;
+            grid.Height = embedded ? 360 : 420;
             scrollHost.Controls.Add(grid);
             scrollHost.SizeChanged += delegate
             {
-                grid.Height = Math.Max(embedded ? 380 : 450, scrollHost.ClientSize.Height);
+                grid.Height = Math.Max(embedded ? 360 : 420, scrollHost.ClientSize.Height);
             };
             var help = new Label
             {
@@ -159,8 +163,11 @@ namespace murumsWiiModStudio
             sourcePanel.SetColumnSpan(source, 2);
             grid.Controls.Add(sourcePanel, 0, 1);
             grid.SetColumnSpan(sourcePanel, 2);
-            grid.RowStyles[1].Height = 70;            models.Dock = DockStyle.Fill;
-            models.AutoScroll = true;
+            grid.RowStyles[1].Height = 70;
+            models.Dock = DockStyle.Top;
+            models.AutoSize = true;
+            models.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            models.AutoScroll = false;
             models.Padding = new Padding(8);
             models.BackColor = DarkTheme.Panel;
             models.Enabled = false;
@@ -191,7 +198,7 @@ namespace murumsWiiModStudio
                     if (d.ShowDialog(this) == DialogResult.OK)
                     {
                         glowColor = d.Color;
-                        glowButton.FlatAppearance.BorderColor = glowColor;
+                        RefreshColourBorders();
                         status.Text = L.T("Färbt den Leuchtrand separat. Weiß erhält den ursprünglichen blauen Schein.", "Tints the glowing rim separately. White keeps the original blue glow.");
                     }
             };
@@ -209,6 +216,9 @@ namespace murumsWiiModStudio
                 RefreshColors();
             };
             colors.Controls.Add(reset);
+            var liveColours = new Button { Text = L.T("Live-Farbvorschau…", "Live colour preview…"), Width = 195, Height = 36 };
+            liveColours.Click += delegate { PreviewSetup(); };
+            colors.Controls.Add(liveColours);
             starButton = new Button
             {
                 Text = L.T("Sternmuster wählen…", "Choose star pattern…"),
@@ -244,22 +254,26 @@ namespace murumsWiiModStudio
             };
             colors.Controls.Add(resetPattern);
             colors.SetFlowBreak(resetPattern, true);
-            DarkTheme.StyleTabs(appearance);
-            colors.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(940, 0), Margin = new Padding(4, 4, 4, 4), Text = L.T("Sternmuster: kleines helles Muster auf dunklem Grund, das über den 3D-Himmel wiederholt wird. Für ein normales Hintergrundbild den Tab Standbild verwenden.", "Star pattern: a small light pattern on a dark background, repeated across the 3D sky. For a normal background picture, use Still image.") });
-            var originalTab = new TabPage(L.T("Sternenhimmel", "Starry sky"));
-            originalTab.Controls.Add(colors);
-            appearance.TabPages.Add(originalTab);
-            var photoTab = new TabPage(L.T("Standbild", "Still image"));
-            appearance.TabPages.Add(photoTab);
-            var photoGrid = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                Padding = new Padding(8)
-            };
+            colors.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(430, 0), Text = L.T("Helles Muster auf dunklem Grund. Wiederholt sich über dem Himmel; kein Vollbildfoto.", "Light pattern on a dark background. Repeated across the sky; not a full-screen photo.") });
+            var skyGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+            skyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            skyGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+            skyGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            skyGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            appearance.Controls.Add(skyGrid);
+            var globeActions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+            foreach (Control control in new Control[] { globeButton, glowButton, reset, liveColours }) globeActions.Controls.Add(control);
+            skyGrid.Controls.Add(globeActions, 0, 0);
+            skyMode.Items.AddRange(new object[] { L.T("Himmel: Sternenmuster", "Sky: star pattern"), L.T("Himmel: eigenes Standbild", "Sky: own still image") });
+            skyMode.SelectedIndex = 0;
+            skyGrid.Controls.Add(skyMode, 0, 1);
+            var photoGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(4) };
             photoGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
             photoGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
-            photoTab.Controls.Add(photoGrid);
+            skyGrid.Controls.Add(photoGrid, 0, 2);
+            var skyOptions = new Panel { Dock = DockStyle.Fill };
+            photoGrid.Controls.Add(skyOptions, 0, 0);
+            skyOptions.Controls.Add(colors);
             var actions = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -267,7 +281,15 @@ namespace murumsWiiModStudio
                 WrapContents = false,
                 AutoScroll = true
             };
-            photoGrid.Controls.Add(actions, 0, 0);
+            skyOptions.Controls.Add(actions);
+            actions.Visible = false;
+            skyMode.SelectedIndexChanged += delegate
+            {
+                bool photo = skyMode.SelectedIndex == 1;
+                colors.Visible = !photo;
+                actions.Visible = photo;
+                if (!photo) ClearPicture();
+            };
             photoGrid.Controls.Add(preview, 1, 0);
             var choosePicture = new Button
             {
@@ -362,8 +384,26 @@ namespace murumsWiiModStudio
                 customOutput = true;
                 if (setSharedOutput != null) setSharedOutput(output.Text);
             });
+            footer.SendToBack();
+            if (embedded)
+            {
+                sourcePanel.Controls.Clear();
+                sourcePanel.RowCount = 1;
+                sourcePanel.RowStyles.Clear();
+                sourcePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                sourcePanel.Controls.Add(source, 0, 0);
+                sourcePanel.SetColumnSpan(source, 1);
+                sourcePanel.Controls.Add(browse, 1, 0);
+                grid.RowStyles[1].Height = 36;
+                grid.RowStyles[4].Height = 0;
+                outputPanel.Visible = folder.Visible = false;
+                footer.Visible = false;
+                grid.Height = 280;
+                scrollHost.SizeChanged += delegate { grid.Height = Math.Max(280, scrollHost.ClientSize.Height); };
+            }
             DarkTheme.Apply(this);
             StyleButtons(this);
+            RefreshColourBorders();
             ToolStatus.Watch(this);
             build.BackColor = DarkTheme.Accent;
             build.ForeColor = Color.White;
@@ -469,7 +509,7 @@ namespace murumsWiiModStudio
                     return;
                 try
                 {
-                    AddArchives(dialog.FileNames);
+                    AddArchives(ToolArchiveFilters.SelectedFiles(dialog));
                 }
                 catch (Exception error)
                 {
@@ -563,16 +603,17 @@ namespace murumsWiiModStudio
             return b;
         }
 
+        void RefreshColourBorders()
+        {
+            ColourButton.SetColor(globeButton, globeColor);
+            ColourButton.SetColor(skyButton, skyColor);
+            ColourButton.SetColor(glowButton, glowColor);
+        }
+
         void RefreshColors()
         {
-            glowButton.FlatAppearance.BorderColor = glowColor;
-            globeButton.BackColor = skyButton.BackColor = Color.FromArgb(36, 39, 49);
-            globeButton.ForeColor = skyButton.ForeColor = Color.White;
-            globeButton.FlatStyle = skyButton.FlatStyle = FlatStyle.Flat;
-            globeButton.FlatAppearance.BorderSize = skyButton.FlatAppearance.BorderSize = 3;
-            globeButton.FlatAppearance.BorderColor = globeColor;
-            skyButton.FlatAppearance.BorderColor = skyColor;
-            status.Text = L.T("Farben tönen die bestehenden Oberflächen. Weiß = unveränderte Originalfarben. Vorschau: Farbfelder, keine Spielansicht.", "Colours tint the existing surfaces. White = unchanged original colours. Preview: colour swatches, not an in-game view.");
+            RefreshColourBorders();
+            status.Text = L.T("Farben tönen die bestehenden Oberflächen. Weiß = unveränderte Originalfarben. Live-Farbvorschau zeigt eine schematische Kugel mit Beleuchtung.", "Colours tint the existing surfaces. White = unchanged original colours. Live colour preview shows a schematic sphere with lighting.");
         }
 
         internal bool HasLoadedArchive
@@ -609,8 +650,8 @@ namespace murumsWiiModStudio
                 PackSelection.SourceLoaded(this);
                 isEarth = switches.ContainsKey("earth_with_dummy_tex.brres");
                 appearance.Visible = isEarth;
-                layout.RowStyles[2].SizeType = SizeType.Absolute;
-                layout.RowStyles[2].Height = isEarth ? 64 : 112;
+                layout.RowStyles[2].SizeType = SizeType.AutoSize;
+                layout.RowStyles[2].Height = 0;
                 layout.RowStyles[3].SizeType = SizeType.Percent;
                 layout.RowStyles[3].Height = 100;
                 ClearPicture();
@@ -641,6 +682,7 @@ namespace murumsWiiModStudio
                 }
 
                 fullPicture = path;
+                skyMode.SelectedIndex = 1;
                 UpdatePictureInfo();
             }
             catch (Exception ex)
@@ -652,6 +694,7 @@ namespace murumsWiiModStudio
         void ClearPicture()
         {
             fullPicture = "";
+            if (skyMode.SelectedIndex != 0) skyMode.SelectedIndex = 0;
             var previous = preview.Image;
             preview.Image = null;
             if (previous != null)
@@ -692,68 +735,19 @@ namespace murumsWiiModStudio
 
         void PreviewSetup()
         {
-            using (var f = new Form
+            if (isEarth)
             {
-                Text = L.T("Vorschau der Auswahl — schematisch", "Setup preview — schematic"),
-                Size = new Size(780, 590),
-                StartPosition = FormStartPosition.CenterParent
-            }
-
-            )
-            {
-                var image = new murumsWiiModStudio.ZoomPanPictureBox
-                {
-                    Dock = DockStyle.Fill,
-                    SizeMode = PictureBoxSizeMode.Zoom
-                };
-                var summary = new TextBox
-                {
-                    Dock = DockStyle.Bottom,
-                    Height = 160,
-                    Multiline = true,
-                    ReadOnly = true,
-                    ScrollBars = ScrollBars.Vertical
-                };
-                foreach (var pair in switches)
-                    summary.AppendText((pair.Value.Checked ? "ON  " : "OFF ") + pair.Value.Text + Environment.NewLine);
-                summary.AppendText("Schematic colour swatches and model visibility; not the exported 3D scene.");
-                var b = new Bitmap(720, 330);
-                using (var g = Graphics.FromImage(b))
-                {
-                    g.Clear(Color.FromArgb(35, 35, 42));
-                    if (isEarth)
+                bool visible = !switches.ContainsKey("earth_with_dummy_tex.brres") || switches["earth_with_dummy_tex.brres"].Checked;
+                using (var dialog = new GlobeColourPreviewForm(globeColor, skyColor, glowColor, visible, preview.Image))
+                    if (dialog.ShowDialog(this) == DialogResult.OK)
                     {
-                        using (var sky = new SolidBrush(Color.FromArgb(255, skyColor.R / 3, skyColor.G / 3, skyColor.B / 3)))
-                            g.FillRectangle(sky, 0, 0, 720, 330);
-                        bool globeVisible = !switches.ContainsKey("earth_with_dummy_tex.brres") || switches["earth_with_dummy_tex.brres"].Checked;
-                        if (globeVisible)
-                        {
-                            using (var glow = new Pen(glowColor, 14))
-                                g.DrawEllipse(glow, 260, 60, 200, 200);
-                            using (var globe = new SolidBrush(globeColor))
-                                g.FillEllipse(globe, 260, 60, 200, 200);
-                        }
-
-                        g.DrawString("Colour combination only — no globe geometry / game lighting", Font, Brushes.White, 15, 300);
+                        globeColor = dialog.GlobeColor; skyColor = dialog.SkyColor; glowColor = dialog.GlowColor;
+                        RefreshColors();
                     }
-                    else
-                        g.DrawString("Selected model visibility is listed below.\n3D geometry is not rendered by this preview.", Font, Brushes.White, 30, 90);
-                }
-
-                image.Image = b;
-                f.Controls.Add(image);
-                f.Controls.Add(summary);
-                DarkTheme.Apply(f);
-                try
-                {
-                    f.ShowDialog(this);
-                }
-                finally
-                {
-                    image.Image = null;
-                    b.Dispose();
-                }
+                return;
             }
+            using (var dialog = new MenuModelPreviewForm(source.Text, switches.ToDictionary(p => p.Key, p => p.Value.Checked)))
+                dialog.ShowDialog(this);
         }
 
         void Collect(ArchiveEntry entry)
@@ -864,10 +858,10 @@ namespace murumsWiiModStudio
                 {
                     if (String.Equals(Path.GetFullPath(globeSource), Path.Combine(dir, "globe.arc"), StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("Output must not overwrite the globe source.");
-                    BackupManager.WriteAllBytesSafely(Path.Combine(dir, "globe.arc"), globe);
+                    ArchiveCopyExport.SaveCopy(globeSource, globe, Path.Combine(dir, "globe.arc"));
                 }
 
-                BackupManager.WriteAllBytesSafely(path, model);
+                ArchiveCopyExport.SaveCopy(source.Text, model, path);
                 status.Text = L.T("Erstellt: ", "Created: ") + Path.GetFileName(path) + (globe != null ? " + globe.arc" : "") + "\r\n" + dir;
                 ExportHelp.Show(this, dir);
             }
@@ -883,3 +877,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

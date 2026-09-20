@@ -98,6 +98,19 @@ namespace murumsWiiModStudio
                 }
             }
 
+            var group = c as GroupBox;
+            if (group != null)
+            {
+                group.EnabledChanged += delegate { group.Invalidate(); };
+                group.Paint += delegate(object sender, PaintEventArgs e)
+                {
+                    if (group.Enabled || String.IsNullOrEmpty(group.Text)) return;
+                    Size size = TextRenderer.MeasureText(group.Text, group.Font);
+                    var bounds = new Rectangle(7, 0, Math.Min(size.Width, Math.Max(0, group.Width - 14)), size.Height);
+                    using (var brush = new SolidBrush(group.BackColor)) e.Graphics.FillRectangle(brush, bounds);
+                    TextRenderer.DrawText(e.Graphics, group.Text, group.Font, bounds, DarkTheme.Disabled, TextFormatFlags.NoPrefix);
+                };
+            }
             var label = c as Label;
             if (label != null)
             {
@@ -110,7 +123,7 @@ namespace murumsWiiModStudio
                     Rectangle bounds = label.ClientRectangle;
                     bounds = new Rectangle(bounds.X + label.Padding.Left, bounds.Y + label.Padding.Top,
                         Math.Max(0, bounds.Width - label.Padding.Horizontal), Math.Max(0, bounds.Height - label.Padding.Vertical));
-                    TextFormatFlags flags = label.AutoSize ? TextFormatFlags.SingleLine : TextFormatFlags.WordBreak;
+                    TextFormatFlags flags = label.AutoSize && label.Text.IndexOfAny(new[] { '\r', '\n' }) < 0 ? TextFormatFlags.SingleLine : TextFormatFlags.WordBreak;
                     if (!label.UseMnemonic) flags |= TextFormatFlags.NoPrefix;
                     if (label.AutoEllipsis) flags |= TextFormatFlags.EndEllipsis;
                     if (label.TextAlign == ContentAlignment.MiddleLeft || label.TextAlign == ContentAlignment.MiddleCenter || label.TextAlign == ContentAlignment.MiddleRight) flags |= TextFormatFlags.VerticalCenter;

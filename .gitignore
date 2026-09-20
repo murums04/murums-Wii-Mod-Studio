@@ -32,3 +32,16 @@
 !/internal/source/Resources/SkyPlane.dae
 !/internal/source/Resources/SkyStill.brres.gz
 !/internal/source/Resources/SkyAnimated.brres.gz
+
+!/internal/build-model.ps1
+!/internal/model/
+/internal/model/*
+!/internal/model/StudioModelCodec.cs
+!/internal/model/README.md
+!/internal/model/notices/
+/internal/model/notices/*
+!/internal/model/notices/*.txt
+!/internal/source/Resources/ModelImport.py
+!/internal/source/Resources/ModelRigPrepare.py
+!/internal/source/Resources/ModelRigExport.py
+!/internal/source/Resources/ModelRigBind.py

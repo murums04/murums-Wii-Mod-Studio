@@ -135,6 +135,12 @@ namespace murumsWiiModStudio
                     result.Add(name, file);
                 }
             }
+            string effects = Path.Combine(root, "Patches", "Common.szs");
+            if (File.Exists(effects))
+            {
+                // RR lädt Renn-Effekte aus /patches; eine zusätzliche UI-Kopie ist keine Effektquelle.
+                result["Common.szs"] = effects;
+            }
             RequireBackground(U8Archive.Load(File.ReadAllBytes(result["Title.szs"])));
             return result;
         }
@@ -168,3 +174,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

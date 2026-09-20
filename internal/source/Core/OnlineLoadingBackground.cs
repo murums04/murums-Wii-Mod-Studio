@@ -8,6 +8,8 @@ using murumsWiiModStudio.Brlan;
 
 namespace murumsWiiModStudio
 {
+    internal enum WaitingScreen { MenuDialog, BeforeRace }
+
     internal static class OnlineLoadingBackground
     {
         const string Name = "murums_wait_bg";
@@ -175,11 +177,19 @@ namespace murumsWiiModStudio
 
         public static byte[] Build(byte[] input, string picture)
         {
+            return Build(input, picture, WaitingScreen.MenuDialog);
+        }
+
+        internal static byte[] Build(byte[] input, string picture, WaitingScreen screen)
+        {
             var a = U8Archive.Load(input);
             RetroRewindSource.RequireBackground(a);
-            var layout = PathEntry(a.Root, "message_window/blyt/common_w017_message.brlyt");
-            layout.Data = AddPicture(layout.Data);
-            var images = PathEntry(a.Root, "message_window/timg");
+            bool race = screen == WaitingScreen.BeforeRace;
+            string folder = race ? "game_image" : "message_window";
+            string layoutName = race ? "common_w074_loading_back" : "common_w017_message";
+            var layout = PathEntry(a.Root, folder + "/blyt/" + layoutName + ".brlyt");
+            layout.Data = MenuBackgroundLayout.ReplacePicture(layout.Data, race ? "back_parts_00" : "check", Name + ".tpl", false);
+            var images = PathEntry(a.Root, folder + "/timg");
             var target = images.FindChild(Name + ".tpl");
             if (target == null)
             {

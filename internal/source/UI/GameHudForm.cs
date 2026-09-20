@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -92,7 +92,7 @@ namespace murumsWiiModStudio
         {
         }
 
-        internal GameHudForm(IEnumerable<StudioArchiveCopy> archives) : base(archives == null ? "MKWii Game HUD Tool" : "MKWii Race HUD Tool – Layout", L.T("Layout auswählen • Elemente auf der Arbeitsfläche verschieben • Farben und Texturen bearbeiten", "Choose a layout • Drag elements on the canvas • Edit colours and textures"), archives == null ? "MenuSingle.szs · MenuMulti.szs · Title_E.szs / Title_U.szs / Title_J.szs → *.brlyt / *.tpl" : "Race.szs · Race_E.szs → *.brlyt / *.tpl", false)
+        internal GameHudForm(IEnumerable<StudioArchiveCopy> archives) : base(archives == null ? "RR-MKWii Game HUD Tool" : "RR-MKWii Race HUD Tool – Layout", L.T("Layout auswählen • Elemente auf der Arbeitsfläche verschieben • Farben und Texturen bearbeiten", "Choose a layout • Drag elements on the canvas • Edit colours and textures"), archives == null ? "MenuSingle.szs · MenuMulti.szs · Title_E.szs / Title_U.szs / Title_J.szs → *.brlyt / *.tpl" : "Race.szs · Race_E.szs → *.brlyt / *.tpl", false)
         {
             embedded = archives != null;
             Size = new Size(1380, 900);
@@ -101,9 +101,9 @@ namespace murumsWiiModStudio
             Status.AutoEllipsis = false;
             if (!embedded)
             {
-                Action("Add archive…", "Select multiple layout archives; existing changes are kept.", delegate { OpenArchive(true); }).Name = "PackSourceAction";
-                Action("Clear selection", "Clear loaded archives.", delegate {
-                    if (unexported && StudioMessageBox.Show(this, "Discard unsaved changes and clear loaded archives?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                Action(L.T("Archive hinzufügen…", "Add archive…"), L.T("Mehrere Layout-Archive ergänzen; bestehende Änderungen bleiben erhalten.", "Select multiple layout archives; existing changes are kept."), delegate { OpenArchive(); }).Name = "PackSourceAction";
+                Action(L.T("Auswahl leeren", "Clear selection"), L.T("Geladene Archive entfernen.", "Clear loaded archives."), delegate {
+                    if (unexported && StudioMessageBox.Show(this, L.T("Ungespeicherte Änderungen verwerfen und geladene Archive entfernen?", "Discard unsaved changes and clear loaded archives?"), Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
                     Session.Clear(); unexported = false; search.Clear(); RefreshLayouts(); PackSelection.SourceCleared(this);
                 });
             }
@@ -194,17 +194,17 @@ namespace murumsWiiModStudio
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             Body.Controls.Add(root);
-            var archiveHeader = FieldHeader(L.T("Layout-Archiv auswählen", "Choose layout archive"), archiveChoice);
+            var archiveHeader = FieldHeader(L.T("Layout-Archiv", "Layout archive"), archiveChoice);
             root.Controls.Add(archiveHeader, 0, 0);
             root.SetColumnSpan(archiveHeader, 2);
-            root.Controls.Add(FieldHeader(L.T("1  Layouts suchen", "1  Search layouts"), search), 0, 1);
-            root.Controls.Add(FieldHeader(L.T("2  Layout auswählen", "2  Choose a layout"), layouts), 1, 1);
+            root.Controls.Add(FieldHeader(L.T("Suche", "Search"), search), 0, 1);
+            root.Controls.Add(FieldHeader("Layout", layouts), 1, 1);
             moveWhole.Margin = new Padding(8, 14, 4, 0);
             root.Controls.Add(tree, 0, 3);
             root.Controls.Add(canvas, 1, 3);
@@ -213,8 +213,8 @@ namespace murumsWiiModStudio
             StudioUx.SetHelp(aspectChoice, L.T("Bildformat der HUD-Positionen. Ändert nicht die Renderauflösung des Spiels.", "Aspect ratio for HUD positions. Does not change game render resolution."));
             aspectChoice.Items.AddRange(new object[] { "16:9", "4:3" });
             aspectChoice.SelectedIndex = 0;
-            root.Controls.Add(FieldHeader(L.T("Bildformat", "Aspect ratio"), aspectChoice), 0, 2);
-            root.Controls.Add(FieldHeader(L.T("Bildschirmposition / Spieleransicht aus BRCTR", "Screen placement / player view from BRCTR"), placementChoice), 1, 2);
+            root.Controls.Add(FieldHeader(L.T("Format", "Aspect"), aspectChoice), 0, 2);
+            root.Controls.Add(FieldHeader(L.T("Spieleransicht", "Player view"), placementChoice), 1, 2);
             root.SetColumnSpan(root.GetControlFromPosition(1, 2), 1);
             placementChoice.SelectedIndexChanged += delegate
             {
@@ -265,6 +265,9 @@ namespace murumsWiiModStudio
                     values[i].Parent.Visible = advanced.Checked;
             };
             tint = PropertyButton(L.T("Elementfarbe…", "Element tint…"), Tint);
+            ColourButton.SetColor(tint, Color.White);
+            StudioUx.SetHelp(tint, L.T("Zeigt die linke obere Ecke bzw. Textanfangsfarbe. Die Auswahl färbt das ganze Element.",
+                "Shows the top-left corner or text start colour. Choosing a colour tints the whole element."));
             replace = PropertyButton(L.T("Textur ersetzen…", "Replace texture…"), Replace);
             recolour = PropertyButton(L.T("Texturfarben…", "Texture colours…"), Recolour);
             restore = PropertyButton(L.T("Layout zurücksetzen", "Restore opened layout"), delegate
@@ -289,6 +292,16 @@ namespace murumsWiiModStudio
             });
             info.Visible = false;
             properties.Controls.Add(info);
+            properties.Layout += delegate
+            {
+                int height = properties.Padding.Vertical;
+                foreach (Control child in properties.Controls)
+                    if (child.Visible)
+                        height += child.Height + child.Margin.Vertical;
+                var minimum = new Size(0, height);
+                if (properties.AutoScrollMinSize != minimum)
+                    properties.AutoScrollMinSize = minimum;
+            };
             StudioUx.SetHelp(properties, L.T("Element wählen und ziehen. Ganze Gruppen lassen sich mit ihren Kindern verschieben.", "Select and drag an element. Groups move together with their children."));
             save = ExportAction(embedded ? L.T("In Race HUD übernehmen", "Apply to Race HUD") : L.T("Archivkopien speichern…", "Save archive copies…"), "Apply changes or save separate archive copies.", Export);
             search.KeyPress += delegate (object sender, KeyPressEventArgs e)
@@ -360,23 +373,21 @@ namespace murumsWiiModStudio
             var box = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
+                ColumnCount = 2,
+                RowCount = 1,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Margin = new Padding(3, 0, 6, 8)
+                Margin = new Padding(3, 0, 6, 5)
             };
-            box.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            box.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            box.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             box.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            box.Controls.Add(new Label { Text = caption, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty }, 0, 0);
+            box.Controls.Add(new Label { Text = caption, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 10, 0) }, 0, 0);
             field.Dock = DockStyle.Top;
             field.Margin = Padding.Empty;
             field.AccessibleName = caption;
-            box.Controls.Add(field, 0, 1);
-            EventHandler fit = delegate
-            {
-                box.MinimumSize = new Size(0, 24 + field.Height);
-            };
+            box.Controls.Add(field, 1, 0);
+            EventHandler fit = delegate { box.MinimumSize = new Size(0, field.Height); };
             field.SizeChanged += fit;
             fit(null, EventArgs.Empty);
             return box;
@@ -437,24 +448,56 @@ namespace murumsWiiModStudio
             };
         }
 
-        void OpenArchive(bool add)
+        void OpenArchive()
         {
-            string[] paths = GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Layouts);
+            AddSelectedArchives(GameArchiveImportForm.SelectMany(this, ToolArchiveFilters.Layouts));
+        }
+
+        internal void AddSelectedArchives(string[] paths)
+        {
+            if (paths == null || paths.Length == 0)
+                return;
+
             var loaded = new List<StudioArchiveCopy>();
-            foreach (string path in paths)
+            var skipped = new List<string>();
+            foreach (string path in paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (Session.Archives.Any(a => a.Source.Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))) continue;
+                if (Session.Archives.Any(a => a.Source.Equals(path, StringComparison.OrdinalIgnoreCase)))
+                    continue;
                 if (Session.Archives.Concat(loaded).Any(a => Path.GetFileName(a.Source).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)))
-                    throw new IOException("An archive with this name is already loaded.");
+                    throw new IOException(L.T("Ein Archiv mit diesem Namen ist bereits geladen: ", "An archive with this name is already loaded: ") + Path.GetFileName(path));
+
                 var archive = new StudioArchiveCopy(path);
-                if (!archive.Files.Keys.Any(k => k.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase)))
-                    throw new InvalidDataException("This archive contains no layouts: " + Path.GetFileName(path));
-                loaded.Add(archive);
+                if (archive.Files.Keys.Any(k => k.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase)
+                    || k.EndsWith(".tpl", StringComparison.OrdinalIgnoreCase)
+                    || k.EndsWith(".brctr", StringComparison.OrdinalIgnoreCase)))
+                    loaded.Add(archive);
+                else
+                    skipped.Add(Path.GetFileName(path));
             }
-            foreach (var archive in loaded) Session.Add(archive);
-            if (Session.Archives.Count == 0) return;
-            PackSelection.SourceLoaded(this);
-            search.Clear(); RefreshLayouts();
+
+            // Zusatztexturen sind nur zusammen mit einem Layout nutzbar.
+            if (loaded.Count > 0 && !Session.Layouts.Any()
+                && !loaded.Any(a => a.Files.Keys.Any(k => k.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase))))
+            {
+                Status.Text = L.T("Bitte zuerst ein Layout-Archiv wie MenuSingle.szs, MenuMulti.szs oder Title.szs hinzufügen. Zusatztexturen können gemeinsam damit geladen werden.",
+                    "Add a layout archive such as MenuSingle.szs, MenuMulti.szs or Title.szs first. Shared textures can be selected together with it.");
+                return;
+            }
+
+            foreach (var archive in loaded)
+                Session.Add(archive);
+            if (loaded.Count > 0)
+            {
+                PackSelection.SourceLoaded(this);
+                search.Clear();
+                RefreshLayouts();
+            }
+            if (skipped.Count > 0)
+                Status.Text = L.T("Ohne Layout-Ressourcen übersprungen: ", "Skipped without layout resources: ") + string.Join(", ", skipped)
+                    + "\n" + (Session.Layouts.Any()
+                        ? L.T("Geladene Layouts und Änderungen bleiben erhalten.", "Loaded layouts and changes are kept.")
+                        : L.T("MenuSingle.szs, MenuMulti.szs oder Title.szs hinzufügen.", "Add MenuSingle.szs, MenuMulti.szs or Title.szs."));
         }
         void RefreshLayouts()
         {
@@ -732,6 +775,7 @@ namespace murumsWiiModStudio
                 visible.Enabled = selected != null && selected != placementPane;
                 visible.Checked = selected != null && selected.Visible;
                 tint.Enabled = selected != null && (selected.Magic == "pic1" || selected.Magic == "txt1");
+                ColourButton.SetColor(tint, SelectedTint());
                 var texture = SelectedTexture();
                 replace.Enabled = recolour.Enabled = texture != null && TplTextureEditor.CanReplaceImage(texture.Bytes, 0);
                 info.Text = L.T("Texturersatz ändert alle Verwendungen derselben Datei.", "Texture replacement affects every use of the same file.");
@@ -739,7 +783,7 @@ namespace murumsWiiModStudio
                 undo.Enabled = Session.CanUndo;
                 redo.Enabled = Session.CanRedo;
                 save.Enabled = Session.Changes.Any();
-                Status.Text = current == null ? L.T("Menüarchive wie MenuSingle.szs, Title.szs oder Common.szs öffnen. Suche oben links filtert die Layouts.", "Open menu archives such as MenuSingle.szs, Title.szs or Common.szs. Search at the upper left filters layouts.") : current.ToString() + "\n" + L.T("Ziehen: verschieben • Mausradtaste: Ansicht verschieben • 8 Ziehpunkte: Größe • Umschalt: Proportionen • Änderungen: ", "Drag: move • Middle drag: pan view • 8 handles: resize • Shift: proportions • Changed resources: ") + Session.Changes.Count() + "\n" + (placement == null ? L.T("Keine Bildschirmposition aktiv: lokale Koordinaten. Spielcode/Animationen fehlen.", "No screen placement active: local coordinates. Game code/animations are not simulated.") : L.T("BRCTR-Position aktiv. Spielcode/Animationen können sie zusätzlich verändern.", "BRCTR placement active. Game code/animations may apply additional changes.") + L.T(" Position speichern in: ", " Save placement in: ") + Path.GetFileName(placement.Archive.Source));
+                Status.Text = current == null ? L.T("Menüarchive wie MenuSingle.szs, MenuMulti.szs oder Title.szs öffnen. Suche oben links filtert die Layouts.", "Open menu archives such as MenuSingle.szs, MenuMulti.szs or Title.szs. Search at the upper left filters layouts.") : current.ToString() + "\n" + L.T("Ziehen: verschieben • Mausradtaste: Ansicht verschieben • 8 Ziehpunkte: Größe • Umschalt: Proportionen • Änderungen: ", "Drag: move • Middle drag: pan view • 8 handles: resize • Shift: proportions • Changed resources: ") + Session.Changes.Count() + "\n" + (placement == null ? L.T("Keine Bildschirmposition aktiv: lokale Koordinaten. Spielcode/Animationen fehlen.", "No screen placement active: local coordinates. Game code/animations are not simulated.") : L.T("BRCTR-Position aktiv. Spielcode/Animationen können sie zusätzlich verändern.", "BRCTR placement active. Game code/animations may apply additional changes.") + L.T(" Position speichern in: ", " Save placement in: ") + Path.GetFileName(placement.Archive.Source));
             }
             finally
             {
@@ -808,6 +852,16 @@ namespace murumsWiiModStudio
             return mat == null || mat.Bindings.Count == 0 ? null : Session.Texture(current, mat.Bindings[0].TextureName);
         }
 
+        Color SelectedTint()
+        {
+            if (doc == null || selected == null) return Color.White;
+            int offset = selected.Magic == "pic1" && selected.Size >= 0x60 ? 0x4c
+                : selected.Magic == "txt1" && selected.Size >= 0x74 ? 0x5c : -1;
+            if (offset < 0 || selected.Offset < 0 || selected.Offset > doc.Data.Length - offset - 4) return Color.White;
+            int at = selected.Offset + offset;
+            return Color.FromArgb(doc.Data[at + 3], doc.Data[at], doc.Data[at + 1], doc.Data[at + 2]);
+        }
+
         void Tint()
         {
             if (selected == null)
@@ -815,7 +869,7 @@ namespace murumsWiiModStudio
             using (var d = new ColorDialog
             {
                 FullOpen = true,
-                Color = Color.White
+                Color = SelectedTint()
             }
 
             )

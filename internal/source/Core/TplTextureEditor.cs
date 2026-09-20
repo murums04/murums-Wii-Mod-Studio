@@ -213,7 +213,7 @@ namespace murumsWiiModStudio
             return result;
         }
 
-        private static int GetBaseLevelPayloadLength(int width, int height, int format)
+        internal static int GetBaseLevelPayloadLength(int width, int height, int format)
         {
             checked
             {

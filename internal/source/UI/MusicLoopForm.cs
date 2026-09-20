@@ -13,6 +13,7 @@ namespace murumsWiiModStudio
         SoundPlayer player;
         MemoryStream sound;
         bool converting;
+        int draggingBoundary;
         readonly NumericUpDown start = new NumericUpDown
         {
             Maximum = int.MaxValue,
@@ -70,6 +71,21 @@ namespace murumsWiiModStudio
             workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            waveform.MouseDown += delegate(object sender, MouseEventArgs e)
+            {
+                if (wave == null || wave.Samples < 1 || e.Button != MouseButtons.Left) return;
+                PointF point = ((ZoomPanPictureBox)waveform).ImagePoint(e.Location);
+                double position = point.X / 790 * wave.Samples;
+                draggingBoundary = (ModifierKeys & Keys.Shift) != 0 || Math.Abs(position - (double)end.Value) < Math.Abs(position - (double)start.Value) ? 2 : 1;
+                waveform.Capture = true;
+                DragBoundary(e.Location);
+            };
+            waveform.MouseMove += delegate(object sender, MouseEventArgs e) { if (draggingBoundary != 0) DragBoundary(e.Location); };
+            waveform.MouseUp += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left) { draggingBoundary = 0; waveform.Capture = false; }
+            };
+            waveform.MouseCaptureChanged += delegate { if (!waveform.Capture) draggingBoundary = 0; };
             waveform.Dock = DockStyle.Fill;
             waveform.MinimumSize = new Size(0, 60);
             waveform.BackColor = DarkTheme.Panel;
@@ -89,7 +105,7 @@ namespace murumsWiiModStudio
             info.Dock = DockStyle.Fill;
             workspace.Controls.Add(info, 0, 2);
             var guide = new Label { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(3, 8, 3, 0),
-                Text = "Set the loop range, preview the seam, then save the looped WAV. In BRSTM converter, keep its loop markers.\nSave using your pack's music filename; add the result to a Theme Project. Final-lap music may need a separate file.\nLooping Audio Converter is connected through Tools > Toolchain status." };
+                Text = L.T("Linksklick/Ziehen: nächsten Loop-Punkt setzen. Umschalt+Klick: Ende. Mausrad: Zoom.\\n", "Left click/drag: set the nearest loop point. Shift+click: end. Mouse wheel: zoom.\\n") + "Set the loop range, preview the seam, then save the looped WAV. In BRSTM converter, keep its loop markers.\nSave using your pack's music filename; add the result to a Theme Project. Final-lap music may need a separate file.\nLooping Audio Converter is connected through Tools > Toolchain status." };
             workspace.Controls.Add(guide, 0, 3);
             Body.Controls.Add(workspace);
             start.ValueChanged += delegate
@@ -147,11 +163,20 @@ namespace murumsWiiModStudio
                 info.Text = Path.GetFileName(source) + "\n" + wave.SampleRate + " Hz • " + wave.Samples + " samples • " + (wave.Samples / (double)wave.SampleRate).ToString("F3") + " seconds\nLoop: " + (start.Value / wave.SampleRate).ToString("F3") + " s → " + (end.Value / wave.SampleRate).ToString("F3") + " s";
         }
 
+        void DragBoundary(Point point)
+        {
+            if (wave == null || waveform.Image == null || wave.Samples < 1) return;
+            PointF imagePoint = ((ZoomPanPictureBox)waveform).ImagePoint(point);
+            decimal position = (decimal)Math.Max(0, Math.Min(wave.Samples, Math.Round(imagePoint.X / waveform.Image.Width * wave.Samples)));
+            if (draggingBoundary == 1) start.Value = Math.Min(position, Math.Max(0, end.Value - 1));
+            else if (draggingBoundary == 2) end.Value = Math.Max(position, Math.Min(wave.Samples, start.Value + 1));
+        }
+
         void DrawWave()
         {
             if (wave == null || peaks == null)
                 return;
-            var b = new Bitmap(790, 155);
+            var b = waveform.Image as Bitmap ?? new Bitmap(790, 155);
             using (var g = Graphics.FromImage(b))
             {
                 g.Clear(Color.FromArgb(30, 30, 36));
@@ -168,8 +193,8 @@ namespace murumsWiiModStudio
 
             var old = waveform.Image;
             waveform.Image = b;
-            if (old != null)
-                old.Dispose();
+            if (old != null && !ReferenceEquals(old, b)) old.Dispose();
+            waveform.Invalidate();
         }
 
         protected override void Dispose(bool disposing)
@@ -267,3 +292,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Text.RegularExpressions;
 
 namespace murumsWiiModStudio
 {
@@ -92,12 +93,10 @@ namespace murumsWiiModStudio
 
             using (var headingFont = new Font(Font, FontStyle.Bold))
             {
-                foreach (string heading in new[] { CurrentHeading(), "2.1.0-beta2 — Release", "2.1.0-beta1 — Release" })
+                // Alle Versionsüberschriften erkennen, damit neue Releases nicht vergessen gehen.
+                foreach (Match heading in Regex.Matches(history.Text, @"^\d+\.\d+\.\d+(?:-[^\s]+)?[ \t]+—[ \t]+[^\r\n]+", RegexOptions.Multiline))
                 {
-                    int index = history.Text.IndexOf(heading, StringComparison.Ordinal);
-                    if (index < 0)
-                        continue;
-                    history.Select(index, heading.Length);
+                    history.Select(heading.Index, heading.Length);
                     history.SelectionFont = headingFont;
                     history.SelectionColor = DarkTheme.Accent;
                 }
@@ -114,12 +113,30 @@ namespace murumsWiiModStudio
 
         private static string CurrentHeading()
         {
-            return L.T("2.1.0-beta3 — Release", "2.1.0-beta3 — Release");
+            return L.T("2.1.0-beta4 — Release", "2.1.0-beta4 — Release");
         }
 
         internal static string HistoryText()
         {
             return CurrentHeading() + "\n\n" + L.T(
+                "• Font Tool: geprüfte Schriftbereiche, Archivauswahl korrigiert, sichere Abstände und Textfeld-Vergleich.\n\n"
+                + "• RR-Effekte: getrennte Kategorien inklusive Windschatten, Originalfarben, echte Texturmuster und MUR_EDITED-Export.\n\n"
+                + "• Pack-Werkstatt: Prüfbericht, geprüfte Projektstände und getrenntes Dolphin-Testprofil.\n\n"
+                + "• Mod Merge: unabhängige Archivänderungen kombinieren, Konflikte bewusst auswählen.\n\n"
+                + "• Hintergründe: RR-Region automatisch (PAL/USA/Japan), Lizenz-Zuordnung korrigiert, getrennte Warteansichten, Himmel ohne verschachtelte Scrollleiste und echte Modellvorschau.\n\n"
+                + "• Audio: Loop-Punkte direkt in der Wellenform verschieben.\n\n"
+                + "• Oberfläche/Theme Project: einfacheres Sammeln, Farbränder, korrigiertes Vorschau-Icon und fehlende RR-Dateien nach Bestätigung ergänzen.\n\n"
+                + "• Character Builder: große Modelle automatisch voranzeigen, menschliche Quell-Rigs übernehmen, Blender-Körperbindung, korrigierte Schulterpunkte und direkter Export. Sechs Modellformate, korrigierte Materialien und RR-Konvertierung samt doppelten/ausgeblendeten Menüskeletten und gemeinsamem Wii-Matrixlimit; abschaltbare Zusatzteile, getrennte Bilder und klare Bewegungsschritte. Natürliche Menü- und Fahrzeughaltungen erhalten Größe und Proportionen, markieren unerreichbare Kontaktpunkte und bleiben korrigierbar. Fahrzeugauswahl-Animationen auch für manuell angepasste Haltungen korrigiert; einfacher Kopierordner und sichere Projektkopien.\n\n"
+                + "• Installer: Modellkomponenten enthalten; Update und Wiederherstellung für größere Pakete.\n\n",
+                "• Font Tool: checked script assignments, corrected archive selection, safer spacing and text-field comparison.\n\n"
+                + "• RR effects: separate categories including slipstream, original colours, actual texture samples and MUR_EDITED exports.\n\n"
+                + "• Pack Workshop: check reports, verified snapshots and an isolated Dolphin test profile.\n\n"
+                + "• Mod Merge: combine independent archive edits and resolve conflicts explicitly.\n\n"
+                + "• Backgrounds: automatic RR region (PAL/USA/Japan), corrected license target, separate waiting views, sky controls without nested scrolling and actual model previews.\n\n"
+                + "• Audio: drag loop points directly in the waveform.\n\n"
+                + "• UI/Theme Project: simpler collection, colour borders, corrected review icon and confirmed recovery of missing RR files.\n\n"
+                + "• Character Builder: automatic large-model previews, human source rigs, Blender body binding, corrected shoulders and direct export. Six model formats, corrected materials and RR conversion, including duplicate/hidden menu skeletons and the combined Wii matrix limit; optional-part toggles, separate images and clear movement steps. Natural menu and per-vehicle poses preserve size and proportions, flag unreachable contacts and remain editable. Corrected vehicle-selection animations, including manually adjusted poses; simple copy folder and safe project copies.\n\n"
+                + "• Installer: model components included; update and rollback support larger packages.\n\n") + "2.1.0-beta3 — Release\n\n" + L.T(
                 "• Font Tool: Menü-/HUD-Schriften wählbar, mehr Unicode-Zeichen, Symbolbearbeitung und bessere Vorschau. Positionsnummern bleiben erhalten; Ingame-Prüfung offen.\n\n"
                 + "• Vorschauen: Mausrad zoomt, gedrückt ziehen verschiebt, Mausrad-Doppelklick setzt zurück.\n\n"
                 + "• Archive: Mehrfachauswahl, passende Dateifilter und sicheres Leeren.\n\n"
@@ -154,3 +171,5 @@ namespace murumsWiiModStudio
         }
     }
 }
+
+

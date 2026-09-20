@@ -16,6 +16,7 @@ namespace murumsWiiModStudio
         public readonly Dictionary<int, int> Characters = new Dictionary<int, int>();
         readonly Dictionary<int, int> widths = new Dictionary<int, int>();
         readonly Dictionary<int, int> lefts = new Dictionary<int, int>(), advances = new Dictionary<int, int>();
+        public int NominalWidth, NominalHeight;
         public int CellWidth, CellHeight, Baseline, Columns, Rows, Width, Height, Sheets, Format, SheetSize, TextureOffset;
         static int U16(byte[] b, int p)
         {
@@ -46,6 +47,7 @@ namespace murumsWiiModStudio
                 {
                     if (length < 32 || bytes[p + 15] != 1)
                         throw new NotSupportedException("Only UTF-16 Wii fonts are supported.");
+                    NominalHeight = bytes[p + 28]; NominalWidth = bytes[p + 29];
                     finf = true;
                 }
 
@@ -217,6 +219,49 @@ namespace murumsWiiModStudio
             }
         }
 
+        internal Bitmap LayoutSample(string text, float fontWidth, float fontHeight, float spacing, out float advance)
+        {
+            if (text == null || text.Length > 80 || NominalWidth < 1 || NominalHeight < 1
+                || Single.IsNaN(fontWidth) || Single.IsInfinity(fontWidth) || fontWidth <= 0 || fontWidth > 512
+                || Single.IsNaN(fontHeight) || Single.IsInfinity(fontHeight) || fontHeight <= 0 || fontHeight > 512
+                || Single.IsNaN(spacing) || Single.IsInfinity(spacing) || Math.Abs(spacing) > 128)
+                throw new InvalidDataException("Unsupported text layout metrics.");
+            float scaleX = fontWidth / NominalWidth, scaleY = fontHeight / NominalHeight;
+            advance = 0;
+            foreach (char c in text)
+            {
+                int glyph;
+                advance += (Characters.TryGetValue(c, out glyph) ? advances[glyph] : CellWidth) * scaleX + spacing;
+            }
+            if (text.Length > 0) advance -= spacing;
+            int width = (int)Math.Ceiling(Math.Max(1, advance) + CellWidth * scaleX + 32);
+            int height = (int)Math.Ceiling(CellHeight * scaleY + 32);
+            if (width > 8192 || height > 4096) throw new InvalidDataException("Text preview is too large.");
+            var bitmap = new Bitmap(width, height);
+            var sheets = new Dictionary<int, Bitmap>();
+            try
+            {
+                using (var g = Graphics.FromImage(bitmap))
+                {
+                    float x = 16;
+                    foreach (char c in text)
+                    {
+                        int glyph;
+                        if (!Characters.TryGetValue(c, out glyph)) { x += CellWidth * scaleX + spacing; continue; }
+                        int sheetIndex = glyph / (Columns * Rows), slot = glyph % (Columns * Rows);
+                        if (!sheets.ContainsKey(sheetIndex)) sheets.Add(sheetIndex, Atlas(sheetIndex));
+                        if (widths[glyph] > 0)
+                            g.DrawImage(sheets[sheetIndex], new RectangleF(x + lefts[glyph] * scaleX, 16, widths[glyph] * scaleX, CellHeight * scaleY),
+                                new RectangleF(slot % Columns * (CellWidth + 1) + 1, slot / Columns * (CellHeight + 1) + 1, widths[glyph], CellHeight), GraphicsUnit.Pixel);
+                        x += advances[glyph] * scaleX + spacing;
+                    }
+                }
+                return bitmap;
+            }
+            catch { bitmap.Dispose(); throw; }
+            finally { foreach (var sheetImage in sheets.Values) sheetImage.Dispose(); }
+        }
+
         internal Bitmap GlyphImage(int character)
         {
             int glyph;
@@ -301,6 +346,21 @@ namespace murumsWiiModStudio
 
         public byte[] ImportLatin(string ttf, Color fill, Color outlineColor, float outlineWidth, GlyphHinting hinting, out int replaced, bool gameNumbers = false, Dictionary<int, string> report = null)
         {
+            return ImportFonts(new FontScriptSources { Latin = ttf }, fill, outlineColor, outlineWidth, hinting, out replaced, gameNumbers, report);
+        }
+
+        float SafeGlyphLeft(int glyph)
+        {
+            // Zeichen inklusive Kontur innerhalb ihres tatsächlichen Vorschubs halten.
+            return Math.Max(0, -lefts[glyph]) + 1;
+        }
+
+        float SafeGlyphRight(int glyph)
+        {
+            return Math.Min(Math.Min(widths[glyph], CellWidth), advances[glyph] - lefts[glyph]) - 1;
+        }
+        internal byte[] ImportFonts(FontScriptSources sources, Color fill, Color outlineColor, float outlineWidth, GlyphHinting hinting, out int replaced, bool gameNumbers = false, Dictionary<int, string> report = null)
+        {
             if (float.IsNaN(outlineWidth) || outlineWidth < 0 || outlineWidth > 4)
                 throw new ArgumentOutOfRangeException("outlineWidth");
             // I4/I8-Schriften speichern Deckung; die Farbe kommt aus dem Spielmaterial.
@@ -311,35 +371,40 @@ namespace murumsWiiModStudio
             }
             byte[] output = (byte[])data.Clone();
             replaced = 0;
-            var supported = TtfCoverage.Unicode(ttf);
+
             var replacedGlyphs = new HashSet<int>();
-            using (var fonts = new PrivateFontCollection())
+            using (var faces = new FontScriptCollection(sources))
             {
-                fonts.AddFontFile(ttf);
-                if (fonts.Families.Length == 0)
-                    throw new InvalidDataException("The font could not be loaded.");
-                FontFamily family = fonts.Families[0];
-                FontStyle style = family.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular : FontStyle.Bold;
-                var protectedGlyphs = new HashSet<int>(Characters.Where(c => { int code = gameNumbers ? GameNumberCharacter(c.Key) : c.Key; return !IsTextCharacter(code) || !supported.Contains(code); }).Select(c => c.Value));
+                var protectedGlyphs = new HashSet<int>(Characters.Where(c => { int code = gameNumbers ? GameNumberCharacter(c.Key) : c.Key; return !IsTextCharacter(code) || !faces.Supports(code); }).Select(c => c.Value));
+                // Ein gemeinsam genutztes Atlasfeld darf nicht zwei verschiedenen TTFs gehören.
+                foreach (var group in Characters.GroupBy(p => p.Value))
+                    if (group.Select(p => sources.ForCharacter(gameNumbers ? GameNumberCharacter(p.Key) : p.Key))
+                        .Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+                        protectedGlyphs.Add(group.Key);
                 if (report != null)
                     foreach (var pair in Characters)
                     {
                         int code = gameNumbers ? GameNumberCharacter(pair.Key) : pair.Key;
                         report[pair.Key] = !IsTextCharacter(code) ? "Protected symbol / control"
-                            : !supported.Contains(code) ? "Missing in TTF - original kept"
+                            : !faces.Supports(code) ? "Missing in TTF - original kept"
                             : protectedGlyphs.Contains(pair.Value) ? "Protected shared glyph - original kept"
                             : "No usable outline / space - original kept";
                     }
                 // Measure the outlines actually imported, not the family's line spacing.
                 // Decorative fonts can have very large metric descents; BRFNT baselines
                 // can also lie below the atlas cell. Neither may collapse visible ink.
-                float ascent = family.GetCellAscent(style) / (float)family.GetEmHeight(style) * CellHeight;
+
                 float inkAbove = 0, inkBelow = 0;
+                var widthFits = new List<float>();
                 foreach (var pair in Characters)
                 {
                     int c = gameNumbers ? GameNumberCharacter(pair.Key) : pair.Key;
-                    if (!supported.Contains(c) || !IsTextCharacter(c) || protectedGlyphs.Contains(pair.Value) || widths[pair.Value] == 0)
+                    if (!faces.Supports(c) || !IsTextCharacter(c) || protectedGlyphs.Contains(pair.Value) || widths[pair.Value] == 0)
                         continue;
+                    var face = faces.ForCharacter(c);
+                    var family = face.Family;
+                    var style = face.Style;
+                    float ascent = family.GetCellAscent(style) / (float)family.GetEmHeight(style) * CellHeight;
                     using (var outline = new GraphicsPath())
                     using (var format = (StringFormat)StringFormat.GenericTypographic.Clone())
                     {
@@ -347,6 +412,9 @@ namespace murumsWiiModStudio
                         var bounds = outline.GetBounds();
                         if (bounds.Width <= 0 || bounds.Height <= 0)
                             continue;
+                        float usable = SafeGlyphRight(pair.Value) - SafeGlyphLeft(pair.Value) - outlineWidth;
+                        if (usable > 0 && Char.IsLetterOrDigit((char)c))
+                            widthFits.Add(usable / bounds.Width);
                         inkAbove = Math.Max(inkAbove, ascent - bounds.Top);
                         inkBelow = Math.Max(inkBelow, bounds.Bottom - ascent);
                     }
@@ -358,6 +426,12 @@ namespace murumsWiiModStudio
                 float fit = Math.Max(1, CellHeight - 2 * margin) / (inkAbove + inkBelow);
                 float baseline = Math.Min(Math.Max(margin, Baseline), CellHeight - margin - inkBelow * fit);
                 float sy = Math.Min(fit, (baseline - margin) / Math.Max(1, inkAbove));
+                // Breite Schriften gemeinsam verkleinern, ohne einzelne schmale Zeichen aufzublasen.
+                if (widthFits.Count > 0)
+                {
+                    widthFits.Sort();
+                    sy = Math.Min(sy, widthFits[(widthFits.Count - 1) / 4]);
+                }
                 // Preserve spacing and icon aliases; only cells for existing printable Latin characters are replaced.
                 for (int sheet = 0; sheet < Sheets; sheet++)
                     using (Bitmap atlas = Atlas(sheet))
@@ -368,8 +442,12 @@ namespace murumsWiiModStudio
                         foreach (var pair in Characters.OrderBy(c => c.Key))
                         {
                             int c = gameNumbers ? GameNumberCharacter(pair.Key) : pair.Key, glyph = pair.Value;
-                            if (!supported.Contains(c) || !IsTextCharacter(c) || protectedGlyphs.Contains(glyph) || glyph / (Columns * Rows) != sheet || !done.Add(glyph) || widths[glyph] == 0)
+                            if (!faces.Supports(c) || !IsTextCharacter(c) || protectedGlyphs.Contains(glyph) || glyph / (Columns * Rows) != sheet || !done.Add(glyph) || widths[glyph] == 0)
                                 continue;
+                            var face = faces.ForCharacter(c);
+                            var family = face.Family;
+                            var style = face.Style;
+                            float ascent = family.GetCellAscent(style) / (float)family.GetEmHeight(style) * CellHeight;
                             using (var path = new GraphicsPath())
                             using (var format = (StringFormat)StringFormat.GenericTypographic.Clone())
                             {
@@ -378,12 +456,14 @@ namespace murumsWiiModStudio
                                 if (bounds.Width <= 0 || bounds.Height <= 0)
                                     continue;
                                 int slot = glyph % (Columns * Rows), x = (slot % Columns) * (CellWidth + 1) + 1, y = (slot / Columns) * (CellHeight + 1) + 1;
-                                float sx = Math.Min(sy, (Math.Min(widths[glyph], CellWidth) - 1f - outlineWidth) / bounds.Width);
+                                float safeLeft = SafeGlyphLeft(glyph), safeRight = SafeGlyphRight(glyph);
+                                float sx = Math.Min(sy, (safeRight - safeLeft - outlineWidth) / bounds.Width);
+                                float origin = safeLeft + (safeRight - safeLeft - bounds.Width * sx) / 2;
                                 if (sx <= 0 || sy <= 0)
                                     continue;
                                 if (hinting != GlyphHinting.None)
                                 {
-                                    var target = new RectangleF(outlineWidth / 2, baseline + (bounds.Y - ascent) * sy, bounds.Width * sx, bounds.Height * sy);
+                                    var target = new RectangleF(origin, baseline + (bounds.Y - ascent) * sy, bounds.Width * sx, bounds.Height * sy);
                                     using (var glyphImage = GlyphRasterizer.Render(char.ConvertFromUtf32(c), family, style, CellHeight, bounds, new Size(CellWidth, CellHeight), target, fill, outlineColor, outlineWidth, hinting))
                                     {
                                         g.CompositingMode = CompositingMode.SourceCopy;
@@ -392,7 +472,7 @@ namespace murumsWiiModStudio
                                 }
                                 else
                                 {
-                                    using (var transform = new Matrix(sx, 0, 0, sy, x + outlineWidth / 2 - bounds.X * sx, y + baseline - ascent * sy))
+                                    using (var transform = new Matrix(sx, 0, 0, sy, x + origin - bounds.X * sx, y + baseline - ascent * sy))
                                         path.Transform(transform);
                                     g.SetClip(new Rectangle(x, y, CellWidth, CellHeight));
                                     g.CompositingMode = CompositingMode.SourceCopy;
@@ -443,8 +523,9 @@ namespace murumsWiiModStudio
 
             if (report != null)
                 foreach (var pair in Characters)
-                    if (replacedGlyphs.Contains(pair.Value)) report[pair.Key] = "Replaced";
+                    if (replacedGlyphs.Contains(pair.Value)) report[pair.Key] = "Replaced — " + Path.GetFileName(sources.ForCharacter(gameNumbers ? GameNumberCharacter(pair.Key) : pair.Key));
             return output;
         }
     }
 }
+

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -195,43 +195,62 @@ namespace murumsWiiModStudio
                 FindEntry(true);
             }));
             ToolStripMenuItem tools = new ToolStripMenuItem(L.T("Tools", "Tools"));
-            tools.DropDownItems.Add(MakeMenu("MKWii Custom Pack Maker...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Custom Pack Maker Tool...", Keys.None, delegate
             {
                 using (var maker = new CustomPackMakerForm())
                     maker.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("MKWii Game HUD Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Mod Merge Tool...", Keys.None, delegate
+            {
+                using (var merge = new ArchiveMergeForm()) merge.ShowDialog(this);
+            }));
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Pack Workshop Tool...", Keys.None, delegate
+            {
+                using (var workshop = new PackWorkbenchForm()) workshop.ShowDialog(this);
+            }));
+            tools.DropDownItems.Add(new ToolStripSeparator());
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Game HUD Tool...", Keys.None, delegate
             {
                 using (var hud = new GameHudForm())
                     hud.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("MKWii Race HUD Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Race HUD Tool...", Keys.None, delegate
             {
                 using (var hud = new RaceHudForm())
                     hud.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu(L.T("MKWii Backgrounds Tool...", "MKWii Backgrounds Tool..."), Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Race Effects Tool...", Keys.None, delegate
+            {
+                using (var effects = new RaceEffectsForm()) effects.ShowDialog(this);
+            }));
+            tools.DropDownItems.Add(MakeMenu(L.T("RR-MKWii Backgrounds Tool...", "RR-MKWii Backgrounds Tool..."), Keys.None, delegate
             {
                 OpenRetroRewindGifWizard();
             }));
-            tools.DropDownItems.Add(MakeMenu("MKWii Font Changer Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Font Changer Tool...", Keys.None, delegate
             {
                 using (var f = new FontChangerForm())
                     f.ShowDialog(this);
             }));
-            tools.DropDownItems.Add(MakeMenu("MKWii Theme Project Tool...", Keys.None, delegate
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Theme Project Tool...", Keys.None, delegate
             {
                 using (var f = new ThemeProjectForm())
                     f.ShowDialog(this);
             }));
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Character Builder Tool...", Keys.None, delegate
+            {
+                using (var f = new CharacterBuilderForm())
+                    f.ShowDialog(this);
+            }));
+            tools.DropDownItems.Add(MakeMenu("RR-MKWii Menu Text Tool...", Keys.None, delegate
+            {
+                using (var f = new MenuTextForm())
+                    f.ShowDialog(this);
+            }));
+            tools.DropDownItems.Add(new ToolStripSeparator());
             tools.DropDownItems.Add(MakeMenu("MKWii Archive Compare Tool...", Keys.None, delegate
             {
                 using (var f = new ArchiveCompareForm())
-                    f.ShowDialog(this);
-            }));
-            tools.DropDownItems.Add(MakeMenu("MKWii Menu Text Tool...", Keys.None, delegate
-            {
-                using (var f = new MenuTextForm())
                     f.ShowDialog(this);
             }));
             tools.DropDownItems.Add(MakeMenu("MKWii Music && Loops Tool...", Keys.None, delegate
@@ -1034,16 +1053,11 @@ namespace murumsWiiModStudio
                 {
                     using (Bitmap source = TplTextureEditor.LoadSourceBitmap(dialog.FileName))
                     {
-                        bool resize = false;
-                        if (source.Width != info.Width || source.Height != info.Height)
+                        using (var preview = new TextureImportPreviewForm(entry.Data, imageIndex, source))
                         {
-                            DialogResult answer = murumsWiiModStudio.StudioMessageBox.Show(this, L.F("Das Quellbild ist {0}×{1}, die Ziel-TPL {2}×{3}.\r\n\r\nAutomatisch auf die Zielgrösse skalieren?", "The source image is {0}×{1}, the target TPL is {2}×{3}.\r\n\r\nResize automatically to the target size?", source.Width, source.Height, info.Width, info.Height), L.T("Bildgrösse anpassen", "Resize image"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                            if (answer != DialogResult.Yes)
-                                return;
-                            resize = true;
+                            if (preview.ShowDialog(this) != DialogResult.OK) return;
+                            entry.Data = preview.Result;
                         }
-
-                        entry.Data = TplTextureEditor.ReplaceImage(entry.Data, source, resize, imageIndex);
                     }
 
                     MarkDirty();
@@ -2823,3 +2837,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+

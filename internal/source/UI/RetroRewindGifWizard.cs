@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Drawing;
@@ -31,25 +31,18 @@ namespace murumsWiiModStudio
         }
 
         private readonly List<TargetEditor> _targets = new List<TargetEditor>();
+        private readonly List<TextBox> _waitingInputs = new List<TextBox>();
+        private readonly Dictionary<string, TextBox> _waitingArchives = new Dictionary<string, TextBox>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, MenuModelsForm> _modelEditors = new Dictionary<string, MenuModelsForm>(StringComparer.OrdinalIgnoreCase);
         private TextBox _uiFolder;
         private TextBox _outputFolder;
         private string _lastDefaultOutput = "";
         private ComboBox _quality;
-        private ComboBox _language;
-        private readonly string[] _languageSuffixes = new string[]
-        {
-            "G",
-            "E",
-            "U",
-            "F",
-            "S",
-            "I",
-            "J",
-            "M",
-            "Q",
-            "K"
-        };
+        private ComboBox _region;
+        private Label _regionHint;
+        private string _regionFolder = "";
+        private bool _manualRegion, _syncingRegion;
+        private readonly string[] _regionSuffixes = { null, "E", "U", "J" };
         private ComboBox _menuFraming;
         private CheckBox _cleanupOld;
         private StudioProgressBar _progress;
@@ -64,7 +57,7 @@ namespace murumsWiiModStudio
 
         public RetroRewindGifWizard(string currentArchivePath)
         {
-            Text = L.T("MKWii Backgrounds Tool", "MKWii Backgrounds Tool");
+            Text = L.T("RR-MKWii Backgrounds Tool", "RR-MKWii Backgrounds Tool");
             StartPosition = FormStartPosition.CenterParent;
             MinimumSize = new Size(980, 700);
             Size = new Size(1180, Math.Min(950, Screen.FromControl(this).WorkingArea.Height - 40));
@@ -93,7 +86,8 @@ namespace murumsWiiModStudio
                 if (StudioMessageBox.Show(this, "Clear loaded sources and pending background/model settings?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
                 foreach (var target in _targets) { target.SourcePath.Clear(); target.CommonPath.Clear(); target.LanguagePath.Clear(); }
                 foreach (var editor in _modelEditors.Values) editor.ClearArchives();
-                _uiFolder.Clear(); PackSelection.SourceCleared(this);
+                foreach (var input in _waitingInputs) input.Clear();
+                _uiFolder.Clear(); UpdateRegionFromFolder(""); PackSelection.SourceCleared(this);
             };
             Controls.Add(clearSources);
 
@@ -145,8 +139,8 @@ namespace murumsWiiModStudio
             AddTargetGroup(titleTab, "title", L.T("Titelbildschirm + Lizenz / Hauptmenü", "Title screen + license / main menu"), "Title", true, L.T("GIF: Titelbildschirm animiert; Lizenz/Hauptmenü verwenden standardmässig Frame 0. PNG/JPEG: alles statisch.", "GIF: animated title screen; license/main menu use frame 0 by default. PNG/JPEG: all static."));
             tabs.TabPages.Add(titleTab);
             TabPage licenseTab = NewTab(L.T("Lizenz-Einstellungen", "License settings"));
-            AddTargetGroup(licenseTab, "license-settings", L.T("Lizenz-Einstellungen: Hintergrund", "License settings: background"), "Title", false,
-                L.T("Title.szs: Hintergrund der Menüansicht. Obere und untere Balken separat über Menütexturen bearbeiten.", "Title.szs: menu background. Edit top and bottom bars separately through Menu textures."));
+            AddTargetGroup(licenseTab, "license-settings", L.T("Lizenz-Einstellungen: Hintergrund", "License settings: background"), "MenuOther", false,
+                L.T("MenuOther.szs: Lizenz-Einstellungen und weitere Optionen teilen diesen Hintergrund. Fehlt die Datei, kannst du sie aus deinem Spielabbild ergänzen.", "MenuOther.szs: license settings and other options share this background. If missing, import it from your game image."));
             var menuTextures = NewButton(L.T("Menütexturen / Balken...", "Menu textures / bars..."));
             menuTextures.Dock = DockStyle.Bottom;
             menuTextures.Height = 38;
@@ -155,10 +149,30 @@ namespace murumsWiiModStudio
                 using (var editor = new MenuTextureForm())
                     editor.ShowDialog(this);
             };
-            licenseTab.Controls.Add(menuTextures);
+            var importLicense = NewButton(L.T("Fehlende MenuOther.szs aus ISO ergänzen…", "Get missing MenuOther.szs from ISO…"));
+            importLicense.Dock = DockStyle.Bottom;
+            importLicense.Height = 38;
+            importLicense.Click += delegate
+            {
+                using (var picker = new OpenFileDialog { Filter = "Mario Kart Wii ISO / WBFS|*.iso;*.wbfs;*.wia;*.ciso;*.wdf", CheckFileExists = true })
+                {
+                    if (picker.ShowDialog(this) != DialogResult.OK) return;
+                    string imported = GameArchiveImportForm.Resolve(this, picker.FileName, "MenuOther.szs", PackSelection.Folder(this));
+                    if (imported == null) return;
+                    _targets.First(t => t.Key == "license-settings").CommonPath.Text = imported;
+                    PackSelection.SourceLoaded(this);
+                }
+            };
+            var licenseActions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42, WrapContents = false };
+            importLicense.Dock = menuTextures.Dock = DockStyle.None;
+            importLicense.AutoSize = menuTextures.AutoSize = true;
+            licenseActions.Controls.Add(importLicense);
+            licenseActions.Controls.Add(menuTextures);
+            licenseTab.Controls.Add(licenseActions);
+            licenseActions.SendToBack();
             tabs.TabPages.Add(licenseTab);
             TabPage singleTab = NewTab(L.T("Singleplayer", "Single Player"));
-            AddTargetGroup(singleTab, "single", L.T("Singleplayer + Online-Voting", "Single player + online voting"), "MenuSingle", false, L.T("Ändert den Hintergrund der Einzelspieler-Menüs und der Online-Abstimmung. Wähle ein Foto oder ein GIF; passende Animationen werden automatisch eingerichtet.", "Changes the single-player menu and online voting background. Pick a photo or GIF; compatible animations are configured automatically."));
+            AddTargetGroup(singleTab, "single", L.T("Singleplayer", "Single player"), "MenuSingle", false, L.T("Ändert den Hintergrund der Einzelspieler-Menüs. Foto oder GIF wählen. Online-Voting nutzt den 3D-Hintergrund unter Globus & Himmel.", "Changes the single-player menu background. Choose a photo or GIF. Online voting uses the 3D background under Globe & sky."));
             tabs.TabPages.Add(singleTab);
             TabPage multiTab = NewTab(L.T("Multiplayer", "Multiplayer"));
             AddTargetGroup(multiTab, "multi", L.T("Lokaler Multiplayer", "Local multiplayer"), "MenuMulti", false, L.T("Ändert das tatsächliche Hintergrundlayout, einschließlich Controller-Anmeldung. 3D-Modelle werden separat eingestellt.", "Changes the actual menu background layout. The controller registration screen is included. 3D models are managed separately."));
@@ -176,6 +190,7 @@ namespace murumsWiiModStudio
             TabPage modelsTab = NewTab(L.T("3D-Modelle", "3D models"));
             AddModelsPage(modelsTab, "BackModel.szs");
             other.TabPages.Add(modelsTab);
+            otherTab.Padding = new Padding(3);
             otherTab.Controls.Add(other);
             tabs.TabPages.Add(otherTab);
             AddBuildButton(titleTab);
@@ -323,142 +338,91 @@ namespace murumsWiiModStudio
 
         private void AddLoadingTab(TabControl tabs)
         {
-            TabPage page = NewTab(L.T("Wartefenster", "Waiting screens"));
-            var grid = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                ColumnCount = 3
-            };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-            int row = 0;
-            TextBox archive, picture;
-            var purpose = NewLabel(L.T("Archiv des Wartefensters wählen: Title.szs für Titel-/Lizenzmenüs, Globe.szs für Online-Menüs. Gemeinsam verwendete Dialoge werden ebenfalls geändert.", "Choose the archive used by the waiting screen: Title.szs for title/license menus, Globe.szs for online menus. Changes affect dialogs sharing this layout."));
-            purpose.AutoSize = true;
-            purpose.MaximumSize = new Size(980, 0);
-            purpose.Margin = new Padding(8, 8, 8, 18);
-            grid.Controls.Add(purpose, 0, row++);
-            grid.SetColumnSpan(purpose, 3);
-            AddFileRow(grid, ref row, L.T("Datei öffnen", "Open file") + ": Title.szs / Globe.szs", out archive, L.T("Aus deinem Custom Pack. Diese Kopie behält deine bisherigen Online-Menüänderungen.", "From your custom pack. This copy preserves your existing online menu edits."), "Menu archives|Globe.szs;Title.szs;MenuSingle.szs;MenuMulti.szs;Channel.szs");
-            AddFileRow(grid, ref row, L.T("Hintergrundbild", "Background picture") + "\n" + L.T("z. B. hintergrund.png", "e.g. background.png"), out picture, L.T("Zum Beispiel wallpaper.png. Statisch; bei GIF wird das erste Bild verwendet. Betrifft auch andere Online-Dialoge mit demselben Nachrichtenfenster.", "For example wallpaper.png. Static; GIF uses its first frame. Also affects other online dialogs sharing this message window."), "Pictures|*.png;*.jpg;*.jpeg;*.gif");
-            var preview = new murumsWiiModStudio.ZoomPanPictureBox
-            {
-                Height = 125,
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Zoom
-            };
-            grid.Controls.Add(preview, 1, row++);
-            var create = NewButton(L.T("Kopien für diesen Tab erstellen", "Create copies for this tab"));
-            create.AutoSize = true;
-            create.MinimumSize = new Size(260, 34);
-            create.Enabled = false;
-            StylePrimaryButton(create);
-            var footer = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 48,
-                FlowDirection = FlowDirection.RightToLeft,
-                Padding = new Padding(0, 7, 0, 0)
-            };
-            footer.Controls.Add(create);
-            _exports.Add(page, create);
-            var info = NewLabel(L.T("Ausgabe nach Ordner & Qualität; keine Änderung am Quellarchiv.", "Output uses Folders & quality; source archive remains unchanged."));
-            info.MaximumSize = new Size(720, 0);
-            grid.Controls.Add(info, 1, row++);
-            grid.SetColumnSpan(info, 2);
-            var clear = new SelectionClearButton
-            {
-                Text = L.T("Bildauswahl leeren", "Clear picture selection"),
-                Enabled = false
-            };
-            clear.Click += delegate
-            {
-                picture.Clear();
-            };
-            grid.Controls.Add(clear, 1, row++);
-            EventHandler update = delegate
-            {
-                create.Enabled = File.Exists(archive.Text) && File.Exists(picture.Text);
-                clear.Enabled = picture.Text.Length > 0;
-            };
-            archive.TextChanged += update;
-            picture.TextChanged += update;
-            picture.TextChanged += delegate
-            {
-                if (preview.Image != null)
-                    preview.Image.Dispose();
-                preview.Image = null;
-                try
-                {
-                    using (var image = Image.FromFile(picture.Text))
-                        preview.Image = new Bitmap(image);
-                }
-                catch
-                {
-                }
-            };
-            preview.Disposed += delegate
-            {
-                if (preview.Image != null)
-                    preview.Image.Dispose();
-            };
-            _uiFolder.TextChanged += delegate
-            {
-                archive.Text = "";
-                foreach (string folder in new[]
-                {
-                    _uiFolder.Text,
-                    Path.Combine(_uiFolder.Text, "Scene", "UI"),
-                    Path.Combine(_uiFolder.Text, "UI")
-                }
+            var page = NewTab(L.T("Wartebildschirme", "Waiting screens"));
+            page.Padding = new Padding(3);
+            var choices = new TabControl { Dock = DockStyle.Fill };
+            DarkTheme.StyleTabs(choices);
+            AddLoadingChoice(choices, WaitingScreen.BeforeRace);
+            AddLoadingChoice(choices, WaitingScreen.MenuDialog);
+            page.Controls.Add(choices);
+            choices.SelectedIndexChanged += delegate { RefreshExportLocation(); };
+            tabs.TabPages.Add(page);
+        }
 
-                )
+        private void AddLoadingChoice(TabControl tabs, WaitingScreen screen)
+        {
+            bool race = screen == WaitingScreen.BeforeRace;
+            var page = NewTab(race ? L.T("Vor dem Rennen", "Before the race") : L.T("Menü / Verbindung", "Menu / connection"));
+            page.Padding = new Padding(3);
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 4, Padding = new Padding(4) };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 115));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var purpose = new Label { Dock = DockStyle.Fill, Text = race
+                ? L.T("Große Warteansicht: Race.szs. Ändert den Hintergrund; Texte bleiben erhalten.", "Large waiting view: Race.szs. Changes the background and preserves text.")
+                : L.T("Kleine Dialoge: Globe.szs online, Title.szs im Titelmenü. Das Bild füllt das Nachrichtenfenster; gemeinsam verwendete Dialoge ändern sich mit.", "Small dialogs: Globe.szs online, Title.szs in title menus. The picture fills the message window; shared dialogs change too.") };
+            grid.Controls.Add(purpose, 0, 0); grid.SetColumnSpan(purpose, 3);
+            var archive = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
+            var picture = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
+            _waitingInputs.Add(archive); _waitingInputs.Add(picture);
+            _waitingArchives.Add(race ? "Race.szs" : "Globe.szs", archive);
+            grid.Controls.Add(new Label { Text = race ? "Race.szs" : L.T("Menüarchiv", "Menu archive"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 1);
+            grid.Controls.Add(archive, 1, 1);
+            grid.Controls.Add(new Label { Text = L.T("Dein Bild", "Your picture"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 2);
+            grid.Controls.Add(picture, 1, 2);
+            var browse = NewButton(L.T("Auswählen…", "Choose…")); browse.Dock = DockStyle.Fill;
+            browse.Click += delegate {
+                string path = GameArchiveImportForm.Select(this, race ? "Race archive|Race.szs" : "Menu archives|Globe.szs;Title.szs;MenuSingle.szs;MenuMulti.szs;MenuOther.szs;Channel.szs");
+                if (path != null) archive.Text = path;
+            };
+            grid.Controls.Add(browse, 2, 1);
+            var choose = NewButton(L.T("Bild wählen…", "Choose image…")); choose.Dock = DockStyle.Fill;
+            choose.Click += delegate { using (var picker = new OpenFileDialog { Filter = "Pictures|*.png;*.jpg;*.jpeg;*.gif", CheckFileExists = true })
+                if (picker.ShowDialog(this) == DialogResult.OK) picture.Text = picker.FileName; };
+            grid.Controls.Add(choose, 2, 2);
+            var preview = new ZoomPanPictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
+            grid.Controls.Add(preview, 1, 3); grid.SetColumnSpan(preview, 2);
+            var options = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+
+            var clear = new SelectionClearButton { Text = L.T("Bild leeren", "Clear picture"), Width = 140, Height = 32 };
+            clear.Click += delegate { picture.Clear(); }; options.Controls.Add(clear); grid.Controls.Add(options, 0, 3);
+            options.Controls.Add(new Label { Text = L.T("GIF: erstes Bild.", "GIF: first frame."), Width = 145, Height = 23 });
+            var create = NewButton(L.T("Warteansicht als Kopie speichern", "Save waiting screen copy")); create.AutoSize = true; create.Enabled = false; StylePrimaryButton(create);
+            var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 42 }; footer.Controls.Add(create); page.Controls.Add(footer);
+            _exports.Add(page, create);
+            EventHandler update = delegate { create.Enabled = File.Exists(archive.Text) && File.Exists(picture.Text); clear.Enabled = picture.Text.Length > 0; };
+            archive.TextChanged += update; picture.TextChanged += update;
+            picture.TextChanged += delegate {
+                if (preview.Image != null) preview.Image.Dispose(); preview.Image = null;
+                if (File.Exists(picture.Text)) using (var image = Image.FromFile(picture.Text)) preview.Image = new Bitmap(image);
+            };
+            preview.Disposed += delegate { if (preview.Image != null) preview.Image.Dispose(); };
+            _uiFolder.TextChanged += delegate {
+                archive.Clear();
+                foreach (string folder in new[] { _uiFolder.Text, Path.Combine(_uiFolder.Text, "Scene", "UI"), Path.Combine(_uiFolder.Text, "UI") })
                 {
-                    string file = Path.Combine(folder, "Globe.szs");
-                    if (File.Exists(file))
-                    {
-                        archive.Text = file;
-                        break;
-                    }
+                    string file = Path.Combine(folder, race ? "Race.szs" : "Globe.szs");
+                    if (File.Exists(file)) { archive.Text = file; break; }
                 }
             };
-            create.Click += delegate
-            {
+            create.Click += delegate {
                 try
                 {
+                    create.Enabled = false; UseWaitCursor = true;
                     string output = Path.Combine(ResolveOutputFolder(), Path.GetFileName(archive.Text));
-                    if (String.Equals(output, Path.GetFullPath(archive.Text), StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException(L.T("Wähle einen separaten Ausgabeordner.", "Choose a separate output folder."));
-                    create.Enabled = false;
-                    UseWaitCursor = true;
-                    byte[] data = OnlineLoadingBackground.Build(File.ReadAllBytes(archive.Text), picture.Text);
-                    Directory.CreateDirectory(Path.GetDirectoryName(output));
-                    BackupManager.WriteAllBytesSafely(output, data);
+                    byte[] data = OnlineLoadingBackground.Build(File.ReadAllBytes(archive.Text), picture.Text, screen);
+                    ArchiveCopyExport.SaveCopy(archive.Text, data, output);
                     _status.Text = L.T("Kopie erstellt: ", "Copy created: ") + output;
                     ExportHelp.Show(this, Path.GetDirectoryName(output));
                 }
-                catch (Exception ex)
-                {
-                    murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-                finally
-                {
-                    UseWaitCursor = false;
-                    update(null, EventArgs.Empty);
-                }
+                catch (Exception error) { StudioMessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                finally { UseWaitCursor = false; update(null, EventArgs.Empty); }
             };
-            var content = new Panel
-            {
-                Dock = DockStyle.Fill,
-                AutoScroll = true
-            };
-            content.Controls.Add(grid);
-            page.AutoScroll = false;
-            page.Controls.Add(content);
-            page.Controls.Add(footer);
-            tabs.TabPages.Add(page);
+            page.Controls.Add(grid); tabs.TabPages.Add(page);
         }
 
         private static void AddInfoTab(TabControl tabs, string name, string heading, string description)
@@ -477,7 +441,7 @@ namespace murumsWiiModStudio
 
         private Control BuildHeaderPanel()
         {
-            return StudioChrome.Header("MKWii Backgrounds Tool", L.T("Wähle deinen Custom-Pack-Ordner. Passe Bilder und Modelle an und erstelle eine Kopie.", "Choose your custom mod folder. Edit pictures and models, then create a copy."));
+            return StudioChrome.Header("RR-MKWii Backgrounds Tool", L.T("Wähle deinen Custom-Pack-Ordner. Passe Bilder und Modelle an und erstelle eine Kopie.", "Choose your custom mod folder. Edit pictures and models, then create a copy."));
         }
 
         private static void StylePrimaryButton(Button b)
@@ -539,7 +503,7 @@ namespace murumsWiiModStudio
             languageFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             languageFields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
             int languageRow = 0;
-            AddFileRow(languageFields, ref languageRow, L.T("Zusätzliches Menüarchiv", "Additional menu archive") + "\n" + L.T("z. B. ", "e.g. ") + archiveBaseName + "_E.szs", out target.LanguagePath, isTitle ? L.T("Für den Titelbildschirm erforderlich. Im kopierten Custom Pack: Title_E.szs; in der RR-UI-Referenz: Title_U.szs. Passend zur Spielsprache auswählen.", "Required for the title screen. Copied custom pack: Title_E.szs; RR UI reference: Title_U.szs. Select the file matching your game language.") : L.T("Dieses zusätzliche Archiv wurde im gewählten Ordner für deine Spielsprache gefunden. Es wird zusammen mit dem Basisarchiv verarbeitet.", "This additional archive was found in the selected folder for your game language. It is processed together with the base archive."), ToolArchiveFilters.Background(archiveBaseName, true));
+            AddFileRow(languageFields, ref languageRow, L.T("Zusätzliches Menüarchiv", "Additional menu archive") + "\n" + L.T("z. B. ", "e.g. ") + archiveBaseName + "_E.szs", out target.LanguagePath, isTitle ? L.T("Für den Titelbildschirm erforderlich. Im kopierten Custom Pack: Title_E.szs; in der RR-UI-Referenz: Title_U.szs. Passend zur Spielregion auswählen.", "Required for the title screen. Copied custom pack: Title_E.szs; RR UI reference: Title_U.szs. Select the file matching your game region.") : L.T("Dieses zusätzliche Archiv wurde im gewählten Ordner für deine Spielregion gefunden. Es wird zusammen mit dem Basisarchiv verarbeitet.", "This additional archive was found in the selected folder for your game region. It is processed together with the base archive."), ToolArchiveFilters.Background(archiveBaseName, true));
             target.LanguageFields = languageFields;
             languageFields.Visible = isTitle;
             grid.SetColumnSpan(languageFields, 3);
@@ -564,7 +528,7 @@ namespace murumsWiiModStudio
             target.Capability.ForeColor = Color.FromArgb(180, 190, 210);
             target.Capability.Margin = new Padding(0, 6, 0, 8);
             target.Capability.Text = capabilityText;
-            if (!isTitle && archiveBaseName != "MenuSingle" && archiveBaseName != "MenuMulti" && archiveBaseName != "Title")
+            if (!isTitle && archiveBaseName != "MenuSingle" && archiveBaseName != "MenuMulti" && archiveBaseName != "Title" && archiveBaseName != "MenuOther")
             {
                 target.Capability.Text += L.T("\r\nFür diesen Bereich ist kein geprüfter Bildimport verfügbar. Es werden keine Menürahmen als Hintergrund ersetzt.", "\r\nNo verified picture import is available for this area. Menu borders will not be replaced as backgrounds.");
                 target.SourcePath.Enabled = false;
@@ -654,6 +618,42 @@ namespace murumsWiiModStudio
                     preview.Image = null;
                 }
             };
+            if (!isTitle)
+            {
+                var archiveBrowse = grid.GetControlFromPosition(2, grid.GetRow(target.CommonPath));
+                var pictureBrowse = grid.GetControlFromPosition(2, grid.GetRow(target.SourcePath));
+                grid.Controls.Clear();
+                grid.AutoSize = group.AutoSize = false;
+                grid.Dock = group.Dock = DockStyle.Fill;
+                grid.RowStyles.Clear();
+                grid.RowCount = 6;
+                grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
+                grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+                grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+                grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                grid.ColumnStyles[0].Width = 155;
+                grid.Controls.Add(new Label { Text = archiveBaseName + ".szs", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+                grid.Controls.Add(target.CommonPath, 1, 0);
+                grid.Controls.Add(archiveBrowse, 2, 0);
+                grid.Controls.Add(languageFields, 0, 1); grid.SetColumnSpan(languageFields, 3);
+                target.ArchiveStatus.AutoEllipsis = true;
+                target.ArchiveStatus.AutoSize = false; target.ArchiveStatus.Dock = DockStyle.Fill;
+                grid.Controls.Add(target.ArchiveStatus, 0, 2); grid.SetColumnSpan(target.ArchiveStatus, 3);
+                grid.Controls.Add(new Label { Text = L.T("Dein Bild / GIF", "Your picture / GIF"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 3);
+                grid.Controls.Add(target.SourcePath, 1, 3);
+                grid.Controls.Add(pictureBrowse, 2, 3);
+                target.Capability.AutoSize = false; target.Capability.Dock = DockStyle.Fill;
+                target.Capability.Margin = new Padding(0, 3, 0, 0);
+                grid.Controls.Add(target.Capability, 0, 4); grid.SetColumnSpan(target.Capability, 3);
+                clearSource.Text = L.T("Bild leeren", "Clear picture");
+                clearSource.Size = new Size(145, 32);
+                grid.Controls.Add(clearSource, 0, 5);
+                grid.Controls.Add(preview, 1, 5); grid.SetColumnSpan(preview, 2);
+                archiveBrowse.Dock = pictureBrowse.Dock = DockStyle.Fill;
+                tab.AutoScroll = false;
+            }
             tab.Controls.Add(group);
             group.BringToFront();
         }
@@ -692,6 +692,8 @@ namespace murumsWiiModStudio
             };
             form.Controls.Add(_uiFolder, 1, row);
             Button detect = NewButton(L.T("Auswählen", "Browse"));
+            detect.AutoSize = true;
+            detect.Dock = DockStyle.Fill;
             detect.Click += delegate
             {
                 BrowseAndDetectUiFolder();
@@ -704,26 +706,29 @@ namespace murumsWiiModStudio
             StylePathBox(_outputFolder);
             form.Controls.Add(_outputFolder, 1, row);
             Button browseOut = NewButton(L.T("Auswählen", "Browse"));
+            browseOut.AutoSize = true;
+            browseOut.Dock = DockStyle.Fill;
             browseOut.Click += delegate
             {
                 BrowseOutputFolder();
             };
             form.Controls.Add(browseOut, 2, row++);
             AddExample(form, ref row, L.T("Alle Tabs speichern hier mit Originalnamen. Standard: MUR_EDITED in deinem Pack. Danach die Dateien ins Pack kopieren.", "All tabs save to this folder with the original filenames. Default: MUR_EDITED inside your pack. Copy its files into the pack when ready."));
-            form.Controls.Add(NewLabel(L.T("Sprache im Spiel", "In-game language")), 0, row);
-            _language = new ComboBox();
-            _language.Dock = DockStyle.Fill;
-            _language.DropDownStyle = ComboBoxStyle.DropDownList;
-            _language.Items.AddRange(new object[] { "Deutsch (G)", "English / PAL (E)", "English / USA (U)", "Français (F)", "Español (S)", "Italiano (I)", "Japanese (J)", "Español / USA (M)", "Français / Canada (Q)", "Korean (K)" });
-            _language.SelectedIndex = L.Current == UiLanguage.German ? 0 : 1;
-            _language.SelectedIndexChanged += delegate
+            form.Controls.Add(NewLabel(L.T("Spielregion", "Game region")), 0, row);
+            _region = new ComboBox { Name = "BackgroundRegion", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            _region.Items.AddRange(new object[] { L.T("Region wählen…", "Choose region…"), L.T("PAL / Europa (E)", "PAL / Europe (E)"), "USA (U)", "Japan (J)" });
+            _region.SelectedIndex = 0;
+            _region.SelectedIndexChanged += delegate
             {
+                if (_syncingRegion) return;
+                _manualRegion = _region.SelectedIndex > 0;
                 DetectArchivesInFolder(_uiFolder.Text);
                 ResetPathViews();
             };
-            form.SetColumnSpan(_language, 2);
-            form.Controls.Add(_language, 1, row++);
-            AddExample(form, ref row, L.T("Beispiel: Title_E.szs → English / PAL (E). Wähle die Sprache, die du im Spiel verwendest; die App-Sprache ist unabhängig davon.", "Example: Title_E.szs → English / PAL (E). Choose the language used in your game; the app language is independent."));
+            form.SetColumnSpan(_region, 2);
+            form.Controls.Add(_region, 1, row++);
+            _regionHint = AddExample(form, ref row, L.T("Wird aus den Pack-Dateien erkannt. Falls nicht eindeutig, wähle PAL, USA oder Japan. Die Studio-Sprache ist davon unabhängig.",
+                "Detected from the pack files. If unclear, choose PAL, USA or Japan. Studio language is independent."));
             form.Controls.Add(NewLabel(L.T("Animationsqualität", "Animation quality")), 0, row);
             _quality = new ComboBox();
             _quality.Dock = DockStyle.Fill;
@@ -757,7 +762,7 @@ namespace murumsWiiModStudio
             hint.MaximumSize = new Size(850, 0);
             hint.ForeColor = Color.FromArgb(180, 190, 210);
             hint.Margin = new Padding(0, 12, 0, 8);
-            hint.Text = L.T("Ordner-Erkennung akzeptiert direkt Scene/UI oder einen Mod-Ordner mit Scene/UI und sucht Common-/Sprachpaare wie Title.szs / Title_E.szs ; weitere Archive werden nur angezeigt, wenn sie tatsächlich gefunden wurden. Sprachsuffixe werden nicht auf E festgelegt. Bereiche ohne ausgewähltes Bild werden übersprungen.", "Folder detection accepts Scene/UI directly or a mod folder containing Scene/UI and finds common/language pairs such as Title.szs / Title_E.szs ; other additional archives are shown only when actually found. Language suffixes are not hard-coded to E. Areas without a picture are skipped.");
+            hint.Text = L.T("Ordner-Erkennung akzeptiert direkt Scene/UI oder einen Mod-Ordner mit Scene/UI und sucht die passenden Archivpaare wie Title.szs / Title_E.szs. Die RR-Region wird aus Title-, Race- und Common-Dateien erkannt. Weitere Archive erscheinen nur, wenn sie vorhanden sind. Bereiche ohne ausgewähltes Bild werden übersprungen.", "Folder detection accepts Scene/UI directly or a mod folder containing Scene/UI and finds matching archive pairs such as Title.szs / Title_E.szs. RR region is detected from Title, Race and Common files. Other archives appear only when present. Areas without a picture are skipped.");
             form.SetColumnSpan(hint, 2);
             form.Controls.Add(hint, 1, row++);
         }
@@ -804,11 +809,12 @@ namespace murumsWiiModStudio
             {
                 BrowseFile(captured, filter);
             };
+            button.Dock = DockStyle.Fill;
             form.Controls.Add(button, 2, row++);
             AddExample(form, ref row, cue);
         }
 
-        private static void AddExample(TableLayoutPanel form, ref int row, string text)
+        private static Label AddExample(TableLayoutPanel form, ref int row, string text)
         {
             Label hint = new Label();
             hint.AutoSize = true;
@@ -819,6 +825,7 @@ namespace murumsWiiModStudio
             hint.Text = text;
             form.SetColumnSpan(hint, 2);
             form.Controls.Add(hint, 1, row++);
+            return hint;
         }
 
         private void AutoDetectPaths(string currentArchivePath)
@@ -853,6 +860,7 @@ namespace murumsWiiModStudio
             if (String.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 return;
             _uiFolder.Text = folder;
+            UpdateRegionFromFolder(folder);
             int i;
             for (i = 0; i < _targets.Count; i++)
             {
@@ -862,13 +870,37 @@ namespace murumsWiiModStudio
                 target.CommonPath.Text = !String.IsNullOrWhiteSpace(common) ? common : "";
                 target.LanguagePath.Text = !String.IsNullOrWhiteSpace(language) ? language : "";
                 target.LanguageFields.Visible = target.IsTitle || !String.IsNullOrWhiteSpace(language);
-                target.ArchiveStatus.Text = String.IsNullOrWhiteSpace(common) ? L.T("Im gewählten Ordner nicht vorhanden: ", "Not found in the selected folder: ") + target.ArchiveBaseName + ".szs" : L.T("Gefunden: ", "Found: ") + Path.GetFileName(common) + (String.IsNullOrWhiteSpace(language) ? (target.IsTitle ? L.T(". Das zusätzliche Titelarchiv für die gewählte Spielsprache fehlt.", ". The additional title archive for the selected game language is missing.") : L.T(". Kein zusätzliches Archiv für die gewählte Spielsprache gefunden oder nötig.", ". No additional archive for the selected game language was found or is required.")) : " + " + Path.GetFileName(language));
+                target.ArchiveStatus.Text = String.IsNullOrWhiteSpace(common) ? L.T("Im gewählten Ordner nicht vorhanden: ", "Not found in the selected folder: ") + target.ArchiveBaseName + ".szs" : L.T("Gefunden: ", "Found: ") + Path.GetFileName(common) + (String.IsNullOrWhiteSpace(language) ? (target.IsTitle ? L.T(". Das zusätzliche Titelarchiv für die gewählte Spielregion fehlt.", ". The additional title archive for the selected game region is missing.") : L.T(". Kein zusätzliches Archiv für die gewählte Spielregion gefunden oder nötig.", ". No additional archive for the selected game region was found or is required.")) : " + " + Path.GetFileName(language));
             }
 
             _lastDefaultOutput = Path.Combine(folder, "MUR_EDITED");
             if (useDefault)
                 _outputFolder.Text = _lastDefaultOutput;
             ResetPathViews();
+        }
+
+        private void UpdateRegionFromFolder(string folder)
+        {
+            string full = String.IsNullOrWhiteSpace(folder) ? "" : Path.GetFullPath(folder);
+            if (!String.Equals(full, _regionFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                _regionFolder = full;
+                _manualRegion = false;
+            }
+            if (!_manualRegion)
+            {
+                string inferred = full.Length == 0 ? null : RrMissingFiles.InferRegion(full);
+                _syncingRegion = true;
+                try { _region.SelectedIndex = Math.Max(0, Array.IndexOf(_regionSuffixes, inferred)); }
+                finally { _syncingRegion = false; }
+            }
+            if (_region.SelectedIndex <= 0)
+                _regionHint.Text = L.T("Region nicht eindeutig: Wähle PAL, USA oder Japan passend zu deiner Spielkopie. Es wird kein fremdes Regionsarchiv als Ersatz gewählt.",
+                    "Region unclear: choose PAL, USA or Japan to match your game copy. Archives from another region are not used as a fallback.");
+            else
+                _regionHint.Text = (_manualRegion ? L.T("Manuell gewählt: ", "Selected manually: ") : L.T("Aus Pack-Dateien erkannt: ", "Detected from pack files: "))
+                    + _region.SelectedItem + L.T(". Die Dateinamen bleiben erhalten; die Studio-Sprache spielt keine Rolle.",
+                        ". Filenames are preserved; Studio language does not affect this choice.");
         }
 
         private static string ResolveUiFolder(string folder)
@@ -940,7 +972,8 @@ namespace murumsWiiModStudio
         {
             try
             {
-                string suffix = _languageSuffixes[Math.Max(0, _language.SelectedIndex)];
+                if (_region.SelectedIndex <= 0) return "";
+                string suffix = _regionSuffixes[_region.SelectedIndex];
                 string p = Path.Combine(folder, baseName + "_" + suffix + ".szs");
                 if (File.Exists(p))
                     return p;
@@ -1005,6 +1038,12 @@ namespace murumsWiiModStudio
                     if (existing.Length > 0 && !Path.GetFullPath(existing).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
                         throw new IOException("A source for " + slot + " is already loaded. Use Clear selection before switching.");
                 }
+                else if (_waitingArchives.ContainsKey(Path.GetFileName(path)))
+                {
+                    string existing = _waitingArchives[Path.GetFileName(path)].Text;
+                    if (existing.Length > 0 && !Path.GetFullPath(existing).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("This waiting-screen archive is already loaded. Use Clear selection to switch sources.");
+                }
                 else if (!_modelEditors.ContainsKey(Path.GetFileName(path)) && !Path.GetFileName(path).Equals("globe.arc", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Unsupported background source: " + Path.GetFileName(path));
                 if (selectedNames.ContainsKey(slot)) throw new IOException("Select only one source for " + slot + ".");
@@ -1015,6 +1054,18 @@ namespace murumsWiiModStudio
         internal void LoadSourceFile(string path)
         {
             string fileName = Path.GetFileName(path);
+            TextBox waiting;
+            if (_waitingArchives.TryGetValue(fileName, out waiting))
+            {
+                U8Archive.Load(File.ReadAllBytes(path));
+                if (waiting.Text.Length > 0 && !Path.GetFullPath(waiting.Text).Equals(Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("This waiting-screen archive is already loaded. Use Clear selection to switch sources.");
+                waiting.Text = path;
+                PackSelection.SourceLoaded(this);
+                for (Control parent = waiting.Parent; parent != null; parent = parent.Parent)
+                    if (parent is TabPage && parent.Parent is TabControl) ((TabControl)parent.Parent).SelectedTab = (TabPage)parent;
+                return;
+            }
             string modelName = String.Equals(fileName, "globe.arc", StringComparison.OrdinalIgnoreCase) ? "Earth.szs" : fileName;
             MenuModelsForm editor;
             if (_modelEditors.TryGetValue(modelName, out editor))
@@ -1156,7 +1207,7 @@ namespace murumsWiiModStudio
             {
                 if (target.Tab != tab || String.IsNullOrWhiteSpace(target.SourcePath.Text))
                     continue;
-                if (!target.IsTitle && target.ArchiveBaseName != "MenuSingle" && target.ArchiveBaseName != "MenuMulti" && target.ArchiveBaseName != "Title")
+                if (!target.IsTitle && target.ArchiveBaseName != "MenuSingle" && target.ArchiveBaseName != "MenuMulti" && target.ArchiveBaseName != "Title" && target.ArchiveBaseName != "MenuOther")
                     return false;
                 any = true;
                 string common = target.CommonPath.Text.Trim();
@@ -1218,7 +1269,7 @@ namespace murumsWiiModStudio
 
                 if (t.IsTitle && !File.Exists((t.LanguagePath.Text ?? "").Trim()))
                 {
-                    murumsWiiModStudio.StudioMessageBox.Show(this, L.T("Die Titel-Sprachdatei fehlt. Prüfe unter „Ordner & Qualität“ die Sprache im Spiel und wähle den Mod-Ordner mit den passenden Title_*.szs-Dateien.", "The title language file is missing. Check the in-game language under 'Folders & quality' and select the mod folder containing the matching Title_*.szs files."), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    murumsWiiModStudio.StudioMessageBox.Show(this, L.T("Die Titel-Sprachdatei fehlt. Prüfe unter „Ordner & Qualität“ die Spielregion und wähle den Mod-Ordner mit den passenden Title_*.szs-Dateien.", "The title language file is missing. Check the game region under 'Folders & quality' and select the mod folder containing the matching Title_*.szs files."), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
@@ -1360,7 +1411,7 @@ namespace murumsWiiModStudio
 
                 _progress.Value = failures == 0 ? 100 : 0;
                 _status.Text = failures == 0 ? L.T("Fertig. Die Bereiche mit ausgewähltem Bild in diesem Tab wurden verarbeitet.", "Done. The areas with a selected picture in this tab were processed.") : L.F("Fertig mit {0} Fehler(n). Siehe Zusammenfassung.", "Done with {0} error(s). See summary.", failures);
-                murumsWiiModStudio.StudioMessageBox.Show(this, failures == 0 ? ExportHelp.Message(output) + "\n\n" + Summary : Summary, L.T("MKWii Backgrounds Tool", "MKWii Backgrounds Tool"), MessageBoxButtons.OK, failures == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                murumsWiiModStudio.StudioMessageBox.Show(this, failures == 0 ? ExportHelp.Message(output) + "\n\n" + Summary : Summary, L.T("RR-MKWii Backgrounds Tool", "RR-MKWii Backgrounds Tool"), MessageBoxButtons.OK, failures == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             catch (Exception ex)
             {
@@ -1793,9 +1844,9 @@ namespace murumsWiiModStudio
                 Directory.CreateDirectory(options.OutputFolder);
                 string commonOut = SafeOutputPath(options.OutputFolder, options.CommonTitlePath);
                 string languageOut = SafeOutputPath(options.OutputFolder, options.LanguageTitlePath);
-                SaveSzs(common, commonOut);
+                ArchiveCopyExport.SaveCopy(options.CommonTitlePath, Yaz0.Compress(common.BuildU8()), commonOut);
                 progress(92, L.T("Sprach-Archiv wird komprimiert...", "Compressing language archive..."));
-                SaveSzs(language, languageOut);
+                ArchiveCopyExport.SaveCopy(options.LanguageTitlePath, Yaz0.Compress(language.BuildU8()), languageOut);
                 string commonMode = options.MenuFittingMode == 0 ? L.F("BRLYT 4-Punkt-UV ({0} Texturen mit expliziten UVs)", "BRLYT 4-point UV ({0} textures with explicit UVs)", commonUvCount) : (options.MenuFittingMode == 2 ? L.T("Legacy Fill/Crop", "Legacy Fill/Crop") : L.T("Legacy Volltextur-Stretch", "Legacy full-texture stretch"));
                 if (mappingDiagnostics.Count > 0)
                 {
@@ -3437,7 +3488,7 @@ namespace murumsWiiModStudio
                 anyAnimated |= commonAnimated;
                 string commonOut = SafeOutputPath(options.OutputFolder, options.CommonArchivePath);
                 if (commonPatched)
-                    SaveSzs(common, commonOut);
+                    ArchiveCopyExport.SaveCopy(options.CommonArchivePath, Yaz0.Compress(common.BuildU8()), commonOut);
                 else
                     throw new NotSupportedException(L.T("Kein geprüfter Hintergrund in diesem Archiv. Es wurde keine Ausgabedatei geschrieben.", "No verified background in this archive. No output file was written."));
                 summary.AppendLine(Path.GetFileName(options.CommonArchivePath) + ": " + commonDiagnostic);
@@ -3453,7 +3504,7 @@ namespace murumsWiiModStudio
                     anyAnimated |= languageAnimated;
                     string languageOut = SafeOutputPath(options.OutputFolder, languagePath);
                     if (languagePatched)
-                        SaveSzs(language, languageOut);
+                        ArchiveCopyExport.SaveCopy(languagePath, Yaz0.Compress(language.BuildU8()), languageOut);
                     else
                         summary.AppendLine(L.T("Zusätzliches Archiv unverändert; keine Ausgabekopie geschrieben.", "Additional archive unchanged; no output copy written."));
                     summary.AppendLine(Path.GetFileName(languagePath) + ": " + languageDiagnostic);
@@ -3484,10 +3535,11 @@ namespace murumsWiiModStudio
             diagnostic = "";
             List<FileRef> files = new List<FileRef>();
             CollectFiles(archive.Root, "", files);
-            if (options.ArchiveBaseName == "MenuSingle" || options.ArchiveBaseName == "MenuMulti" || options.ArchiveBaseName == "Title")
+            if (options.ArchiveBaseName == "MenuSingle" || options.ArchiveBaseName == "MenuMulti" || options.ArchiveBaseName == "Title" || options.ArchiveBaseName == "MenuOther")
             {
-                FileRef layout = FindExactSuffix(files, "/bg/blyt/bg.brlyt");
-                FileRef loop = FindExactSuffix(files, "/bg/anim/bg_Loop.brlan");
+                string stem = options.ArchiveBaseName == "MenuOther" ? "option_bg" : "bg";
+                FileRef layout = FindExactSuffix(files, "/bg/blyt/" + stem + ".brlyt");
+                FileRef loop = FindExactSuffix(files, "/bg/anim/" + stem + "_Loop.brlan");
                 FileRef existing = FindExactSuffix(files, "/bg/timg/ht_squareWhite_00.tpl");
                 if (optionalLanguage && layout == null && loop == null && existing == null)
                 {
@@ -3559,7 +3611,8 @@ namespace murumsWiiModStudio
 
         private static BackgroundCandidate FindBackgroundCandidate(List<FileRef> files, string archiveBaseName)
         {
-            FileRef exactLayout = FindExactSuffix(files, "/bg/blyt/bg.brlyt");
+            string stem = archiveBaseName == "MenuOther" ? "option_bg" : "bg";
+            FileRef exactLayout = FindExactSuffix(files, "/bg/blyt/" + stem + ".brlyt");
             FileRef exactTexture = FindExactSuffix(files, "/bg/timg/" + MenuBackgroundLayout.TextureName);
             if (exactLayout == null || exactTexture == null)
                 return null;
@@ -3579,7 +3632,7 @@ namespace murumsWiiModStudio
                             Brlyt = exactLayout,
                             Binding = binding,
                             TplInfo = TplTextureEditor.GetFirstImageInfo(exactTexture.Entry.Data),
-                            Brlan = FindExactSuffix(files, "/bg/anim/bg_Loop.brlan")
+                            Brlan = FindExactSuffix(files, "/bg/anim/" + stem + "_Loop.brlan")
                         };
             }
 

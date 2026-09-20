@@ -39,17 +39,22 @@ namespace murumsWiiModStudio
 
         public static byte[] Convert(byte[] input)
         {
+            return ReplacePicture(input, "line0", TextureName, true);
+        }
+
+        internal static byte[] ReplacePicture(byte[] input, string paneName, string textureName, bool fullScreen)
+        {
             BrlytDocument doc = BrlytDocument.FromBytes(input);
             if (doc.LittleEndian)
                 throw new InvalidDataException("Unsupported background byte order.");
             BrlytPaneInfo picture = null;
             foreach (var pane in doc.Panes)
-                if (pane.Name == "line0" && pane.Magic == "pic1")
+                if (pane.Name == paneName && pane.Magic == "pic1")
                     picture = pane;
             if (picture == null || picture.TexCoords.Count != 1 || picture.MaterialId < 0)
                 throw new InvalidDataException("Expected MenuBG line0 picture was not found.");
             var material = doc.Materials[picture.MaterialId];
-            if (material.Name != "line0" || material.Bindings.Count != 1)
+            if (material.Bindings.Count != 1)
                 throw new InvalidDataException("Unsupported MenuBG material.");
             int textureId = material.Bindings[0].TextureId;
             // An older export flattened line0 to Z=0 while its bg_null parent stayed at
@@ -58,12 +63,12 @@ namespace murumsWiiModStudio
             bool repairFlattenedDepth = doc.Textures[textureId] == TextureName && picture.Z == 0 && picture.Parent != null && picture.Parent.Name == "bg_null" && picture.Parent.Z == -999;
             if (repairFlattenedDepth)
                 picture.Z = 998;
-            doc.Textures[textureId] = TextureName;
+            doc.Textures[textureId] = textureName;
             foreach (var pane in doc.Panes)
             {
-                if (pane.Magic == "pic1")
+                if (fullScreen && pane.Magic == "pic1")
                     pane.Visible = pane == picture;
-                if (pane == picture)
+                if (fullScreen && pane == picture)
                 {
                     pane.X = pane.Y = pane.RotX = pane.RotY = pane.RotZ = 0;
                     pane.ScaleX = pane.ScaleY = 1;
@@ -107,7 +112,7 @@ namespace murumsWiiModStudio
 
             // A single texture with identity SRT and the SDK's default texture TEV setup.
             byte[] simple = new byte[0x5c];
-            Encoding.ASCII.GetBytes("line0").CopyTo(simple, 0);
+            Encoding.ASCII.GetBytes(material.Name).CopyTo(simple, 0);
             for (int i = 0; i < 8; i++)
                 U16(simple, 0x1c + i * 2, 255);
             for (int i = 0x2c; i < 0x3c; i++)

@@ -1,0 +1,59 @@
+﻿using System.IO;
+using System.Collections.Generic;
+namespace murumsWiiModStudio
+{
+    internal static class CharacterVehicleNames
+    {
+        static readonly Dictionary<string, string> Names = new Dictionary<string, string>
+        {
+            { "la_bike", "Flame Runner" },
+            { "la_kart", "Offroader" },
+            { "lb_bike", "Wario Bike" },
+            { "lb_kart", "Flame Flyer" },
+            { "lc_bike", "Shooting Star" },
+            { "lc_kart", "Piranha Prowler" },
+            { "ld_bike", "Spear" },
+            { "ld_kart", "Jetsetter" },
+            { "ldf_bike", "Standard Bike L" },
+            { "ldf_kart", "Standard Kart L" },
+            { "le_bike", "Phantom" },
+            { "le_kart", "Honeycoupe" },
+            { "ma_bike", "Mach Bike" },
+            { "ma_kart", "Classic Dragster" },
+            { "mb_bike", "Sugarscoot" },
+            { "mb_kart", "Wild Wing" },
+            { "mc_bike", "Zip Zip" },
+            { "mc_kart", "Super Blooper" },
+            { "md_bike", "Sneakster" },
+            { "md_kart", "Daytripper" },
+            { "mdf_bike", "Standard Bike M" },
+            { "mdf_kart", "Standard Kart M" },
+            { "me_bike", "Dolphin Dasher" },
+            { "me_kart", "Sprinter" },
+            { "sa_bike", "Bullet Bike" },
+            { "sa_kart", "Booster Seat" },
+            { "sb_bike", "Bit Bike" },
+            { "sb_kart", "Mini Beast" },
+            { "sc_bike", "Quacker" },
+            { "sc_kart", "Cheep Charger" },
+            { "sd_bike", "Magikruiser" },
+            { "sd_kart", "Tiny Titan" },
+            { "sdf_bike", "Standard Bike S" },
+            { "sdf_kart", "Standard Kart S" },
+            { "se_bike", "Jet Bubble" },
+            { "se_kart", "Blue Falcon" },
+        };
+        internal static string ShortLabel(string key)
+        {
+            string name;
+            return Names.TryGetValue(key, out name) ? name : key;
+        }
+        internal static string Label(string path)
+        {
+            string name = Path.GetFileNameWithoutExtension(path);
+            string code = name.Split('-')[0];
+            string label;
+            return (Names.TryGetValue(code, out label) ? label : code) + " · " + Path.GetFileName(path);
+        }
+    }
+}

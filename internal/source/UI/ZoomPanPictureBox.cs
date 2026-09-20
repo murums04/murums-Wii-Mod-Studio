@@ -48,6 +48,27 @@ namespace murumsWiiModStudio
             Invalidate();
         }
 
+        internal PointF ImagePoint(Point point)
+        {
+            CheckImage();
+            if (Image == null) return PointF.Empty;
+            float x = (point.X - offset.X) / zoom, y = (point.Y - offset.Y) / zoom;
+            var box = ClientRectangle;
+            box = new Rectangle(box.X + Padding.Left, box.Y + Padding.Top,
+                Math.Max(1, box.Width - Padding.Horizontal), Math.Max(1, box.Height - Padding.Vertical));
+            float width = Image.Width, height = Image.Height;
+            if (SizeMode == PictureBoxSizeMode.StretchImage) { width = box.Width; height = box.Height; }
+            else if (SizeMode == PictureBoxSizeMode.Zoom)
+            {
+                float fit = Math.Min(box.Width / width, box.Height / height);
+                width *= fit; height *= fit;
+            }
+            float left = box.Left, top = box.Top;
+            if (SizeMode == PictureBoxSizeMode.Zoom || SizeMode == PictureBoxSizeMode.CenterImage)
+            { left += (box.Width - width) / 2; top += (box.Height - height) / 2; }
+            return new PointF((x - left) * Image.Width / width, (y - top) * Image.Height / height);
+        }
+
         internal void ZoomAt(Point point, int delta)
         {
             CheckImage();
@@ -172,3 +193,4 @@ namespace murumsWiiModStudio
         }
     }
 }
+
