@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Collections.Generic;
 using System.Drawing.Drawing2D;
@@ -18,6 +18,7 @@ namespace murumsWiiModStudio
         internal bool EditGameJoints;
         internal CharacterModelImport ReferenceModel;
         internal float[][] AnimationPoints;
+        internal float[][] AnimationJoints;
         internal bool ShowWeights, Marking, ShowBones, EditJoints, BrushSelection, ReferencePose;
         internal bool ThroughSelection;
         internal int BrushRadius = 20;
@@ -99,6 +100,17 @@ namespace murumsWiiModStudio
             if (model != null)
             {
                 Focus();
+                if (AnimationJoints != null && e.Button == MouseButtons.Left)
+                {
+                    int joint = HitJoint(e.Location);
+                    if (joint >= 0)
+                    {
+                        SelectedBone = joint;
+                        if (BoneSelected != null) BoneSelected(this, EventArgs.Empty);
+                        Invalidate();
+                        return;
+                    }
+                }
                 if (((EditJoints && !ReferencePose) || EditGameJoints) && e.Button == MouseButtons.Left && model.Rig != null)
                 {
                     int joint = HitJoint(e.Location);
@@ -282,7 +294,7 @@ namespace murumsWiiModStudio
                     foreach (var face in ReferenceModel.Faces) g.DrawPolygon(outline, face.Select(i => referencePoints[i]).ToArray());
                 TextRenderer.DrawText(g, L.T("Blaues Gitter: Originalmodell (nur Hilfe)", "Blue wireframe: original model (reference only)"), Font, new Point(8, 30), Color.LightSkyBlue);
             }
-            if (model.Rig != null && ShowBones && AnimationPoints == null)
+            if (model.Rig != null && ShowBones && (AnimationPoints == null || AnimationJoints != null))
             {
                 Func<float[], PointF> projectBone = p => {
                     double x = (p[0] - ((double)min[0] + max[0]) / 2) * modelScale;
@@ -291,7 +303,7 @@ namespace murumsWiiModStudio
                     double rx = x * cy + z * sy, rz = -x * sy + z * cy;
                     return new PointF((float)(Width / 2.0 + pan.X + rx * fit * zoom), (float)(Height / 2.0 + pan.Y - (y * cp - rz * sp) * fit * zoom));
                 };
-                var positions = (GameContext > 0 ? model.Rig.GameJoints(GameContext) : model.Rig.BonePositions(SelectedBone, PoseDegrees, ReferencePose)).Select(projectBone).ToArray();
+                var positions = (AnimationJoints ?? (GameContext > 0 ? model.Rig.GameJoints(GameContext) : model.Rig.BonePositions(SelectedBone, PoseDegrees, ReferencePose))).Select(projectBone).ToArray();
                 ProjectedJoints = positions;
                 using (var bonePen = new Pen(Color.FromArgb(230, 185, 80), 2))
                 using (var boneBrush = new SolidBrush(Color.White))
@@ -309,9 +321,8 @@ namespace murumsWiiModStudio
                     using (var warning = new Pen(Color.Orange, 2))
                         foreach (var contact in model.Rig.MissedContacts(GameContext))
                         {
-                            int joint = Array.FindIndex(model.Rig.Bones, b => b.Name == contact.Joint);
                             var target = projectBone(contact.Target);
-                            var actual = positions[joint];
+                            var actual = projectBone(model.Rig.ContactPosition(GameContext, contact));
                             g.DrawLine(warning, actual, target);
                             g.DrawEllipse(warning, actual.X - 8, actual.Y - 8, 16, 16);
                             g.DrawLine(warning, target.X - 5, target.Y - 5, target.X + 5, target.Y + 5);

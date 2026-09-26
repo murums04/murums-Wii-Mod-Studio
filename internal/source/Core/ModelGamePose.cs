@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -16,6 +16,7 @@ namespace murumsWiiModStudio
         public float MotionStrength = 100;
         public bool NaturalHuman;
         public PoseContact[] Contacts;
+        public Dictionary<string, List<JointAnimationKey>> Animations;
     }
 
     internal sealed class RigPoseReference
@@ -27,7 +28,7 @@ namespace murumsWiiModStudio
         internal float Frame;
         internal int Frames;
         internal string[] Names, Parents, AvailableAnimations;
-        internal float[][] Matrices, Joints, Binds;
+        internal float[][] Matrices, Joints, Binds, Contacts;
         internal string Corrections;
         internal CharacterModelImport Visual;
 
@@ -46,6 +47,7 @@ namespace murumsWiiModStudio
                 Binds = nodes.Select(n => Numbers(n.GetAttribute("bind"))).ToArray(),
                 Matrices = nodes.Select(n => Numbers(n.GetAttribute("skin"))).ToArray(),
                 Joints = nodes.Select(n => Numbers(n.GetAttribute("joint"))).ToArray(),
+                Contacts = nodes.Select(n => n.HasAttribute("contact") ? Numbers(n.GetAttribute("contact")) : null).ToArray(),
                 Visual = visual ? CharacterModelImport.Load(preview) : null
             };
         }
@@ -148,6 +150,7 @@ namespace murumsWiiModStudio
                 node.SetAttribute("anchor", String.Join(" ", oldLocal.Select(v => v.ToString("R", CultureInfo.InvariantCulture))));
                 node.SetAttribute("matrix", String.Join(" ", RigMatrix.Multiply(newLocal, RigMatrix.Inverse(oldLocal)).Select(v => v.ToString("R", CultureInfo.InvariantCulture))));
             }
+            rig.AppendAnimationEdits(root, context);
             return new RigPoseReference { Names = Names, Parents = Parents, Binds = Binds, Template = Template, Animation = Animation, Frame = Frame, Frames = Frames,
                 Matrices = targetWorld.Select((m, i) => RigMatrix.Multiply(m, RigMatrix.Inverse(Binds[i]))).ToArray(), Joints = targetWorld.Select(m => new[] { m[3], m[7], m[11] }).ToArray(), Corrections = doc.OuterXml };
         }
@@ -161,7 +164,7 @@ namespace murumsWiiModStudio
             copy.targetWorldOverride = Names.Select((name, index) => {
                 if (!active[index]) return RigMatrix.Multiply(Matrices[index], Binds[index]);
                 int bone = Array.FindIndex(rig.Bones, b => b.Name == name);
-                int original = Array.IndexOf(standing.Names, name);
+                int original = bone < 0 ? -1 : standing.MatchBone(rig, bone);
                 if (bone >= 0) bone = rig.SharedBodyBone(bone);
                 if (bone < 0 || original < 0) throw new InvalidDataException("Menu vehicle skeleton differs from the selected character.");
                 return RigMatrix.Multiply(RigMatrix.Multiply(to[bone], RigMatrix.Inverse(from[bone])), standingWorld[original]);
@@ -195,14 +198,14 @@ namespace murumsWiiModStudio
             var originalWorld = Matrices.Select((m, i) => RigMatrix.Multiply(m, Binds[i])).ToArray();
             var local = new float[Names.Length][];
             var changes = new XmlDocument { XmlResolver = null }; changes.LoadXml(anchor.Corrections);
-            var changedNames = new HashSet<string>(changes.DocumentElement.ChildNodes.OfType<XmlElement>().Select(n => n.GetAttribute("name")));
+            var changedNames = new HashSet<string>(changes.DocumentElement.ChildNodes.OfType<XmlElement>().Where(n => n.Name == "bone").Select(n => n.GetAttribute("name")));
             for (int i = 0; i < Names.Length; i++)
             {
                 int parent = Array.IndexOf(Names, Parents[i]);
                 if (!changedNames.Contains(Names[i])) { local[i] = Binds[i]; continue; }
                 local[i] = parent < 0 ? originalWorld[i] : RigMatrix.Multiply(RigMatrix.Inverse(originalWorld[parent]), originalWorld[i]);
             }
-            var corrected = (float[][])StudioModelLibrary.Call("CorrectPose", anchor.Corrections, Names, local);
+            var corrected = (float[][])StudioModelLibrary.Call("CorrectAnimationPose", anchor.Corrections, Names, local, Animation, Frame - 1);
             var changed = Names.Select(changedNames.Contains).ToArray();
             for (int i = 0; i < Names.Length; i++)
             {
@@ -210,7 +213,9 @@ namespace murumsWiiModStudio
                 if (!changed[i]) { world[i] = InheritUnchangedWorld(i, changed, originalWorld, world); continue; }
                 world[i] = parent < 0 ? corrected[i] : RigMatrix.Multiply(world[parent], corrected[i]);
             }
-            return new RigPoseReference { Names = Names, Parents = Parents, Binds = Binds, Matrices = world.Select((m, i) => RigMatrix.Multiply(m, RigMatrix.Inverse(Binds[i]))).ToArray() };
+            return new RigPoseReference { Names = Names, Parents = Parents, Binds = Binds,
+                Joints = world.Select(m => new[] { m[3], m[7], m[11] }).ToArray(),
+                Matrices = world.Select((m, i) => RigMatrix.Multiply(m, RigMatrix.Inverse(Binds[i]))).ToArray() };
         }
         internal float[][] ForRig(ModelRig rig)
         {
@@ -302,11 +307,12 @@ namespace murumsWiiModStudio
                 throw new InvalidDataException("Invalid vehicle poses.");
             foreach (var settings in new[] { MenuPose, RacePose }.Concat(VehiclePoses == null ? Enumerable.Empty<GamePoseSettings>() : VehiclePoses.Values).Where(p => p != null))
             {
+                ValidateAnimationEdits(settings);
                 if (JointGuides == null || settings.Position != null && settings.Position.Any(v => Math.Abs(v) > 1000) || settings.Rotation != null && settings.Rotation.Any(v => Math.Abs(v) > 180) || settings.Joints == null || settings.Joints.Length != Bones.Length || settings.Joints.Any(p => !ValidGameVector(p))
                     || !ValidGameVector(settings.Position) || !ValidGameVector(settings.Rotation) || Single.IsNaN(settings.Scale) || Single.IsInfinity(settings.Scale) || settings.Scale < 1 || settings.Scale > 500
                     || Single.IsNaN(settings.MotionStrength) || Single.IsInfinity(settings.MotionStrength) || settings.MotionStrength < 0 || settings.MotionStrength > 100)
                     throw new InvalidDataException("Invalid game pose settings.");
-                if (settings.Contacts != null && (settings.Contacts.Length > 4 || settings.Contacts.Any(c => c == null || !ValidGameVector(c.Target) || !Bones.Any(b => b.Name == c.Joint))))
+                if (settings.Contacts != null && (settings.Contacts.Length > 4 || settings.Contacts.Any(c => c == null || !ValidGameVector(c.Target) || c.SourcePoint != null && !ValidGameVector(c.SourcePoint) || c.Direction != null && (!ValidGameVector(c.Direction) || Math.Abs(RigVector.Length(c.Direction) - 1) > .001 || c.SourcePoint == null) || !Bones.Any(b => b.Name == c.Joint))))
                     throw new InvalidDataException("Invalid vehicle contacts.");
             }
         }
@@ -343,7 +349,7 @@ namespace murumsWiiModStudio
         {
             var settings = GameSettings(context);
             if (settings == null) return AlignedGeometry(normals);
-            var mapped = MapGeometry(normals, settings.Joints);
+            var mapped = MapGeometry(normals, settings.Joints, context == 2 && settings.NaturalHuman, settings);
             return mapped.Select(p => TransformGamePoint(p, settings, normals, false)).ToArray();
         }
         internal float[][] GameExportGeometry(int context, bool normals, RigPoseReference reference)

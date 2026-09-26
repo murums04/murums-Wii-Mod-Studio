@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,7 +8,7 @@ namespace murumsWiiModStudio
 {
     internal static class CharacterModelConversion
     {
-        static void Convert(ModelRig rig, string template, string detailed, string destination, CancellationToken token, int context)
+        static void Convert(ModelRig rig, string template, string destination, CancellationToken token, int context)
         {
             bool edited = rig.GameSettings(context) != null;
             string animation = context == 1 ? "sel_wait" : "drive";
@@ -16,22 +16,28 @@ namespace murumsWiiModStudio
             var corrections = new System.Xml.XmlDocument { XmlResolver = null }; corrections.LoadXml("<corrections/>");
             string mainReference = Path.Combine(ModelRuntime.NewWorkFolder(), "reference.dae");
             StudioModelLibrary.Call("ExportModel", template, "model", mainReference);
+            int triangles = (int)StudioModelLibrary.Call("TriangleCount", template, "model");
+            int mainBudget = Math.Max(1500, Math.Min(4000, triangles * 2));
+            string detailed;
             if (edited)
             {
                 var anchor = RigPoseReference.Load(template, "model", animation, frame, false).Adjusted(rig, context);
                 corrections.LoadXml(anchor.Corrections);
-                detailed = rig.ExportDae(token, 6000, mainReference, context, anchor);
-                string copy = Path.Combine(rig.Folder, "game-main-" + context + ".dae");
-                File.Copy(detailed, copy, true); detailed = copy;
+                detailed = rig.ExportDae(token, mainBudget, mainReference, context, anchor);
             }
-            else detailed = rig.ExportDae(token, 6000, mainReference);
+            else detailed = rig.ExportDae(token, mainBudget, mainReference);
+            string copy = Path.Combine(rig.Folder, "game-main-" + context + ".dae");
+            File.Copy(detailed, copy, true);
+            detailed = copy;
             string lod = detailed;
             if (((string[])StudioModelLibrary.Call("Models", template)).Contains("model_lod"))
             {
                 string reference = Path.Combine(ModelRuntime.NewWorkFolder(), "reference.dae");
                 StudioModelLibrary.Call("ExportModel", template, "model_lod", reference);
                 var lodPose = edited ? RigPoseReference.Load(template, "model_lod", animation, frame, false).Adjusted(rig, context) : null;
-                lod = rig.ExportDae(token, 1500, reference, edited ? context : 0, lodPose);
+                int lodTriangles = (int)StudioModelLibrary.Call("TriangleCount", template, "model_lod");
+                int lodBudget = Math.Max(1000, Math.Min(1200, lodTriangles * 2));
+                lod = rig.ExportDae(token, lodBudget, reference, edited ? context : 0, lodPose);
                 if (edited)
                 {
                     var lodCorrections = new System.Xml.XmlDocument { XmlResolver = null }; lodCorrections.LoadXml(lodPose.Corrections);
@@ -59,11 +65,6 @@ namespace murumsWiiModStudio
                     sources.Add(relative, CharacterPackage.ReadAsset(source, character, slot));
                 }
             token.ThrowIfCancellationRequested();
-            string detailed = rig.ExportDae(token, 6000);
-            // Beide Detailstufen werden aus der korrigierten Zuordnung erzeugt.
-            string detailCopy = Path.Combine(rig.Folder, "rigged-main.dae");
-            File.Copy(detailed, detailCopy, true);
-
             string folder = ModelRuntime.NewWorkFolder();
             var result = new List<CharacterAsset>();
             foreach (string relative in required)
@@ -78,7 +79,7 @@ namespace murumsWiiModStudio
                 string destination = Path.Combine(folder, relative.Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(destination));
                 if (relative.EndsWith(".brres", StringComparison.OrdinalIgnoreCase))
-                    Convert(rig, edited ? originalPath : source.Source, detailCopy, destination, token, 1);
+                    Convert(rig, edited ? originalPath : source.Source, destination, token, 1);
                 else
                 {
                     var archive = new StudioArchiveCopy(source.Source, source.Data);
@@ -100,7 +101,7 @@ namespace murumsWiiModStudio
                         reference.VehicleCode = key;
                         vehicleRig = rig.ForVehicle(key, reference);
                     }
-                    Convert(vehicleRig, template, detailCopy, converted, token, 2);
+                    Convert(vehicleRig, template, converted, token, 2);
                     drivers[0].Value.Data = File.ReadAllBytes(converted);
                     File.WriteAllBytes(destination, archive.Build());
                 }

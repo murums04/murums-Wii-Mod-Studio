@@ -28,6 +28,7 @@ namespace murumsWiiModStudio.Setup
             "internal/model/OpenTK.dll",
             "internal/model/StudioModelCodec.dll",
             "internal/model/assimp-vc143-mt.dll",
+            "internal/model/meshoptimizer.dll",
             "internal/model/blender-5.2.2-windows-x64.zip",
             "internal/model/notices/ASSIMP-LICENSE.txt",
             "internal/model/notices/BLENDER-COPYRIGHT.txt",
@@ -35,9 +36,11 @@ namespace murumsWiiModStudio.Setup
             "internal/model/notices/GPL-2.0-or-later.txt",
             "internal/model/notices/GPL-3.0-or-later.txt",
             "internal/model/notices/OPENTK-LICENSE.txt",
+            "internal/model/notices/MESHOPTIMIZER-LICENSE.txt",
             "internal/model/sources/StudioModelCodec.cs",
             "internal/model/sources/blender-5.2.2.tar.xz",
-            "internal/model/sources/brawllib-studio-source.zip"
+            "internal/model/sources/brawllib-studio-source.zip",
+            "internal/model/sources/meshoptimizer-1.0.zip"
         };
         internal static string ValidateRoot(string directory)
         {

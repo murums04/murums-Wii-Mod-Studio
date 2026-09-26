@@ -75,7 +75,7 @@ namespace murumsWiiModStudio
             var autoStep = new Button { Name = "AssignStep", Text = L.T("2 · Automatisch zuordnen", "2 · Assign automatically"), Dock = DockStyle.Fill };
             var gameStep = new Button { Name = "GamePoseStep", Text = L.T("3 · Spielhaltung bearbeiten", "3 · Edit game pose"), Dock = DockStyle.Fill };
             gameStep.Click += delegate { mode.SelectedIndex = 4; };
-            var checkStep = new Button { Name = "CheckMovementStep", Text = L.T("4 · Bewegung prüfen", "4 · Check movement"), Dock = DockStyle.Fill };
+            var checkStep = new Button { Name = "CheckMovementStep", Text = L.T("4 · Bewegung bearbeiten", "4 · Edit movement"), Dock = DockStyle.Fill };
             placeStep.Click += delegate { mode.SelectedIndex = 0; };
             autoStep.Click += delegate { PushUndo(); if (Reassign()) mode.SelectedIndex = 4; };
             checkStep.Click += delegate { mode.SelectedIndex = 3; };
@@ -88,7 +88,7 @@ namespace murumsWiiModStudio
             work.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var controls = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(2) };
             controls.Controls.Add(new Label { Tag = "GameHide", Text = L.T("Werkzeug", "Tool"), AutoSize = true });
-            mode.Items.AddRange(new object[] { L.T("1 · Gelenke verschieben", "1 · Move joints"), L.T("Korrektur · Pinsel", "Correction · Brush"), L.T("Korrektur · Rechteck", "Correction · Rectangle"), L.T("4 · Bewegung prüfen", "4 · Check movement"), L.T("3 · Spielhaltung bearbeiten", "3 · Edit game pose") });
+            mode.Items.AddRange(new object[] { L.T("1 · Gelenke verschieben", "1 · Move joints"), L.T("Korrektur · Pinsel", "Correction · Brush"), L.T("Korrektur · Rechteck", "Correction · Rectangle"), L.T("4 · Bewegung bearbeiten", "4 · Edit movement"), L.T("3 · Spielhaltung bearbeiten", "3 · Edit game pose") });
             controls.Controls.Add(mode);
             controls.Controls.Add(help);
             controls.Controls.Add(new Label { Tag = "GameHide", Text = L.T("Körperteil · links/rechts aus Sicht der Figur", "Body part · left/right from the figure's view"), AutoSize = true, MaximumSize = new Size(232, 0) });
@@ -116,6 +116,7 @@ namespace murumsWiiModStudio
             }
             gameControls = CreateGameControls();
             controls.Controls.Add(gameControls);
+            controls.Controls.Add(CreateAnimationEditor());
             controls.Controls.Add(referencePose);
             controls.Controls.Add(weights);
             var brushRow = new FlowLayoutPanel { AutoSize = true, Width = 232 };
@@ -169,6 +170,8 @@ namespace murumsWiiModStudio
             scene.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var motionBar = new FlowLayoutPanel { Name = "MotionControls", Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Visible = false };
             motionBar.Controls.Add(gameAnimation); motionBar.Controls.Add(play); motionBar.Controls.Add(pose);
+            motionBar.Controls.Add(new Label { Text = L.T("Bild", "Frame"), AutoSize = true, Margin = new Padding(3, 10, 3, 3) });
+            motionBar.Controls.Add(animationFrame);
             gameAnimation.SelectedIndexChanged += delegate { ChangeAnimation(); };
             play.Margin = new Padding(5, 10, 5, 3);
             scene.Controls.Add(motionBar, 0, 3);
@@ -216,10 +219,10 @@ namespace murumsWiiModStudio
             };
             referencePose.CheckedChanged += delegate { preview.ReferencePose = referencePose.Checked; preview.Invalidate(); };
             weights.CheckedChanged += delegate { preview.ShowWeights = weights.Checked; preview.Invalidate(); };
-            play.CheckedChanged += delegate { timer.Enabled = play.Checked; if (!play.Checked) pose.Value = preview.GameContext > 0 && ActiveReference != null ? Math.Min(pose.Maximum, (int)ActiveReference.Frame - 1) : 0; };
+            play.CheckedChanged += delegate { timer.Enabled = play.Checked; RefreshKeyEditor(); };
             timer.Tick += delegate { if (preview.GameContext > 0 && ActiveReference != null) { pose.Value = pose.Value >= pose.Maximum ? pose.Minimum : pose.Value + 1; } else { phase += .2; pose.Value = (int)(Math.Sin(phase) * 40); } };
             pose.ValueChanged += delegate { if (preview.GameContext > 0 && ActiveReference != null && mode.SelectedIndex == 3) RefreshAnimation(); else preview.PoseDegrees = pose.Value; preview.Invalidate(); };
-            bone.SelectedIndexChanged += delegate { preview.SelectedBone = SelectedBoneIndex; pose.Value = 0; preview.Invalidate(); };
+            bone.SelectedIndexChanged += delegate { preview.SelectedBone = SelectedBoneIndex; if (mode.SelectedIndex != 3) pose.Value = 0; RefreshKeyEditor(); preview.Invalidate(); };
             preview.BoneSelected += delegate { SelectBone(preview.SelectedBone); };
             preview.JointMoveStarted += delegate { PushUndo(); };
             preview.JointMoved += delegate { if (preview.EditGameJoints) { preview.AnimationPoints = null; ShowContactStatus(); } else Reassign(); };

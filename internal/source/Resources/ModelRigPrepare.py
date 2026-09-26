@@ -1,6 +1,8 @@
 import bpy
+import bmesh
 import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import json
 import math
 import re
@@ -108,25 +110,121 @@ if os.path.splitext(source)[1].lower() == '.obj':
 else:
     # DAE-Zwischenkopien enthalten getrennte UV-Eckpunkte; vor dem Vereinfachen wieder verbinden.
     merge_vertices = sys.argv[sys.argv.index('--') + 6:] == ['merge']
-    bpy.ops.import_scene.gltf(filepath=source, merge_vertices=merge_vertices)
+    # Die in glTF gespeicherte Haltung verwenden; geratene Bindeposen koennen mehrere Rigs verzerren.
+    bpy.ops.import_scene.gltf(filepath=source, merge_vertices=merge_vertices, guess_original_bind_pose=False)
 armatures = [o for o in bpy.context.scene.objects if o.type == 'ARMATURE']
 for armature in armatures:
     armature.data.pose_position = 'REST'
 bpy.context.view_layer.update()
-objects = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+objects = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.visible_get()]
 if not objects:
     raise ValueError('The source contains no meshes.')
+
+# Gemischte Grundfarben (etwa Textur mal Vertexfarbe) in der Arbeitskopie backen.
+for obj in objects:
+    complex_materials = []
+    for material in obj.data.materials:
+        if not material or not material.use_nodes:
+            continue
+        shader = next((n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if shader and shader.inputs['Base Color'].links:
+            color_socket = shader.inputs['Base Color']
+            if color_socket.links[0].from_node.type != 'TEX_IMAGE':
+                complex_materials.append((material, color_socket))
+    if not complex_materials:
+        continue
+    if not obj.data.uv_layers:
+        raise ValueError('The coloured surface needs a UV map before importing: ' + obj.name)
+    # Gemeinsam verwendete Materialien duerfen keine Farben eines anderen Objekts uebernehmen.
+    complex_materials = []
+    for slot in obj.material_slots:
+        if slot.material is None:
+            continue
+        slot.material = slot.material.copy()
+        material = slot.material
+        material.use_nodes = True
+        shader = next((n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if shader is None:
+            shader = next((n for n in material.node_tree.nodes if n.type == 'EMISSION'), None)
+        if shader is None:
+            raise ValueError('Unsupported base colour shader: ' + material.name)
+        complex_materials.append((material, shader.inputs['Color' if shader.type == 'EMISSION' else 'Base Color']))
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.context.scene.render.engine = 'CYCLES'
+    bpy.context.scene.cycles.samples = 1
+    bpy.context.scene.render.bake.margin = 4
+    prepared = []
+    for material, color_socket in complex_materials:
+        nodes, links = material.node_tree.nodes, material.node_tree.links
+        output_node = next(n for n in nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output)
+        old_surface = output_node.inputs['Surface'].links[0].from_socket
+        original_color = color_socket.links[0].from_socket if color_socket.links else None
+        texture_sizes = [max(n.image.size) for n in nodes if n.type == 'TEX_IMAGE' and n.image]
+        colour_varies = any(len({tuple(c.color) for c in a.data}) > 1 for a in obj.data.color_attributes)
+        resolution = min(1024, max(texture_sizes)) if texture_sizes else (256 if colour_varies else 4)
+        image = bpy.data.images.new('Studio base colour', width=resolution, height=resolution, alpha=True)
+        image.generated_color = (0, 0, 0, 1)
+        target = nodes.new('ShaderNodeTexImage')
+        target.image = image
+        nodes.active = target
+        emission = nodes.new('ShaderNodeEmission')
+        if original_color:
+            links.new(original_color, emission.inputs['Color'])
+        else:
+            emission.inputs['Color'].default_value = color_socket.default_value
+        links.new(emission.outputs[0], output_node.inputs['Surface'])
+        prepared.append((nodes, links, output_node, old_surface, color_socket, target, emission))
+    bpy.ops.object.bake(type='EMIT', use_clear=True)
+    for nodes, links, output_node, old_surface, color_socket, target, emission in prepared:
+        target.image.pack()
+        links.new(old_surface, output_node.inputs['Surface'])
+        links.new(target.outputs['Color'], color_socket)
+        nodes.remove(emission)
+    print('Baked source colours:', obj.name, len(prepared))
+
 original_triangles = sum(sum(len(p.vertices) - 2 for p in obj.data.polygons) for obj in objects)
+convert = Matrix(((1,0,0),(0,0,1),(0,-1,0)))
+binding_points, binding_faces = [], []
+if limit > 6000 and original_triangles > 6000:
+    # Die bewährte grobe Bindefläche unabhängig von sichtbaren Gesichtsdetails erhalten.
+    # glTF-Meshbloecke vor der Vereinfachung verbinden, sonst entstehen Loecher.
+    proxy_mesh = bpy.data.meshes.new('Studio binding surface')
+    proxy_vertices, proxy_polygons = [], []
+    for obj in objects:
+        offset = len(proxy_vertices)
+        proxy_vertices.extend(convert @ (obj.matrix_world @ vertex.co) for vertex in obj.data.vertices)
+        proxy_polygons.extend([offset + v for v in polygon.vertices] for polygon in obj.data.polygons)
+    proxy_mesh.from_pydata(proxy_vertices, [], proxy_polygons)
+    proxy = bpy.data.objects.new('Studio binding surface', proxy_mesh)
+    bpy.context.collection.objects.link(proxy)
+    surface = bmesh.new()
+    surface.from_mesh(proxy_mesh)
+    span = max(max(p[a] for p in proxy_vertices) - min(p[a] for p in proxy_vertices) for a in range(3))
+    bmesh.ops.remove_doubles(surface, verts=list(surface.verts), dist=max(span * .000001, 1e-9))
+    bmesh.ops.recalc_face_normals(surface, faces=list(surface.faces))
+    surface.to_mesh(proxy_mesh)
+    surface.free()
+    bpy.context.view_layer.objects.active = proxy
+    decimate = proxy.modifiers.new('Studio binding surface', 'DECIMATE')
+    decimate.ratio = max(.001, 6000 / original_triangles)
+    bpy.ops.object.modifier_apply(modifier=decimate.name)
+    proxy.data.calc_loop_triangles()
+    binding_points = [vertex.co.copy() for vertex in proxy.data.vertices]
+    binding_faces = [list(triangle.vertices) for triangle in proxy.data.loop_triangles]
+    proxy_mesh = proxy.data
+    bpy.data.objects.remove(proxy, do_unlink=True)
+    bpy.data.meshes.remove(proxy_mesh)
 for obj in objects:
     bpy.context.view_layer.objects.active = obj
-    if limit > 0 and original_triangles > limit:
+    if original_triangles > 200000:
         if obj.data.shape_keys:
             obj.shape_key_clear()
         decimate = obj.modifiers.new('Studio preview optimization', 'DECIMATE')
-        decimate.ratio = max(0.01, limit / original_triangles)
+        decimate.ratio = max(0.01, 199000 / original_triangles)
         bpy.ops.object.modifier_apply(modifier=decimate.name)
     obj.data.calc_loop_triangles()
-convert = Matrix(((1,0,0),(0,0,1),(0,-1,0)))
 positions = [convert @ (obj.matrix_world @ vertex.co) for obj in objects for vertex in obj.data.vertices]
 minimum = [min(p[i] for p in positions) for i in range(3)]
 maximum = [max(p[i] for p in positions) for i in range(3)]
@@ -137,6 +235,7 @@ factor = rr_height / height * size_percent / 100
 shift = Vector(((rr_min[0] + rr_max[0]) / 2 - (minimum[0] + maximum[0]) / 2 * factor,
                 rr_min[1] - minimum[1] * factor,
                 (rr_min[2] + rr_max[2]) / 2 - (minimum[2] + maximum[2]) / 2 * factor))
+binding_points = [list(point * factor + shift) for point in binding_points]
 # Benannte menschliche Quell-Rigs samt Gewichten erhalten.
 def human_bone(name):
     if name in bone_names and not name.startswith('pcd_'):
@@ -165,6 +264,8 @@ def human_bone(name):
 
 source_maps = {}
 source_guides = {}
+# Das tragende Koerper-Rig bestimmt die Gelenke, nicht ein zuerst importiertes Zubehoer-Rig.
+armatures.sort(key=lambda rig: sum(len(obj.data.vertices) for obj in objects if obj.find_armature() == rig), reverse=True)
 for armature in armatures:
     direct = {bone.name: human_bone(bone.name) for bone in armature.data.bones}
     required = ['arm_l1','arm_l2','wrist_l1','arm_r1','arm_r2','wrist_r1',
@@ -196,18 +297,27 @@ def material_index(material):
         color = list(material.diffuse_color)
         if material.use_nodes:
             bsdf = next((n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+            if bsdf is None:
+                bsdf = next((n for n in material.node_tree.nodes if n.type == 'EMISSION'), None)
             if bsdf:
-                color = list(bsdf.inputs['Base Color'].default_value)
-                links = bsdf.inputs['Base Color'].links
+                color_input = bsdf.inputs['Color' if bsdf.type == 'EMISSION' else 'Base Color']
+                color = list(color_input.default_value)
+                links = color_input.links
                 image_node = links[0].from_node if links else None
                 if image_node and image_node.type == 'TEX_IMAGE' and image_node.image:
+                    if not len(image_node.image.pixels):
+                        adjacent = os.path.join(os.path.dirname(source), os.path.basename(image_node.image.filepath))
+                        if not os.path.isfile(adjacent):
+                            raise ValueError('Missing texture: ' + image_node.image.filepath)
+                        image_node.image.filepath = adjacent
+                        image_node.image.reload()
                     image_key = image_node.image.name
                     if image_key in saved_textures:
                         texture = saved_textures[image_key]
                     else:
                         image = image_node.image.copy()
-                        if max(image.size) > 512:
-                            ratio = 512 / max(image.size)
+                        if max(image.size) > 1024:
+                            ratio = 1024 / max(image.size)
                             image.scale(max(1, round(image.size[0] * ratio)), max(1, round(image.size[1] * ratio)))
                         texture = 'studio_tex_' + str(len(saved_textures)) + '.png'
                         image.filepath_raw = os.path.join(output, texture)
@@ -278,10 +388,15 @@ for obj in objects:
 result = {'Points':points,'Normals':normals,'Uvs':uvs,'Faces':faces,'FaceMaterials':face_materials,
           'Materials':materials,'Bones':bones,'BoneIndices':bone_indices,'BoneWeights':bone_weights,
           'ReferenceHeight':rr_height,'OriginalTriangles':original_triangles,'SizePercent':size_percent}
+if binding_points:
+    result['BindingProxyPoints'] = binding_points
+    result['BindingProxyFaces'] = binding_faces
 if source_guides:
     result['SourceJointGuides'] = source_guides
     result['SourceBoneIndices'] = bone_indices
     result['SourceBoneWeights'] = bone_weights
+from ModelMeshOptimize import simplify
+simplify(result, limit, output)
 with open(os.path.join(output, 'rig.json'), 'w', encoding='utf-8') as stream:
     json.dump(result, stream, separators=(',',':'), allow_nan=False)
-print('Studio model prepared:', len(points), 'vertices,', len(faces), 'triangles,', len(bones), 'bones')
+print('Studio model prepared:', len(result['Points']), 'vertices,', len(result['Faces']), 'triangles,', len(bones), 'bones')

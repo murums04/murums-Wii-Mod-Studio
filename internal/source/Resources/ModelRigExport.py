@@ -1,12 +1,13 @@
 import sys
 import json
 import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import copy
 import xml.etree.ElementTree as E
 from mathutils import Matrix, Vector
 import math
 
-def compact_weight_mixes(data, budget=2048):
+def compact_weight_mixes(data, budget=512):
     vertices = []
     for bones, weights in zip(data['BoneIndices'], data['BoneWeights']):
         grouped = {}
@@ -23,7 +24,7 @@ def compact_weight_mixes(data, budget=2048):
         return 0
 
     # Nahezu gleiche Mischungen teilen Wii-Matrizen; die editierbaren Gewichte bleiben unverändert.
-    for steps in (4096, 2048, 1024, 512, 256, 128, 64):
+    for steps in (64, 32, 16, 8):
         rounded = []
         for entries in vertices:
             raw = [weight * steps for _, weight in entries]
@@ -33,7 +34,9 @@ def compact_weight_mixes(data, budget=2048):
             for index in order[:remaining]:
                 ticks[index] += 1
             rounded.append(tuple((bone, tick) for (bone, _), tick in zip(entries, ticks) if tick))
-        if len(set(rounded)) <= budget:
+        if len(set(rounded)) <= budget or steps == 8:
+            if len(set(rounded)) + len(data['Bones']) > 2048:
+                raise ValueError('Too many distinct bone-weight combinations for the Wii matrix budget.')
             data['BoneIndices'] = [[bone for bone, _ in entries] for entries in rounded]
             data['BoneWeights'] = [[tick / steps for _, tick in entries] for entries in rounded]
             print('Wii matrix mixes:', len(set(rounded)), 'weight grid:', steps)
@@ -57,89 +60,6 @@ for index in sorted(set(data['FaceMaterials'])):
     material_aliases[index] = canonical_materials[key]
 data['FaceMaterials'] = [material_aliases[index] for index in data['FaceMaterials']]
 used_materials = set(data['FaceMaterials'])
-
-if limit > 0 and len(data['Faces']) > limit:
-    import bpy
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    grouped_faces = {index: [] for index in used_materials}
-    for face, material in zip(data['Faces'], data['FaceMaterials']):
-        grouped_faces[material].append(face)
-    minimum = {index: min(48, len(faces)) for index, faces in grouped_faces.items()}
-    if sum(minimum.values()) > limit:
-        raise ValueError('Too many material regions for the Wii detail budget.')
-    remaining = limit - sum(minimum.values())
-    excess = sum(len(faces) - minimum[index] for index, faces in grouped_faces.items())
-    budgets = {index: minimum[index] + int(remaining * (len(faces) - minimum[index]) / max(1, excess))
-               for index, faces in grouped_faces.items()}
-    result = {name: [] for name in ['Points', 'Normals', 'Uvs', 'Faces',
-                                  'FaceMaterials', 'BoneIndices', 'BoneWeights']}
-    for material, faces in grouped_faces.items():
-        # Geometrisch gleiche Eckpunkte verbinden; verschiedene Gewichte bleiben getrennt.
-        welded = {}
-        originals = []
-        source_to_local = {}
-        for vertex in sorted({vertex for face in faces for vertex in face}):
-            key = (tuple(round(value, 6) for value in data['Points'][vertex]),
-                   tuple(sorted((bone, round(weight, 6)) for bone, weight in
-                                zip(data['BoneIndices'][vertex], data['BoneWeights'][vertex]))))
-            if key not in welded:
-                welded[key] = len(originals)
-                originals.append(vertex)
-            source_to_local[vertex] = welded[key]
-        mesh = bpy.data.meshes.new('Studio material detail')
-        mesh.from_pydata([data['Points'][vertex] for vertex in originals], [],
-                         [[source_to_local[vertex] for vertex in face] for face in faces])
-        obj = bpy.data.objects.new('Studio material detail', mesh)
-        bpy.context.collection.objects.link(obj)
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        uv_layer = mesh.uv_layers.new(name='UV0')
-        for polygon, source_face in zip(mesh.polygons, faces):
-            polygon.use_smooth = True
-            for loop_index, source_vertex in zip(polygon.loop_indices, source_face):
-                uv_layer.data[loop_index].uv = data['Uvs'][source_vertex]
-        for bone in data['Bones']:
-            obj.vertex_groups.new(name=bone['Name'])
-        for vertex, original in enumerate(originals):
-            for bone, weight in zip(data['BoneIndices'][original], data['BoneWeights'][original]):
-                obj.vertex_groups[bone].add([vertex], weight, 'REPLACE')
-        if len(faces) > budgets[material]:
-            modifier = obj.modifiers.new('Studio material detail', 'DECIMATE')
-            modifier.ratio = max(0.001, (budgets[material] - 8) / len(faces))
-            bpy.ops.object.modifier_apply(modifier=modifier.name)
-        mesh = obj.data
-        mesh.calc_loop_triangles()
-        if not mesh.loop_triangles:
-            raise ValueError('A material region disappeared during detail optimization.')
-        cache = {}
-        for triangle in mesh.loop_triangles:
-            face = []
-            for loop_index in triangle.loops:
-                loop = mesh.loops[loop_index]
-                vertex = mesh.vertices[loop.vertex_index]
-                uv = tuple(mesh.uv_layers.active.data[loop_index].uv)
-                normal = tuple(loop.normal)
-                key = (vertex.index, uv, normal)
-                if key not in cache:
-                    cache[key] = len(result['Points'])
-                    result['Points'].append(list(vertex.co))
-                    result['Normals'].append(list(normal))
-                    result['Uvs'].append(list(uv))
-                    weights = sorted([(group.group, group.weight) for group in vertex.groups
-                                      if group.weight > 0], key=lambda value: value[1], reverse=True)[:4]
-                    if not weights:
-                        raise ValueError('A distance-model vertex lost its assignment.')
-                    total = sum(weight for _, weight in weights)
-                    result['BoneIndices'].append([bone for bone, _ in weights])
-                    result['BoneWeights'].append([weight / total for _, weight in weights])
-                face.append(cache[key])
-            result['Faces'].append(face)
-            result['FaceMaterials'].append(material)
-        bpy.data.objects.remove(obj, do_unlink=True)
-        bpy.data.meshes.remove(mesh)
-    data.update(result)
-    if len(data['Faces']) > limit * 1.1:
-        raise ValueError('Distance-model optimization could not reach the requested budget.')
 
 ref = E.parse(reference).getroot()
 for node in ref.iter():
@@ -201,8 +121,35 @@ if [bone['Name'] for bone in reference_bones] != [bone['Name'] for bone in data[
         data['BoneWeights'][vertex] = list(grouped.values())
 data['Bones'] = reference_bones
 
+skin = data.pop('ExportSkinMatrices', None)
+matrices = ([Matrix([skin[b['Name']][i:i+4] for i in range(0, 16, 4)])
+             for b in data['Bones']] if skin else None)
+
+def skin_matrix(vertex):
+    result = Matrix(((0.0,) * 4,) * 4)
+    for bone, weight in zip(data['BoneIndices'][vertex], data['BoneWeights'][vertex]):
+        result += matrices[bone] * weight
+    return result
+
+# In der sichtbaren Haltung vereinfachen, erst danach in die RR-Bindepose zurueckrechnen.
+if matrices:
+    for vertex in range(len(data['Points'])):
+        matrix = skin_matrix(vertex)
+        data['Points'][vertex] = list((matrix @ Vector(data['Points'][vertex]).to_4d()).to_3d())
+        data['Normals'][vertex] = list((matrix.to_3x3().inverted().transposed() @ Vector(data['Normals'][vertex])).normalized())
+
+if limit > 0:
+    from ModelMeshOptimize import simplify
+    simplify(data, limit, os.path.dirname(source), distant=limit < 1500)
+
 # Gelenke und Gewichtsmischungen teilen denselben Wii-Matrixvorrat.
-compact_weight_mixes(data, 2048 - len(data["Bones"]))
+compact_weight_mixes(data, min(512, 2048 - len(data["Bones"])))
+
+if matrices:
+    for vertex in range(len(data['Points'])):
+        matrix = skin_matrix(vertex)
+        data['Points'][vertex] = list((matrix.inverted() @ Vector(data['Points'][vertex]).to_4d()).to_3d())
+        data['Normals'][vertex] = list((matrix.to_3x3().transposed() @ Vector(data['Normals'][vertex])).normalized())
 
 root = E.Element('COLLADA', {'xmlns':'http://www.collada.org/2005/11/COLLADASchema','version':'1.4.1'})
 def node(parent, tag, text=None, **attributes):

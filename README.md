@@ -1,7 +1,7 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
 A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta4**. Developed by murums with AI assistance.
+Current release: **2.1.0-beta5**. Developed by murums with AI assistance.
 
 ## Features
 
@@ -11,7 +11,7 @@ Current release: **2.1.0-beta4**. Developed by murums with AI assistance.
 - Fonts and messages: selectable menu/HUD fonts, Unicode character checks, symbol editing and RR game text support.
 - Backgrounds and animation: menu backgrounds, GIF import and BRLAN editing.
 - Audio and projects: WAV loop preview, theme projects and supporting workflows.
-- Character Builder: replace installed RR variants, import GLB/glTF/BLEND/USDZ/DAE/OBJ models, review body assignment and edit menu/driving poses. Export a flat Character replacement files folder for your custom pack.
+- Character Builder: replace installed RR variants, import GLB/glTF/BLEND/USDZ/DAE/OBJ models, review body assignment, edit menu/driving poses and customize individual movements with keyframes. Export a flat Character replacement files folder for your custom pack.
 - Race Effects: grouped categories including slipstream, texture previews and colour editing.
 - Pack Workshop and Mod Merge: inspect pack changes, keep snapshots and resolve archive conflicts.
 - Integrated help, previews and optional external tools.
@@ -20,7 +20,7 @@ Some workflows require optional tools or original game resources. Previews appro
 
 ## Install
 
-Download **murums Wii Mod Studio.exe** from [Releases](https://github.com/murums04/murums-Wii-Mod-Studio/releases).
+Download **murums.Wii.Mod.Studio.exe** from [Releases](https://github.com/murums04/murums-Wii-Mod-Studio/releases).
 
 1. Run it and choose an empty installation folder.
 2. Select optional tools. Only Wiimms tools are preselected; uncheck all for Studio alone.
@@ -42,7 +42,7 @@ Game files are not included. The installer bundles the model runtime components 
 
 Choose your custom pack and the installed RR variant to replace. In Character Builder, use **Load model → Pose & movement → Export character**. Open saved `.murcharacter` work with **Open project**.
 Copy the contents of `MUR_EDITED/Character replacement files` into your custom-pack root, then relaunch the enabled pack.
-Automatic binding is a starting point: unusual anatomy, disconnected meshes or strongly posed unrigged models can require manual corrections. Not every model, vehicle or animation has been tested in-game.
+Automatic binding is a starting point. Strongly posed unrigged models and some RR skeletons are not yet handled reliably; Baby Daisy and King Boo remain unsupported by the tested automatic export path. Closed finger grips and performance with multiple imported characters still need further work. Not every model, vehicle or animation has been tested in-game.
 
 ## Build
 
@@ -52,7 +52,7 @@ Use Windows PowerShell and the .NET Framework C# compiler at
 From the repository root:
 
     .\internal\build.ps1
-    .\internal\build-setup.ps1 -OutputPath "$PWD\dist\murums Wii Mod Studio.exe"
+    .\internal\build-setup.ps1 -OutputPath "$PWD\dist\murums.Wii.Mod.Studio.exe"
 
 The first command builds the editor under internal/build.
 The second builds the downloadable installer/launcher under dist.

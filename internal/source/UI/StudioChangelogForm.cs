@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Text.RegularExpressions;
@@ -113,12 +113,14 @@ namespace murumsWiiModStudio
 
         private static string CurrentHeading()
         {
-            return L.T("2.1.0-beta4 — Release", "2.1.0-beta4 — Release");
+            return L.T("2.1.0-beta5 — Release", "2.1.0-beta5 — Release");
         }
 
         internal static string HistoryText()
         {
             return CurrentHeading() + "\n\n" + L.T(
+                "• Installer: vollständiges Updatepaket mit Modelloptimierung akzeptieren; Paketinhalt beim Erstellen prüfen.\n\n• Character Builder: sparsamere Spielmodelle mit erhaltenen Gesichts- und Kleidungsdetails; Exportbeleuchtung, gemischte Materialfarben und glTF/USDZ-Import korrigiert. Stabilere Körperbindung bei geteilten Meshes; sichtbare Peach-Gelenke auch in der Fahrzeugauswahl korrekt übernehmen. Fahrhaltungen erhalten das Volumen gebeugter Gliedmaßen; tiefere Ellbogen, Handflächen am Griff und eigene Kontaktpunkte für die Fahrzeugauswahl. Einzelne Menü-/Fahrzeugbewegungen mit Schlüsselbildern bearbeiten und exportieren. Ungewöhnliche Ausgangsposen und einzelne RR-Skelette bleiben eingeschränkt. Fingergriff und Leistung mit mehreren importierten Figuren sind noch nicht abschließend geprüft.\n\n",
+                "• Installer: accept the complete update package with model optimization; verify package contents during packaging.\n\n• Character Builder: lighter game models with preserved face and clothing details; corrected export lighting, mixed material colours and glTF/USDZ import. More stable binding of split meshes; correctly use visible Peach joints in vehicle selection. Driving poses preserve bent limb volume, lower the elbows and align palms with grips; vehicle selection uses its own contact points. Edit and export individual menu/vehicle movements with keyframes. Unusual starting poses and some RR skeletons remain limited. Closed finger grips and performance with multiple imported characters are not yet fully verified.\n\n") + "2.1.0-beta4 — Release\n\n" + L.T(
                 "• Font Tool: geprüfte Schriftbereiche, Archivauswahl korrigiert, sichere Abstände und Textfeld-Vergleich.\n\n"
                 + "• RR-Effekte: getrennte Kategorien inklusive Windschatten, Originalfarben, echte Texturmuster und MUR_EDITED-Export.\n\n"
                 + "• Pack-Werkstatt: Prüfbericht, geprüfte Projektstände und getrenntes Dolphin-Testprofil.\n\n"

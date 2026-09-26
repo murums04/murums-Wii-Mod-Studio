@@ -9,6 +9,8 @@ namespace murumsWiiModStudio
     {
         public string Joint;
         public float[] Target;
+        public float[] SourcePoint;
+        public float[] Direction;
     }
 
     internal sealed partial class ModelRig
@@ -38,19 +40,19 @@ namespace murumsWiiModStudio
             if (RigVector.Length(across) < .9) across = new[] { 1f, 0f, 0f };
             var forward = RigVector.Cross(across, new[] { 0f, 1f, 0f });
             var limbs = PoseLimbs(source);
+            var contacts = limbs.Select(l => ReferenceContact(l, reference, target)).ToArray();
             float[][] joints;
             if (context == 1)
                 joints = StandingPose(source, sourceFrame, target, reference, limbs, root, across, forward);
             else
-                joints = SeatedPose(source, sourceFrame, target, limbs, root, across, forward, reference.VehicleCode);
+                joints = SeatedPose(source, sourceFrame, target, limbs, root, across, forward, reference.VehicleCode, contacts, scale / 100);
             var settings = new GamePoseSettings {
                 NaturalHuman = true,
+                Animations = previous == null ? null : previous.Animations,
                 Scale = scale,
                 MotionStrength = previous == null ? (context == 1 ? 25 : 100) : previous.MotionStrength,
                 Joints = joints.Select(p => RigVector.Scale(p, 100 / scale)).ToArray(),
-                Contacts = context == 1 ? new PoseContact[0] : limbs.Select(l => new PoseContact {
-                    Joint = Bones[l.End].Name, Target = (float[])target[l.End].Clone()
-                }).ToArray()
+                Contacts = context == 1 ? new PoseContact[0] : contacts
             };
             if (settings.Joints.Any(p => !ValidGameVector(p))) throw new InvalidDataException("Invalid original pose.");
             SetGameSettings(context, settings);
@@ -131,10 +133,17 @@ namespace murumsWiiModStudio
         }
 
         float[][] SeatedPose(float[][] source, float[][] sourceFrame, float[][] target,
-            List<PoseLimb> limbs, int root, float[] across, float[] forward, string vehicle)
+            List<PoseLimb> limbs, int root, float[] across, float[] forward, string vehicle, PoseContact[] contacts, double scale)
         {
             double preferredLean = vehicle != null && vehicle.EndsWith("_kart", StringComparison.Ordinal) ? 8 : 24;
             double height = (Points.Max(p => p[1]) - Points.Min(p => p[1])) * limbs[0].Upper / RigVector.Length(RigVector.Sub(JointGuides[limbs[0].Middle], JointGuides[limbs[0].Start]));
+            var endpoints = limbs.ToDictionary(limb => limb.End, limb => {
+                var contact = contacts.Single(c => c.Joint == Bones[limb.End].Name);
+                if (contact.SourcePoint == null) return (float[])target[limb.End].Clone();
+                double length = RigVector.Length(RigVector.Sub(contact.SourcePoint, JointGuides[limb.End])) * scale;
+                // Sitzsuche und Armbeugung muessen denselben Handkontakt verwenden.
+                return RigVector.Sub(contact.Target, RigVector.Scale(contact.Direction, length));
+            });
             double bestCost = Double.MaxValue;
             float[][] best = null;
             // Hüfte und Oberkörper gemeinsam optimieren; Gliedmaßen werden niemals verlängert.
@@ -150,7 +159,7 @@ namespace murumsWiiModStudio
                 double cost = RigVector.Dot(offset, offset) * .4 + Math.Pow((lean - preferredLean) * height / 180, 2) * .08;
                 foreach (var limb in limbs)
                 {
-                    double distance = RigVector.Length(RigVector.Sub(target[limb.End], joints[limb.Start]));
+                    double distance = RigVector.Length(RigVector.Sub(endpoints[limb.End], joints[limb.Start]));
                     double residual = distance - Math.Max(LimbReach(limb, limb.Leg ? 135 : 145), Math.Min(LimbReach(limb, limb.Leg ? 25 : 12), distance));
                     cost += residual * residual * 100;
                 }
@@ -160,10 +169,38 @@ namespace murumsWiiModStudio
             {
                 var pole = limb.Leg
                     ? RigVector.Add(forward, RigVector.Scale(across, limb.Side * .12))
-                    : RigVector.Add(RigVector.Scale(across, limb.Side), RigVector.Add(RigVector.Scale(forward, -.25), new[] { 0f, -.25f, 0f }));
-                SolveLimb(best, limb, target[limb.End], pole, limb.Leg ? 25 : 12, limb.Leg ? 135 : 145);
+                    : RigVector.Add(new[] { 0f, -1f, 0f }, RigVector.Add(RigVector.Scale(across, limb.Side * .35), RigVector.Scale(forward, -.15)));
+                SolveLimb(best, limb, endpoints[limb.End], pole, limb.Leg ? 25 : 12, limb.Leg ? 135 : 145);
             }
             return best;
+        }
+
+        PoseContact ReferenceContact(PoseLimb limb, RigPoseReference reference, float[][] target)
+        {
+            var contact = new PoseContact { Joint = Bones[limb.End].Name, Target = (float[])target[limb.End].Clone() };
+            int referenceBone = reference.MatchBone(this, limb.End);
+            if (limb.Leg || reference.Contacts == null || referenceBone < 0 || reference.Contacts[referenceBone] == null) return contact;
+            var hand = Enumerable.Range(0, Points.Length).Where(v => {
+                int index = Array.IndexOf(BoneIndices[v], limb.End);
+                return index >= 0 && BoneWeights[v][index] >= .75f;
+            }).Select(v => Points[v]).ToArray();
+            if (hand.Length < 4) return contact;
+            contact.SourcePoint = Enumerable.Range(0, 3).Select(axis => (hand.Min(p => p[axis]) + hand.Max(p => p[axis])) * .5f).ToArray();
+            contact.Target = (float[])reference.Contacts[referenceBone].Clone();
+            contact.Direction = RigVector.Unit(RigVector.Sub(contact.Target, target[limb.End]));
+            if (RigVector.Length(contact.Direction) < .9 || RigVector.Length(RigVector.Sub(contact.SourcePoint, JointGuides[limb.End])) < .001)
+            {
+                contact.SourcePoint = contact.Direction = null;
+                contact.Target = (float[])target[limb.End].Clone();
+            }
+            return contact;
+        }
+
+        internal float[] ContactPosition(int context, PoseContact contact)
+        {
+            int index = PoseBone(contact.Joint);
+            return contact.SourcePoint == null ? GameJoints(context)[index]
+                : RigMatrix.Point(GameBoneTransforms(context)[index], contact.SourcePoint);
         }
 
         static double LimbReach(PoseLimb limb, double flexion)
@@ -216,10 +253,9 @@ namespace murumsWiiModStudio
         {
             var settings = GameSettings(context);
             if (settings == null || settings.Contacts == null) return new PoseContact[0];
-            var joints = GameJoints(context);
             return settings.Contacts.Where(c => {
                 int index = PoseBone(c.Joint);
-                return index >= 0 && RigVector.Length(RigVector.Sub(joints[index], c.Target)) > Math.Max(.1, ReferenceHeight * .01);
+                return index >= 0 && RigVector.Length(RigVector.Sub(ContactPosition(context, c), c.Target)) > Math.Max(.1, ReferenceHeight * .01);
             }).ToArray();
         }
     }

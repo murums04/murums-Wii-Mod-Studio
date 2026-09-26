@@ -6,6 +6,7 @@ The release installer includes the runtime components and corresponding source a
 
 - Modified BrawlLib v0.42h1 source at `brawl-source`, built for AnyCPU / Release / net472. Follow `STUDIO-BUILD.txt` in the bundled `internal/model/sources/brawllib-studio-source.zip`. The output directory must contain `BrawlLib.dll` and `OpenTK.dll`.
 - Assimp 6.0.5 Windows x64 at `assimp-6.0.5-x64/Release/assimp-vc143-mt.dll`.
+- meshoptimizer 1.0 Windows x64 shared library at `meshoptimizer-1.0/meshoptimizer-1.0/meshoptimizer.dll`, with its original source archive at `meshoptimizer-1.0/source.zip`. Build the upstream CMake project with `-DMESHOPT_BUILD_SHARED_LIBS=ON` and place the resulting DLL at that path.
 - Original Blender binary archive `blender-5.2.2-windows-x64.zip` and corresponding `blender-5.2.2.tar.xz` source archive.
 - `brawllib-studio-source.zip` containing the corresponding modified BrawlLib source and its build instructions.
 

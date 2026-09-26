@@ -596,7 +596,7 @@ namespace murumsWiiModStudio
             if (model == null) throw new InvalidOperationException(L.T("Zuerst ein 3D-Modell importieren.", "Import a 3D model first."));
             var candidate = reviewedRig ?? ModelOperationForm.Run(this, L.T("RR-Bewegungen vorbereiten", "Prepare RR movement"),
                 token => {
-                    var rig = ModelRig.Prepare(model, target.DriverPath, (float)modelScale.Value, 6000, token);
+                    var rig = ModelRig.Prepare(model, target.DriverPath, (float)modelScale.Value, 20000, token);
                     rig.FitJointGuides();
                     try { rig.BindWithBlender(token); }
                     catch (InvalidDataException error) { rig.BindingWarning = error.Message; }

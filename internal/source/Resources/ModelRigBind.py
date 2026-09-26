@@ -8,14 +8,21 @@ with open(source, encoding='utf-8-sig') as stream:
     data = json.load(stream)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 # Blender erwartet hier Modellgrößen nahe seiner üblichen Einheit.
-scale = 2.0 / max(max(p[1] for p in data['Points']) - min(p[1] for p in data['Points']), 0.000001)
-data['Points'] = [[value * scale for value in point] for point in data['Points']]
+minimum = [min(p[i] for p in data['Points']) for i in range(3)]
+maximum = [max(p[i] for p in data['Points']) for i in range(3)]
+center = [(lo + hi) * .5 for lo, hi in zip(minimum, maximum)]
+scale = 2.0 / max(maximum[1] - minimum[1], .000001)
+def local(point):
+    return [(value - origin) * scale for value, origin in zip(point, center)]
+data['Points'] = [local(point) for point in data['Points']]
+proxy_points = [local(point) for point in data['ProxyPoints']] if data.get('ProxyPoints') else data['Points']
+proxy_faces = data.get('ProxyFaces') or data['Faces']
 for item in data['Segments']:
-    item['Head'] = [value * scale for value in item['Head']]
-    item['Tail'] = [value * scale for value in item['Tail']]
+    item['Head'] = local(item['Head'])
+    item['Tail'] = local(item['Tail'])
 data['WeldDistance'] *= scale
 mesh = bpy.data.meshes.new('Binding surface')
-mesh.from_pydata(data['Points'], [], data['Faces'])
+mesh.from_pydata(proxy_points, [], proxy_faces)
 mesh.update()
 obj = bpy.data.objects.new('Binding surface', mesh)
 bpy.context.collection.objects.link(obj)
@@ -33,6 +40,10 @@ remesh = obj.modifiers.new('Binding proxy', 'REMESH')
 remesh.mode = 'VOXEL'
 remesh.voxel_size = max(max(p[1] for p in data['Points']) - min(p[1] for p in data['Points']), 1.0) / 160
 bpy.ops.object.modifier_apply(modifier=remesh.name)
+smooth = obj.modifiers.new('Stable binding surface', 'SMOOTH')
+smooth.factor = .5
+smooth.iterations = 3
+bpy.ops.object.modifier_apply(modifier=smooth.name)
 mesh = obj.data
 adjacency = [set() for _ in mesh.vertices]
 for edge in mesh.edges:

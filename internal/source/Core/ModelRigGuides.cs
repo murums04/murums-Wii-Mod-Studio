@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -23,8 +23,8 @@ namespace murumsWiiModStudio
             if (!name.StartsWith("pcd_", StringComparison.Ordinal)) return index;
             int primary = Array.FindIndex(Bones, b => b.Name == name.Substring(4));
             if (primary < 0) return index;
-            double distance = new[] { 3, 7, 11 }.Sum(axis => Math.Pow(Bones[index].Matrix[axis] - Bones[primary].Matrix[axis], 2));
-            return distance < .01 ? primary : index;
+            // Kleid- und Fahrmodell teilen Koerpergelenke auch bei abweichender Bindepose.
+            return primary;
         }
 
         internal bool GuideBone(int index)
@@ -171,12 +171,28 @@ namespace murumsWiiModStudio
             return result;
         }
 
+        float[][] GameSegmentTails(float[][] joints, GamePoseSettings settings, bool source)
+        {
+            var tails = Enumerable.Range(0, Bones.Length).Select(i => SegmentTail(i, joints)).ToArray();
+            if (settings == null || settings.Contacts == null) return tails;
+            foreach (var contact in settings.Contacts.Where(c => c.SourcePoint != null && c.Direction != null))
+            {
+                int bone = PoseBone(contact.Joint);
+                if (bone < 0) continue;
+                double length = RigVector.Length(RigVector.Sub(contact.SourcePoint, JointGuides[bone]));
+                tails[bone] = source ? contact.SourcePoint : RigVector.Add(joints[bone], RigVector.Scale(contact.Direction, length));
+            }
+            return tails;
+        }
+
         internal float[][] GameBoneTransforms(int context)
         {
             var settings = GameSettings(context);
+            var sourceTails = GameSegmentTails(JointGuides, settings, true);
+            var targetTails = GameSegmentTails(settings.Joints, settings, false);
             return Enumerable.Range(0, Bones.Length).Select(bone => {
-                var from = RigVector.Sub(SegmentTail(bone, JointGuides), JointGuides[bone]);
-                var to = RigVector.Sub(SegmentTail(bone, settings.Joints), settings.Joints[bone]);
+                var from = RigVector.Sub(sourceTails[bone], JointGuides[bone]);
+                var to = RigVector.Sub(targetTails[bone], settings.Joints[bone]);
                 double ratio = Math.Max(.1, Math.Min(10, RigVector.Length(to) / Math.Max(.0001, RigVector.Length(from))));
                 var direction = RigVector.Unit(from);
                 var matrix = new float[16]; matrix[15] = 1;
@@ -196,11 +212,70 @@ namespace murumsWiiModStudio
             }).ToArray();
         }
 
-        internal float[][] MapGeometry(bool normals, float[][] reference)
+        float[][] MapVolumeGeometry(bool normals, float[][] reference, GamePoseSettings settings)
         {
+            var rotations = new double[Bones.Length][];
+            var duals = new double[Bones.Length][];
+            var directions = new float[Bones.Length][];
+            var ratios = new double[Bones.Length];
+            var sourceTails = GameSegmentTails(JointGuides, settings, true);
+            var targetTails = GameSegmentTails(reference, settings, false);
+            for (int bone = 0; bone < Bones.Length; bone++)
+            {
+                var from = RigVector.Sub(sourceTails[bone], JointGuides[bone]);
+                var to = RigVector.Sub(targetTails[bone], reference[bone]);
+                directions[bone] = RigVector.Unit(from);
+                ratios[bone] = Math.Max(.1, Math.Min(10, RigVector.Length(to) / Math.Max(.0001, RigVector.Length(from))));
+                rotations[bone] = RigVector.RotationQuaternion(from, to);
+                var offset = RigVector.Sub(reference[bone], RigVector.RotateQuaternion(JointGuides[bone], rotations[bone]));
+                duals[bone] = RigVector.MultiplyQuaternion(new[] { 0d, (double)offset[0], offset[1], offset[2] }, rotations[bone]);
+                for (int axis = 0; axis < 4; axis++) duals[bone][axis] *= .5;
+            }
             var source = normals ? Normals : Points;
-            var sourceTails = Enumerable.Range(0, Bones.Length).Select(i => SegmentTail(i, JointGuides)).ToArray();
-            var targetTails = Enumerable.Range(0, Bones.Length).Select(i => SegmentTail(i, reference)).ToArray();
+            var result = new float[source.Length][];
+            for (int vertex = 0; vertex < source.Length; vertex++)
+            {
+                var real = new double[4];
+                var dual = new double[4];
+                var stretched = new float[3];
+                int first = BoneIndices[vertex][Array.IndexOf(BoneWeights[vertex], BoneWeights[vertex].Max())];
+                for (int influence = 0; influence < BoneIndices[vertex].Length; influence++)
+                {
+                    int bone = BoneIndices[vertex][influence];
+                    double weight = BoneWeights[vertex][influence];
+                    double dot = 0;
+                    for (int axis = 0; axis < 4; axis++) dot += rotations[first][axis] * rotations[bone][axis];
+                    double sign = dot < 0 ? -1 : 1;
+                    for (int axis = 0; axis < 4; axis++)
+                    {
+                        real[axis] += rotations[bone][axis] * weight * sign;
+                        dual[axis] += duals[bone][axis] * weight * sign;
+                    }
+                    var local = normals ? source[vertex] : RigVector.Sub(source[vertex], JointGuides[bone]);
+                    double stretch = RigVector.Dot(local, directions[bone]) * (normals ? 1 / ratios[bone] - 1 : ratios[bone] - 1);
+                    stretched = RigVector.Add(stretched, RigVector.Scale(RigVector.Add(source[vertex], RigVector.Scale(directions[bone], stretch)), weight));
+                }
+                // Duale Quaternionen verhindern das Einschnueren beim Mischen gebeugter Gelenke.
+                double length = Math.Sqrt(real.Sum(v => v * v));
+                if (length < .000001) throw new InvalidOperationException("Invalid blended joint rotation.");
+                for (int axis = 0; axis < 4; axis++) { real[axis] /= length; dual[axis] /= length; }
+                var point = RigVector.RotateQuaternion(stretched, real);
+                if (!normals)
+                {
+                    var translation = RigVector.MultiplyQuaternion(dual, new[] { real[0], -real[1], -real[2], -real[3] });
+                    point = RigVector.Add(point, new[] { (float)(2 * translation[1]), (float)(2 * translation[2]), (float)(2 * translation[3]) });
+                }
+                result[vertex] = normals ? RigVector.Unit(point) : point;
+            }
+            return result;
+        }
+
+        internal float[][] MapGeometry(bool normals, float[][] reference, bool preserveVolume = false, GamePoseSettings settings = null)
+        {
+            if (preserveVolume) return MapVolumeGeometry(normals, reference, settings);
+            var source = normals ? Normals : Points;
+            var sourceTails = GameSegmentTails(JointGuides, settings, true);
+            var targetTails = GameSegmentTails(reference, settings, false);
             var result = new float[source.Length][];
             for (int v = 0; v < source.Length; v++)
             {
@@ -240,6 +315,36 @@ namespace murumsWiiModStudio
             var nearest = Add(a, Scale(d, Math.Max(0, Math.Min(1, Dot(Sub(p, a), d) / Math.Max(.000001, Dot(d, d))))));
             var difference = Sub(p, nearest);
             return Dot(difference, difference);
+        }
+        internal static double[] MultiplyQuaternion(double[] a, double[] b)
+        {
+            return new[] {
+                a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3],
+                a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2],
+                a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1],
+                a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0]
+            };
+        }
+        internal static double[] RotationQuaternion(float[] from, float[] to)
+        {
+            if (Length(from) < .000001 || Length(to) < .000001) return new[] { 1d, 0d, 0d, 0d };
+            var a = Unit(from); var b = Unit(to);
+            double cosine = Math.Max(-1, Math.Min(1, Dot(a, b)));
+            var axis = Cross(a, b);
+            if (cosine < -.999999)
+            {
+                axis = Unit(Cross(a, Math.Abs(a[0]) < .9 ? new[] { 1f, 0f, 0f } : new[] { 0f, 1f, 0f }));
+                return new[] { 0d, (double)axis[0], axis[1], axis[2] };
+            }
+            var q = new[] { 1 + cosine, (double)axis[0], axis[1], axis[2] };
+            double length = Math.Sqrt(q.Sum(v => v * v));
+            return q.Select(v => v / length).ToArray();
+        }
+        internal static float[] RotateQuaternion(float[] point, double[] q)
+        {
+            var axis = new[] { (float)q[1], (float)q[2], (float)q[3] };
+            var cross = Scale(Cross(axis, point), 2);
+            return Add(point, Add(Scale(cross, q[0]), Cross(axis, cross)));
         }
         internal static float[] Rotate(float[] p, float[] from, float[] to)
         {

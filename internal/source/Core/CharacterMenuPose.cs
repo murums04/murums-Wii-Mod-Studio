@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -44,8 +44,9 @@ namespace murumsWiiModStudio
                     string key = prefix == "kart" ? character.Weight + "df_kart" : prefix;
                     if (!ModelRig.ValidVehicleKey(key)) throw new InvalidDataException("Unknown RR menu vehicle animation: " + clip);
                     string vehiclePath = Path.Combine(root, "Character", key + "-" + stem + ".szs");
-                    var vehicle = rig.ForVehicle(key, RigReferenceSet.ReadVehicle(vehiclePath));
                     var pose = RigPoseReference.Load(combined, "model", clip, 1, false);
+                    pose.VehicleCode = key;
+                    var vehicle = rig.ForMenuVehicle(key, RigReferenceSet.ReadVehicle(vehiclePath), pose);
                     corrections.Add(pose.FromStandingPose(vehicle, standing).Corrections);
                 }
                 string changed = Path.Combine(work, "driver-posed.brres");

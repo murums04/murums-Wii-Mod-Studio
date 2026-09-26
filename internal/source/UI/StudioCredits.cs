@@ -1,4 +1,4 @@
-﻿namespace murumsWiiModStudio
+namespace murumsWiiModStudio
 {
     internal static class StudioCredits
     {
@@ -13,6 +13,12 @@ Studio's own code in this distribution is offered under PolyForm Noncommercial 1
 game resources and referenced projects retain their own licenses.
 No external editor binaries or game resources are embedded in Studio's installer.
 The editor build references Microsoft .NET Framework system assemblies.
+
+## Internal geometry optimization
+
+meshoptimizer 1.0 - Arseny Kapoulkine and contributors
+Texture-aware simplification; MIT license. License and source are included in internal/model.
+https://github.com/zeux/meshoptimizer
 
 ## Optional external tools
 

@@ -37,5 +37,18 @@ try{foreach($name in ($files.Keys | Sort-Object)){[void][IO.Compression.ZipFileE
 $csc=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 & $csc /nologo /target:winexe /define:SETUP_BUNDLE /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.IO.Compression.dll "/resource:$payload,studio.zip" "/resource:$catalogPath,tools.tsv" "/win32icon:$PSScriptRoot/source/App/murums.ico" "/win32manifest:$PSScriptRoot/source/App/app.manifest" "/out:$OutputPath" (Join-Path $PSScriptRoot 'tools/SETUP_BUNDLE.cs') (Join-Path $PSScriptRoot 'tools/SETUP_PAGE.cs') (Join-Path $PSScriptRoot 'tools/UPDATE_INSTALLER.cs') (Join-Path $PSScriptRoot 'source/App/AssemblyInfo.cs') (Join-Path $PSScriptRoot 'source/UI/FolderPickerDialog.cs') (Join-Path $PSScriptRoot 'tools/SETUP_CHROME.cs')
 if($LASTEXITCODE -ne 0){throw 'Setup bundle compilation failed'}
+# Paketinhalt und Freigabeliste muessen vor der Auslieferung uebereinstimmen.
+$bundle = [Reflection.Assembly]::LoadFile($OutputPath)
+$flags = [Reflection.BindingFlags]'NonPublic,Static'
+$expected = $bundle.GetType('murumsWiiModStudio.Setup.UpdateInstaller').GetField('PackageFiles', $flags).GetValue($null)
+$embeddedStream = $bundle.GetManifestResourceStream('studio.zip')
+$embeddedZip = New-Object IO.Compression.ZipArchive($embeddedStream, [IO.Compression.ZipArchiveMode]::Read)
+try {
+    $actual = @($embeddedZip.Entries | ForEach-Object FullName)
+    $difference = @(Compare-Object -ReferenceObject $expected -DifferenceObject $actual -CaseSensitive)
+    if ($actual.Count -ne $expected.Length -or $difference.Count -ne 0) {
+        throw ('Installer package and update allowlist differ: ' + (($difference | ForEach-Object InputObject) -join ', '))
+    }
+} finally { $embeddedZip.Dispose(); $embeddedStream.Dispose() }
 Get-FileHash -LiteralPath $OutputPath -Algorithm SHA256 | Format-List
 Get-Item -LiteralPath $OutputPath | Select-Object FullName,Length

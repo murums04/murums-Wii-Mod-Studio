@@ -10,7 +10,7 @@ game resources and referenced projects retain their own licenses.
 The installer includes internal model components listed below. No user game resources are included.
 The editor build references Microsoft .NET Framework system assemblies.
 
-## Included internal model components (Build 177)
+## Included internal model components
 
 Assimp 6.0.5 — assimp team. BSD 3-Clause; `internal/model/notices/ASSIMP-LICENSE.txt`.
 https://github.com/assimp/assimp/tree/v6.0.5
@@ -20,7 +20,7 @@ Dynamically loaded from `internal/model/BrawlLib.dll`, with OpenTK 1.0 (MIT).
 Studio's small adapter is `StudioModelCodec.dll`; its source and build instructions are included.
 The modified BrawlLib corresponding source is `internal/model/sources/brawllib-studio-source.zip`.
 Modifications replace modal importer errors with exceptions, remove an unused destructive pre-build command,
-and normalize scaled Collada joint bases before extracting rotation angles (Build 183).
+and normalize scaled Collada joint bases before extracting rotation angles.
 https://github.com/soopercool101/BrawlCrate/tree/v0.42h1
 https://github.com/opentk/opentk
 
@@ -32,6 +32,12 @@ Additional build/dependency source locations are documented by upstream:
 https://download.blender.org/source/
 https://projects.blender.org/blender/blender/src/tag/v5.2.2/build_files/build_environment
 https://svn.blender.org/svnroot/bf-blender/trunk/lib/packages/
+
+meshoptimizer 1.0 — Arseny Kapoulkine and contributors. MIT.
+Model simplification runtime: `internal/model/meshoptimizer.dll`.
+License: `internal/model/notices/MESHOPTIMIZER-LICENSE.txt`.
+Corresponding source: `internal/model/sources/meshoptimizer-1.0.zip`.
+https://github.com/zeux/meshoptimizer
 
 Studio's noncommercial restriction does not apply to these components or limit their license grants.
 You may replace the LGPL libraries with modified compatible versions. To the extent required by LGPL-3.0,

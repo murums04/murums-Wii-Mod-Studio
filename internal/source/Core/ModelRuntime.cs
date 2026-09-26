@@ -100,6 +100,7 @@ namespace murumsWiiModStudio
                 CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, RedirectStandardOutput = true, RedirectStandardError = true };
             info.EnvironmentVariables["BLENDER_USER_CONFIG"] = Path.Combine(work, "config");
             info.EnvironmentVariables["BLENDER_USER_SCRIPTS"] = Path.Combine(work, "scripts");
+            info.EnvironmentVariables["STUDIO_MODEL_RUNTIME"] = Root;
             var log = new StringBuilder();
             using (var process = new Process { StartInfo = info })
             {

@@ -165,6 +165,8 @@ namespace murumsWiiModStudio
             if (referenceControls == null) return;
             bool game = mode.SelectedIndex == 4 || mode.SelectedIndex == 3;
             bool edit = mode.SelectedIndex == 4;
+            string previousAnimation = AnimationName;
+            int previousFrame = pose.Value;
             updatingGame = true;
             try
             {
@@ -174,6 +176,7 @@ namespace murumsWiiModStudio
                 preview.GameContext = game && (edit || ActiveReference != null) ? GameContext : 0;
                 preview.EditGameJoints = edit;
                 preview.AnimationPoints = null;
+                preview.AnimationJoints = null;
                 gameControls.Visible = edit;
                 strengthControls.Visible = game;
                 vehicleControls.Visible = game && GameContext == 2;
@@ -196,15 +199,17 @@ namespace murumsWiiModStudio
                     motionStrength.Value = (decimal)settings.MotionStrength;
                     help.Text = edit
                         ? L.T("Die Ausgangshaltung wird automatisch berechnet. Menü oder Fahrzeug wählen und prüfen. Nur bei Bedarf Gelenke verschieben; Größe bleibt erhalten.", "The starting pose is fitted automatically. Choose menu or vehicle and review it. Move joints only if needed; size is preserved.")
-                        : L.T("Echte Animation der ersetzten RR-Variante. Abspielen oder den Regler ziehen. Danach auch im Spiel prüfen; andere Fahrzeuge und Bewegungen können abweichen.", "Actual animation of the replaced RR variant. Play it or drag the slider. Check in game too; other vehicles and motions can differ.");
+                        : L.T("Bewegung und Zeitpunkt wählen. Körperteil anklicken und mit Schlüsselbildern bearbeiten. Rechts ziehen dreht die Ansicht.", "Choose a motion and frame. Click a body part and edit it with keyframes. Right-drag rotates the view.");
                     if (ActiveReference != null)
                     {
                         gameAnimation.Items.Clear();
                         foreach (string name in ActiveReference.AvailableAnimations ?? new[] { ActiveReference.Animation }) gameAnimation.Items.Add(new AnimationChoice { Name = name });
-                        for (int i = 0; i < gameAnimation.Items.Count; i++) if (((AnimationChoice)gameAnimation.Items[i]).Name == ActiveReference.Animation) gameAnimation.SelectedIndex = i;
-                        pose.Minimum = 0; pose.Maximum = ActiveReference.Frames - 1;
-                        pose.TickFrequency = Math.Max(1, ActiveReference.Frames / 5);
-                        pose.Value = (int)ActiveReference.Frame - 1;
+                        string selectedAnimation = ActiveReference.AvailableAnimations.Contains(previousAnimation) ? previousAnimation : ActiveReference.Animation;
+                        for (int i = 0; i < gameAnimation.Items.Count; i++) if (((AnimationChoice)gameAnimation.Items[i]).Name == selectedAnimation) gameAnimation.SelectedIndex = i;
+                        var clip = selectedAnimation == ActiveReference.Animation ? ActiveReference : RigPoseReference.Load(ActiveReference.Template, "model", selectedAnimation, 1, false);
+                        pose.Minimum = 0; pose.Maximum = clip.Frames - 1;
+                        pose.TickFrequency = Math.Max(1, clip.Frames / 5);
+                        pose.Value = Math.Max(0, Math.Min(pose.Maximum, previousAnimation == selectedAnimation ? previousFrame : (int)clip.Frame - 1));
                     }
                     status.Text = edit ? L.T("Spielhaltung: Gelenke ziehen oder ganze Figur verschieben, drehen und skalieren.", "Game pose: drag joints or move, rotate and scale the whole figure.") : help.Text;
                 }
@@ -215,6 +220,8 @@ namespace murumsWiiModStudio
             }
             finally { updatingGame = false; }
             RefreshReference();
+            RefreshKeyEditor();
+            if (game && !edit) RefreshAnimation();
             if (game && edit) ShowContactStatus();
             preview.Invalidate();
         }
@@ -263,10 +270,18 @@ namespace murumsWiiModStudio
                     animationFrames[key] = frame;
                 }
                 preview.AnimationPoints = Result.GameAnimationPreview(GameContext, ActiveReference, frame);
+                var adjusted = ActiveReference.MotionAnchor(Result, GameContext, frame.Animation).Adjusted(Result, GameContext);
+                var moving = frame.ApplyCorrections(adjusted);
+                preview.AnimationJoints = Result.Bones.Select((b, index) => {
+                    int match = moving.MatchBone(Result, index);
+                    return match < 0 ? Result.GameJoints(GameContext)[index] : moving.Joints[match];
+                }).ToArray();
+                RefreshKeyEditor();
+                preview.Invalidate();
             }
             catch (Exception error)
             {
-                timer.Stop(); status.Text = error.Message; preview.AnimationPoints = null;
+                timer.Stop(); status.Text = error.Message; preview.AnimationPoints = preview.AnimationJoints = null;
             }
         }
         void LoadBaseReference()

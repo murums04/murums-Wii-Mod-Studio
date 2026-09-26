@@ -9,12 +9,22 @@ namespace murumsWiiModStudio
     internal sealed partial class ModelRig
     {
         public string BindingMethod, BindingWarning;
+        public float[][] BindingProxyPoints;
+        public int[][] BindingProxyFaces;
         public Dictionary<string, float[]> SourceJointGuides;
         public int[][] SourceBoneIndices;
         public float[][] SourceBoneWeights;
 
         void ValidateSourceBinding()
         {
+            if (BindingProxyPoints != null || BindingProxyFaces != null)
+            {
+                if (BindingProxyPoints == null || BindingProxyFaces == null || BindingProxyPoints.Length == 0
+                    || BindingProxyPoints.Length > 200000 || BindingProxyFaces.Length == 0 || BindingProxyFaces.Length > 200000
+                    || BindingProxyPoints.Any(p => p == null || p.Length != 3 || p.Any(v => Single.IsNaN(v) || Single.IsInfinity(v) || Math.Abs(v) > 1e9))
+                    || BindingProxyFaces.Any(f => f == null || f.Length != 3 || f.Any(i => i < 0 || i >= BindingProxyPoints.Length)))
+                    throw new InvalidDataException("Invalid binding surface.");
+            }
             if (SourceJointGuides != null && SourceJointGuides.Any(p => p.Value == null || p.Value.Length != 3
                 || p.Value.Any(v => Single.IsNaN(v) || Single.IsInfinity(v) || Math.Abs(v) > 1e8)))
                 throw new InvalidDataException("Invalid source joint guides.");
@@ -68,7 +78,8 @@ namespace murumsWiiModStudio
             var segments = candidates.Select(i => new { Index = i, Head = JointGuides[i], Tail = SegmentTail(i, JointGuides) })
                 .Where(s => RigVector.Length(RigVector.Sub(s.Tail, s.Head)) > .0001).ToArray();
             string input = Path.Combine(work, "input.json"), output = Path.Combine(work, "weights.json");
-            File.WriteAllText(input, Serializer().Serialize(new { Points, Faces, Segments = segments,
+            File.WriteAllText(input, Serializer().Serialize(new { Points, Faces, ProxyPoints = BindingProxyPoints,
+                ProxyFaces = BindingProxyFaces, Segments = segments,
                 WeldDistance = Math.Max(.000001, ReferenceHeight * .000001) }));
             RunScript("ModelRigBind.py", work, token, input, output);
             var result = Serializer().Deserialize<BindingResult>(File.ReadAllText(output));

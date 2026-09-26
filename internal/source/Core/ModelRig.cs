@@ -178,13 +178,24 @@ namespace murumsWiiModStudio
                 output.BoneIndices = BoneIndices.Select(indices => indices.Select(bone => mapping[bone]).ToArray()).ToArray();
             }
             output.AlignToReference = false;
-            output.Save(path);
+            output.Validate();
+            var document = Serializer().Deserialize<Dictionary<string, object>>(Serializer().Serialize(output));
+            if (gameReference != null)
+                document["ExportSkinMatrices"] = gameReference.Names.Select((name, index) => new { name, index })
+                    .ToDictionary(b => b.name, b => gameReference.Matrices[b.index]);
+            File.WriteAllText(path, Serializer().Serialize(document));
             string destination = Path.Combine(Folder, triangleLimit == 0 ? "rigged.dae" : "rigged-lod.dae");
             RunScript("ModelRigExport.py", Folder, token, path, reference ?? Reference, destination, triangleLimit.ToString());
             return destination;
         }
         internal static void RunScript(string name, string work, CancellationToken token, params string[] args)
         {
+            using (var helper = Assembly.GetExecutingAssembly().GetManifestResourceStream("Studio.ModelMeshOptimize.py"))
+            using (var output = File.Create(Path.Combine(work, "ModelMeshOptimize.py")))
+            {
+                if (helper == null) throw new IOException("Missing internal model optimization resource.");
+                helper.CopyTo(output);
+            }
             string script = Path.Combine(work, name);
             using (var input = Assembly.GetExecutingAssembly().GetManifestResourceStream("Studio." + name))
             using (var output = File.Create(script)) { if (input == null) throw new IOException("Missing internal model resource."); input.CopyTo(output); }

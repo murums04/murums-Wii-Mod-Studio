@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Drawing;
@@ -10,6 +10,7 @@ using BrawlLib.Modeling;
 using BrawlLib.Wii.Animations;
 using System.Collections.Generic;
 using BrawlLib.Wii.Textures;
+using BrawlLib.Wii.Graphics;
 using BrawlLib.Modeling.Collada;
 using BrawlLib.SSBB.ResourceNodes;
 public static class StudioModelCodec
@@ -168,6 +169,19 @@ public static class StudioModelCodec
                 var node = doc.CreateElement("bone"); pose.AppendChild(node);
                 node.SetAttribute("name", bone.Name);
                 node.SetAttribute("parent", bone.Parent is MDL0BoneNode ? bone.Parent.Name : "");
+                if (bone.Name.StartsWith("wrist_", StringComparison.Ordinal) || bone.Name.StartsWith("pcd_wrist_", StringComparison.Ordinal))
+                {
+                    var hand = model.PolygonGroup.Children.OfType<MDL0ObjectNode>().SelectMany(p => p.Vertices)
+                        .Where(v => v.GetBoneWeights() != null && v.GetBoneWeights().Where(w => w.Bone == bone).Sum(w => w.Weight) >= .75f)
+                        .Select(v => v.WeightedPosition).ToArray();
+                    if (hand.Length >= 4)
+                    {
+                        var center = new[] { (hand.Min(v => v._x) + hand.Max(v => v._x)) * .5f,
+                            (hand.Min(v => v._y) + hand.Max(v => v._y)) * .5f,
+                            (hand.Min(v => v._z) + hand.Max(v => v._z)) * .5f };
+                        node.SetAttribute("contact", String.Join(" ", center.Select(v => v.ToString("R", CultureInfo.InvariantCulture))));
+                    }
+                }
                 node.SetAttribute("bind", String.Join(" ", Enumerable.Range(0, 16).Select(i => bone.BindMatrix[(i % 4) * 4 + i / 4].ToString("R", CultureInfo.InvariantCulture))));
                 var skin = bone._frameMatrix * bone.InverseBindMatrix;
                 node.SetAttribute("skin", String.Join(" ", Enumerable.Range(0, 16).Select(i => skin[(i % 4) * 4 + i / 4].ToString("R", CultureInfo.InvariantCulture))));
@@ -243,7 +257,7 @@ public static class StudioModelCodec
         float strength = Single.Parse(document.DocumentElement.GetAttribute("strength"), CultureInfo.InvariantCulture);
         if (Single.IsNaN(strength) || strength < 0 || strength > 1)
             throw new InvalidDataException("Movement strength must be between 0 and 100 percent.");
-        return document.DocumentElement.ChildNodes.OfType<XmlElement>().ToDictionary(n => n.GetAttribute("name"), n => new PoseAdjustment {
+        return document.DocumentElement.ChildNodes.OfType<XmlElement>().Where(n => n.Name == "bone").ToDictionary(n => n.GetAttribute("name"), n => new PoseAdjustment {
             Offset = ParsePoseMatrix(n.GetAttribute("matrix")),
             Anchor = ParsePoseMatrix(n.GetAttribute("anchor")),
             Strength = strength,
@@ -347,14 +361,75 @@ public static class StudioModelCodec
 
     public static float[][] CorrectPose(string corrections, string[] names, float[][] localMatrices)
     {
+        return CorrectAnimationPose(corrections, names, localMatrices, null, 0);
+    }
+
+    sealed class AnimationKey
+    {
+        internal int Frame;
+        internal Vector3 Rotation, Position;
+    }
+
+    static Dictionary<string, AnimationKey[]> ReadAnimationKeys(string corrections, string clip)
+    {
+        var document = new XmlDocument { XmlResolver = null };
+        document.LoadXml(corrections);
+        return document.DocumentElement.ChildNodes.OfType<XmlElement>()
+            .Where(n => n.Name == "animation" && n.GetAttribute("name") == clip)
+            .SelectMany(n => n.ChildNodes.OfType<XmlElement>()).GroupBy(n => n.GetAttribute("bone"))
+            .ToDictionary(group => group.Key, group => group.Select(n => new AnimationKey {
+                Frame = Int32.Parse(n.GetAttribute("frame"), CultureInfo.InvariantCulture),
+                Rotation = ParseKeyVector(n.GetAttribute("rotation")),
+                Position = ParseKeyVector(n.GetAttribute("position"))
+            }).OrderBy(k => k.Frame).ToArray());
+    }
+
+    static Vector3 ParseKeyVector(string text)
+    {
+        var values = text.Split(' ').Select(v => Single.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+        if (values.Length != 3 || values.Any(v => Single.IsNaN(v) || Single.IsInfinity(v)))
+            throw new InvalidDataException("Invalid animation keyframe vector.");
+        return new Vector3(values[0], values[1], values[2]);
+    }
+
+    static Matrix ApplyAnimationKeys(Matrix matrix, string bone, float frame, Dictionary<string, AnimationKey[]> tracks)
+    {
+        AnimationKey[] keys;
+        if (!tracks.TryGetValue(bone, out keys) || keys.Length == 0) return matrix;
+        var left = keys.LastOrDefault(k => k.Frame <= frame) ?? keys[0];
+        var right = keys.FirstOrDefault(k => k.Frame >= frame) ?? keys[keys.Length - 1];
+        float amount = left.Frame == right.Frame ? 0 : (frame - left.Frame) / (right.Frame - left.Frame);
+        var state = PoseState(matrix, "edited animation: " + bone);
+        for (int axis = 0; axis < 3; axis++)
+        {
+            state._rotate[axis] += left.Rotation[axis] + amount * (right.Rotation[axis] - left.Rotation[axis]);
+            state._translate[axis] += left.Position[axis] + amount * (right.Position[axis] - left.Position[axis]);
+        }
+        return new FrameState(state._scale, state._rotate, state._translate)._transform;
+    }
+
+    public static float[][] CorrectAnimationPose(string corrections, string[] names, float[][] localMatrices, string animation, float frame)
+    {
         var offsets = ReadAdjustments(corrections);
+        var tracks = ReadAnimationKeys(corrections, animation);
         return names.Select((name, i) => {
             var matrix = Matrix.Identity;
             for (int element = 0; element < 16; element++) matrix[(element % 4) * 4 + element / 4] = localMatrices[i][element];
             PoseAdjustment adjustment;
             var corrected = offsets.TryGetValue(name, out adjustment) ? CorrectFrame(adjustment, matrix) : matrix;
+            corrected = ApplyAnimationKeys(corrected, name, frame, tracks);
             return Enumerable.Range(0, 16).Select(element => corrected[(element % 4) * 4 + element / 4]).ToArray();
         }).ToArray();
+    }
+
+    public static int TriangleCount(string path, string name)
+    {
+        using (var root = NodeFactory.FromFile(null, path) as BRRESNode)
+        {
+            var model = root.GetFolder<MDL0Node>().Children.OfType<MDL0Node>().Single(m => m.Name == name);
+            model.Populate();
+            return model.PolygonGroup.Children.OfType<MDL0ObjectNode>().Sum(p => p.FaceCount);
+        }
     }
 
     public static void AdjustAnimations(string template, string path, string corrections, string destination)
@@ -396,6 +471,9 @@ public static class StudioModelCodec
             {
                 var settings = separate ? descriptions.Single(d => d.DocumentElement.GetAttribute("animation") == animation.Name) : descriptions[0];
                 var offsets = ReadAdjustments(settings.OuterXml);
+                var tracks = ReadAnimationKeys(settings.OuterXml, animation.Name);
+                if (tracks.Values.Any(keys => keys.Any(k => k.Frame >= animation.FrameCount)))
+                    throw new InvalidDataException("A keyframe is outside animation " + animation.Name + ".");
                 var originalAnimation = source.GetFolder<CHR0Node>().Children.OfType<CHR0Node>().Single(a => a.Name == animation.Name);
                 var clipOffsets = offsets;
                 if (settings.DocumentElement.GetAttribute("natural") == "true")
@@ -416,7 +494,8 @@ public static class StudioModelCodec
                     foreach (var pair in clipOffsets)
                     {
                         if (!frames.ContainsKey(pair.Key)) frames.Add(pair.Key, new FrameState[animation.FrameCount]);
-                        frames[pair.Key][frame] = PoseState(CorrectFrame(pair.Value, bones[pair.Key]._frameState._transform), animation.Name + "/" + pair.Key + "/" + frame);
+                        var corrected = CorrectFrame(pair.Value, bones[pair.Key]._frameState._transform);
+                        frames[pair.Key][frame] = PoseState(ApplyAnimationKeys(corrected, pair.Key, frame, tracks), animation.Name + "/" + pair.Key + "/" + frame);
                     }
                 }
                 foreach (var pair in frames)
@@ -485,6 +564,7 @@ public static class StudioModelCodec
                 var model = importer.ImportModel(input, Collada.ImportType.MDL0) as MDL0Node;
                 if (model == null) throw new InvalidDataException("Internal Wii model conversion failed.");
                 model.Populate(); PrepareReference(old);
+                ConfigureImportedMaterials(model, old);
                 var document = new XmlDocument { XmlResolver = null };
                 document.Load(input);
                 var expectedMaterials = document.SelectNodes("//*[local-name()='geometry']/*[local-name()='mesh']/*[local-name()='triangles']")
@@ -530,6 +610,52 @@ public static class StudioModelCodec
                 }
             }
             root.Export(destination);
+        }
+    }
+
+    static void ConfigureImportedMaterials(MDL0Node model, MDL0Node reference)
+    {
+        var lighting = reference.MaterialList.OfType<MDL0MaterialNode>().FirstOrDefault();
+        // Der Brawl-Standardshader verstärkt Farben vierfach und passt nicht zur MKW-Beleuchtung.
+        foreach (var shader in model.MaterialList.OfType<MDL0MaterialNode>().Select(m => m.ShaderNode).Distinct())
+        {
+            foreach (var stage in shader.Children.ToArray()) stage.Remove();
+            shader.AddChild(new MDL0TEVStageNode {
+                TextureEnabled = true,
+                TextureMapID = TexMapID.TexMap0,
+                TextureCoordID = TexCoordID.TexCoord0,
+                RasterColor = ColorSelChan.LightChannel0,
+                ColorSelectionA = ColorArg.Zero,
+                ColorSelectionB = ColorArg.TextureColor,
+                ColorSelectionC = ColorArg.RasterColor,
+                ColorSelectionD = ColorArg.Zero,
+                ColorScale = TevScale.MultiplyBy1,
+                AlphaSelectionA = AlphaArg.Zero,
+                AlphaSelectionB = AlphaArg.Zero,
+                AlphaSelectionC = AlphaArg.Zero,
+                AlphaSelectionD = AlphaArg.TextureAlpha
+            });
+        }
+        foreach (var material in model.MaterialList.OfType<MDL0MaterialNode>())
+        {
+            material.ActiveShaderStages = 1;
+            material.LightSetIndex = lighting == null ? (sbyte)0 : lighting.LightSetIndex;
+            material.FogIndex = lighting == null ? (sbyte)-1 : lighting.FogIndex;
+            material.C1MaterialColor = new RGBAPixel(255, 255, 255, 255);
+            material.C1ColorMaterialSource = GXColorSrc.Register;
+            material.C1ColorAmbientSource = GXColorSrc.Register;
+            if (lighting != null)
+            {
+                material.C1AmbientColor = lighting.C1AmbientColor;
+                material.C1ColorEnabled = lighting.C1ColorEnabled;
+                material.C1ColorDiffuseFunction = lighting.C1ColorDiffuseFunction;
+                material.C1ColorAttenuation = lighting.C1ColorAttenuation;
+                material.C1ColorLights = lighting.C1ColorLights;
+            }
+            material.C1AlphaEnabled = false;
+            material.C1AlphaMaterialSource = GXColorSrc.Register;
+            material.C2ColorEnabled = false;
+            material.C2AlphaEnabled = false;
         }
     }
 }
