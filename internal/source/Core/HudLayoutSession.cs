@@ -157,18 +157,7 @@ namespace murumsWiiModStudio
             var changes = Changes.ToList();
             if (changes.Count == 0)
                 throw new InvalidOperationException("No changes to save.");
-            var builds = new Dictionary<string, byte[]>();
-            foreach (var a in changes.Select(r => r.Archive).Distinct())
-            {
-                string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(a.Source)));
-                if (Archives.Any(x => string.Equals(x.Source, dest, StringComparison.OrdinalIgnoreCase)))
-                    throw new IOException("Choose a separate output folder.");
-                builds.Add(dest, a.Build());
-            }
-
-            Directory.CreateDirectory(folder);
-            foreach (var b in builds)
-                BackupManager.WriteAllBytesSafely(b.Key, b.Value);
+            ArchiveCopyExport.Save(Archives, folder);
         }
     }
 

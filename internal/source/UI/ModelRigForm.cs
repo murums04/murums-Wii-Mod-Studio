@@ -161,6 +161,9 @@ namespace murumsWiiModStudio
             var resetView = new Button { Text = L.T("Zurücksetzen", "Reset view"), AutoSize = true };
             resetView.Click += delegate { preview.ResetView(); };
             views.Controls.Add(resetView);
+            var solid = new CheckBox { Text = L.T("Form ohne Textur", "Solid surface"), AutoSize = true, Margin = new Padding(6, 8, 3, 3) };
+            solid.CheckedChanged += delegate { preview.SolidSurface = solid.Checked; preview.Invalidate(); };
+            views.Controls.Add(solid);
             views.Controls.Add(CreateReferenceControls());
             scene.Controls.Add(views, 0, 0);
             preview.Model = Result.Preview();
@@ -179,7 +182,7 @@ namespace murumsWiiModStudio
             layout.Controls.Add(work, 0, 2);
             layout.Controls.Add(status, 0, 3);
             var footer = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
-            apply = new Button { Text = L.T("Zuordnung übernehmen", "Use assignment"), AutoSize = true, Height = 36, Enabled = !pending };
+            apply = new Button { Text = L.T("Zuordnung übernehmen", "Use assignment"), AutoSize = true, MinimumSize = new Size(200, 36), Enabled = !pending };
             apply.Click += delegate { Result.InitializeGamePose(1, references == null ? null : references.Menu); if (references != null) Result.SelectVehiclePose(VehicleKey, references.GetVehicle(VehicleKey, false)); else Result.InitializeGamePose(2, null); Result.Validate(); DialogResult = DialogResult.OK; Close(); };
             footer.Controls.Add(apply);
             footer.Controls.Add(new Button { Text = L.T("Abbrechen", "Cancel"), AutoSize = true, Height = 36, DialogResult = DialogResult.Cancel });
@@ -234,8 +237,11 @@ namespace murumsWiiModStudio
             back.Enabled = assign.Enabled = false;
             status.Text = L.T("Vorschlag prüfen: Gelenkpunkte anpassen oder „Automatisch zuordnen“ drücken. Haare, Kleidung und Gelenke anschließend in Bewegung kontrollieren.", "Review the suggestion: adjust joints or click Assign automatically. Then check hair, clothes and joints in motion.");
             if (Result.AlignToReference)
-                status.Text = L.T("Automatisch vorbereitet. Menü und Fahren prüfen, bei Bedarf Gelenke korrigieren, dann Haltung übernehmen.",
-                    "Prepared automatically. Review Menu and Driving, adjust joints if needed, then accept the pose.");
+                status.Text = Result.SourceJointGuides == null
+                    ? L.T("Kein Quellskelett: Die Gelenke sind geschätzt. Die automatische Zuordnung bestätigt keine anatomisch richtige Haltung.",
+                        "No source skeleton: joint positions are estimated. Automatic binding does not confirm an anatomically correct pose.")
+                    : L.T("Quellskelett übernommen. Menü und Fahren prüfen, dann Haltung übernehmen.",
+                        "Source skeleton transferred. Review Menu and Driving, then accept the pose.");
             else if (!String.IsNullOrEmpty(Result.BindingWarning))
                 status.Text = L.T("Gelenkpunkte am Modell platzieren und anschließend „Automatisch zuordnen“ wählen. ",
                     "Place the joint points on your model, then choose Assign automatically. ") + Result.BindingWarning;
@@ -328,7 +334,10 @@ namespace murumsWiiModStudio
             }
             pending = false; apply.Enabled = true;
             referencePose.Enabled = mode.SelectedIndex != 0;
-            status.Text = L.T("Automatisch neu zugeordnet. Unter „Bewegung prüfen“ die RR-Spielposition und Bewegungen kontrollieren.", "Reassigned automatically. Use Check movement to review the RR game position and motion.");
+            status.Text = Result.SourceJointGuides == null
+                ? L.T("Oberfläche neu gebunden. Ohne Quellskelett bleiben die Gelenkpunkte ein Vorschlag; Haltung und Bewegungen prüfen.",
+                    "Surface rebound. Without a source skeleton, joint positions remain a suggestion; review the pose and movement.")
+                : L.T("Automatisch neu zugeordnet. Unter „Bewegung prüfen“ die RR-Spielposition und Bewegungen kontrollieren.", "Reassigned automatically. Use Check movement to review the RR game position and motion.");
             preview.Invalidate();
             return true;
         }

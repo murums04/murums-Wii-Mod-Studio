@@ -698,39 +698,41 @@ namespace murumsWiiModStudio
                 psi.WindowStyle = ProcessWindowStyle.Hidden;
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
-                Process p = Process.Start(psi);
-                if (p == null)
+                using (Process p = Process.Start(psi))
                 {
-                    error = "Could not start the toolchain installer.";
-                    return false;
-                }
-
-                System.Threading.Tasks.Task<string> stdoutTask = p.StandardOutput.ReadToEndAsync();
-                System.Threading.Tasks.Task<string> stderrTask = p.StandardError.ReadToEndAsync();
-                if (!p.WaitForExit(360000))
-                {
-                    try
+                    if (p == null)
                     {
-                        p.Kill();
-                    }
-                    catch
-                    {
+                        error = "Could not start the toolchain installer.";
+                        return false;
                     }
 
-                    error = "Toolchain installation timed out after 6 minutes.";
-                    return false;
-                }
+                    System.Threading.Tasks.Task<string> stdoutTask = p.StandardOutput.ReadToEndAsync();
+                    System.Threading.Tasks.Task<string> stderrTask = p.StandardError.ReadToEndAsync();
+                    if (!p.WaitForExit(360000))
+                    {
+                        try
+                        {
+                            p.Kill();
+                        }
+                        catch
+                        {
+                        }
 
-                string stdout = stdoutTask.Result;
-                string stderr = stderrTask.Result;
-                if (p.ExitCode != 0)
-                {
-                    string details = String.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-                    error = "Toolchain installer exited with code " + p.ExitCode + "." + (String.IsNullOrWhiteSpace(details) ? "" : Environment.NewLine + details.Trim());
-                    return false;
-                }
+                        error = "Toolchain installation timed out after 6 minutes.";
+                        return false;
+                    }
 
-                return true;
+                    string stdout = stdoutTask.Result;
+                    string stderr = stderrTask.Result;
+                    if (p.ExitCode != 0)
+                    {
+                        string details = String.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                        error = "Toolchain installer exited with code " + p.ExitCode + "." + (String.IsNullOrWhiteSpace(details) ? "" : Environment.NewLine + details.Trim());
+                        return false;
+                    }
+
+                    return true;
+                }
             }
             catch (Exception ex)
             {

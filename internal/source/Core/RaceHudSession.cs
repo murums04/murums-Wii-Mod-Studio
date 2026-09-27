@@ -169,14 +169,13 @@ namespace murumsWiiModStudio
                 string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(a.Source)));
                 if (Archives.Any(s => string.Equals(dest, s.Source, StringComparison.OrdinalIgnoreCase)))
                     throw new IOException("Choose a separate output folder. Source archives must remain unchanged.");
-                pending.Add(dest, a.Build(hide));
+                pending.Add(dest, a.PrepareCopy(dest, hide));
             }
 
             if (pending.Count == 0)
                 throw new InvalidOperationException("Select replacement pictures or enable the shadow switch first.");
             Directory.CreateDirectory(folder);
-            foreach (var p in pending)
-                BackupManager.WriteAllBytesSafely(p.Key, p.Value);
+            BackupManager.WriteBatch(pending);
             return pending.Keys.ToList();
         }
     }

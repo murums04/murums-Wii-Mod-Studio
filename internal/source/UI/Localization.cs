@@ -77,7 +77,8 @@ namespace murumsWiiModStudio
         public static void SaveLanguage(UiLanguage language)
         {
             Directory.CreateDirectory(SettingsDirectory);
-            File.WriteAllText(SettingsPath, "language=" + (language == UiLanguage.German ? "de" : "en") + Environment.NewLine);
+            BackupManager.WriteAllBytesSafely(SettingsPath, System.Text.Encoding.UTF8.GetBytes(
+                "language=" + (language == UiLanguage.German ? "de" : "en") + Environment.NewLine));
         }
 
         public static void RequestLanguageChange(IWin32Window owner, UiLanguage language)

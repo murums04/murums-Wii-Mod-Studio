@@ -24,7 +24,7 @@ namespace murumsWiiModStudio
         string MainTtf { get { return ScriptSources.MainPath; } }
         byte[] original, pending;
         readonly Dictionary<string, byte[]> changes = new Dictionary<string, byte[]>();
-        readonly Dictionary<string, byte[]> menuCopies = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        readonly Dictionary<string, StudioArchiveCopy> menuCopies = new Dictionary<string, StudioArchiveCopy>(StringComparer.OrdinalIgnoreCase);
         readonly CheckBox includeRaceMessages = new CheckBox { Text = "GO / Finish (shared font)", AutoSize = true, Checked = true, Anchor = AnchorStyles.Left };
 
         readonly CheckBox includeHud = new CheckBox { Text = "Race HUD: TIME / LAP / numbers / km/h", Checked = true, AutoSize = true, Anchor = AnchorStyles.Left };
@@ -606,7 +606,7 @@ namespace murumsWiiModStudio
             }
 
             var menus = includeTimers.Checked && archive != null ? MenuTimerFonts.Generate(additionalArchives, ScriptSources.ForCharacter('0'), fillColor, outlineColor,
-                (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex) : new Dictionary<string, byte[]>();
+                (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex) : new Dictionary<string, StudioArchiveCopy>();
             if (includeHud.Checked && archive != null)
                 foreach (var entry in HudFontTextures.Generate(additionalArchives, ScriptSources.ForCharacter('0'), fillColor, outlineColor,
                     (float)outlineSize.Value, (GlyphHinting)hinting.SelectedIndex))
@@ -642,9 +642,6 @@ namespace murumsWiiModStudio
             string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source)));
             if (string.Equals(dest, Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a separate output folder.");
-            foreach (var entry in menuCopies)
-                if (Path.GetFullPath(Path.Combine(folder, Path.GetFileName(entry.Key))).Equals(Path.GetFullPath(entry.Key), StringComparison.OrdinalIgnoreCase))
-                    throw new IOException("Choose a separate output folder for menu copies.");
             if (archive == null)
             {
                 Directory.CreateDirectory(folder);
@@ -655,14 +652,12 @@ namespace murumsWiiModStudio
                 var fresh = new StudioArchiveCopy(source, archive.Original);
                 foreach (var change in changes)
                     fresh.Files[change.Key].Data = change.Value;
-                Directory.CreateDirectory(folder);
-                fresh.Save(dest);
+                var copies = new List<StudioArchiveCopy> { fresh };
+                copies.AddRange(menuCopies.Values);
+                ArchiveCopyExport.Save(copies, folder);
             }
-
-            foreach (var entry in menuCopies)
-                BackupManager.WriteAllBytesSafely(Path.Combine(folder, Path.GetFileName(entry.Key)), entry.Value);
             dirty = false;
-            return dest;
+            return archive == null ? dest : folder;
         }
     }
 }

@@ -39,7 +39,14 @@ namespace murumsWiiModStudio
                 panel.Controls.Add(cancel, 0, 2); form.Controls.Add(panel); DarkTheme.Apply(form);
                 form.FormClosing += delegate(object sender, FormClosingEventArgs args) { if (!complete) { cancellation.Cancel(); args.Cancel = true; } };
                 form.Shown += async delegate {
-                    try { result = await RunSta(() => operation(cancellation.Token)); }
+                    try
+                    {
+                        result = await RunSta(() => ModelRuntime.RunOperation(() => {
+                            var value = operation(cancellation.Token);
+                            cancellation.Token.ThrowIfCancellationRequested();
+                            return value;
+                        }));
+                    }
                     catch (Exception error) { failure = error; }
                     complete = true; form.DialogResult = failure == null && !cancellation.IsCancellationRequested ? DialogResult.OK : DialogResult.Cancel;
                     form.Close();

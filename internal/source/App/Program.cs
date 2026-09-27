@@ -40,6 +40,10 @@ namespace murumsWiiModStudio
             {
                 ShowFatalError("Startup error", ex);
             }
+            finally
+            {
+                ModelRuntime.CleanupWorkFolders();
+            }
         }
 
         private static void ShowFatalError(string title, Exception ex)

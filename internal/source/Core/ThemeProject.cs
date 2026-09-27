@@ -178,57 +178,7 @@ namespace murumsWiiModStudio
                 if (writes.Keys.Any(other => other.StartsWith(dest + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
                     throw new IOException(L.T("Die Ausgabe enthält widersprüchliche Datei- und Ordnerpfade.", "The output contains conflicting file and folder paths."));
 
-            string recovery = Path.Combine(Path.GetTempPath(), "murums-theme-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(recovery);
-            var originals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var completed = new List<string>();
-            bool keepRecovery = false;
-            try
-            {
-                foreach (string dest in writes.Keys)
-                {
-                    string backup = null;
-                    if (File.Exists(dest))
-                    {
-                        backup = Path.Combine(recovery, originals.Count + ".bak");
-                        File.Copy(dest, backup);
-                    }
-                    originals.Add(dest, backup);
-                }
-                foreach (var item in writes)
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(item.Key));
-                    BackupManager.WriteAllBytesSafely(item.Key, item.Value);
-                    completed.Add(item.Key);
-                    if (afterWrite != null) afterWrite(completed.Count);
-                }
-            }
-            catch (Exception error)
-            {
-                var failures = new List<Exception>();
-                // Bereits geschriebene Dateien rückwärts wiederherstellen.
-                foreach (string dest in completed.AsEnumerable().Reverse())
-                {
-                    try
-                    {
-                        if (originals[dest] == null) File.Delete(dest);
-                        else BackupManager.WriteAllBytesSafely(dest, File.ReadAllBytes(originals[dest]));
-                    }
-                    catch (Exception rollbackError) { failures.Add(rollbackError); }
-                }
-                if (failures.Count > 0)
-                {
-                    keepRecovery = true;
-                    File.WriteAllLines(Path.Combine(recovery, "paths.txt"), originals.Select(p => p.Value + "\t" + p.Key));
-                    throw new IOException(L.T("Wiederherstellung unvollständig. Sicherungen: ", "Recovery incomplete. Backups: ") + recovery, error);
-                }
-                throw;
-            }
-            finally
-            {
-                if (!keepRecovery)
-                    try { Directory.Delete(recovery, true); } catch (IOException) { }
-            }
+            BackupManager.WriteBatch(writes, afterWrite);
         }
     }
 }

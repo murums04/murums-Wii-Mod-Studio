@@ -156,6 +156,15 @@ namespace murumsWiiModStudio
             }
             ManualVertices = (ManualVertices ?? new int[0]).Concat(selectedVertices).Distinct().ToArray();
         }
+        internal ModelRig ExportCopy(string folder)
+        {
+            var copy = (ModelRig)MemberwiseClone();
+            copy.Folder = folder;
+            foreach (string texture in Materials.Select(m => m.Texture).Where(t => t != null).Distinct(StringComparer.OrdinalIgnoreCase))
+                File.Copy(Path.Combine(Folder, texture), Path.Combine(folder, texture));
+            return copy;
+        }
+
         internal string ExportDae(CancellationToken token, int triangleLimit = 0, string reference = null, int gameContext = 0, RigPoseReference gameReference = null)
         {
             string path = Path.Combine(Folder, "rig-reviewed.json");
@@ -179,10 +188,13 @@ namespace murumsWiiModStudio
             }
             output.AlignToReference = false;
             output.Validate();
-            var document = Serializer().Deserialize<Dictionary<string, object>>(Serializer().Serialize(output));
-            if (gameReference != null)
-                document["ExportSkinMatrices"] = gameReference.Names.Select((name, index) => new { name, index })
-                    .ToDictionary(b => b.name, b => gameReference.Matrices[b.index]);
+            // Der Export braucht weder Bindehilfe noch Undo-/Quellgewichte; nur einmal serialisieren.
+            var document = new {
+                output.Points, output.Normals, output.Uvs, output.Faces, output.FaceMaterials,
+                output.Materials, output.Bones, output.BoneIndices, output.BoneWeights,
+                ExportSkinMatrices = gameReference == null ? null : gameReference.Names.Select((name, index) => new { name, index })
+                    .ToDictionary(b => b.name, b => gameReference.Matrices[b.index])
+            };
             File.WriteAllText(path, Serializer().Serialize(document));
             string destination = Path.Combine(Folder, triangleLimit == 0 ? "rigged.dae" : "rigged-lod.dae");
             RunScript("ModelRigExport.py", Folder, token, path, reference ?? Reference, destination, triangleLimit.ToString());

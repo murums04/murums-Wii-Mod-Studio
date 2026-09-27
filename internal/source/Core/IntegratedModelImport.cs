@@ -49,6 +49,18 @@ namespace murumsWiiModStudio
             internal IntPtr Bones;
             internal uint Material;
         }
+        [StructLayout(LayoutKind.Sequential)] struct Bone
+        {
+            internal AiString Name;
+            internal uint WeightCount;
+            internal IntPtr Armature, Node, Weights;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] internal float[] Offset;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct VertexWeight
+        {
+            internal uint Vertex;
+            internal float Weight;
+        }
         [StructLayout(LayoutKind.Sequential)] struct EmbeddedTexture
         {
             internal uint Width, Height;
@@ -98,11 +110,11 @@ namespace murumsWiiModStudio
             materialColor = Bind<ColorDelegate>("aiGetMaterialColor");
             materialString = Bind<StringDelegate>("aiGetMaterialString");
         }
-        static IntPtr Open(string path)
+        static IntPtr Open(string path, uint extraFlags = 0)
         {
             Initialize();
             if (new FileInfo(path).Length > 512L * 1024 * 1024) throw new InvalidDataException("Model exceeds the 512 MB import limit.");
-            IntPtr scene = import(Utf8(path), 0x2u | 0x8u | 0x400u | 0x10000000u);
+            IntPtr scene = import(Utf8(path), 0x2u | 0x8u | 0x400u | 0x10000000u | extraFlags);
             if (scene == IntPtr.Zero) throw new InvalidDataException(L.T("Modell konnte nicht importiert werden: ", "Could not import model: ") + Marshal.PtrToStringAnsi(error()));
             return scene;
         }
@@ -112,7 +124,8 @@ namespace murumsWiiModStudio
         {
             lock (gate)
             {
-                IntPtr pointer = Open(path);
+                // Assimp ordnet Knochen auch bei mehreren gleichnamigen Skeletten ihren Knoten zu.
+                IntPtr pointer = Open(path, 0x4000u);
                 try
                 {
                     Scene scene = Read<Scene>(pointer);
@@ -128,7 +141,9 @@ namespace murumsWiiModStudio
                     result.Joints = bones.Count;
                     result.BoneNames.AddRange(bones);
                     var preview = new PreviewData();
-                    Visit(scene, scene.Root, Identity(), result, new HashSet<IntPtr>(), 0, preview);
+                    var transforms = new Dictionary<IntPtr, double[]>();
+                    CollectTransforms(scene.Root, Identity(), transforms, new HashSet<IntPtr>(), 0);
+                    Visit(scene, scene.Root, result, preview, transforms);
                     string folder = ModelRuntime.NewWorkFolder();
                     var materials = ReadMaterials(scene, path, folder);
                     result.Rig = new ModelRig {
@@ -143,11 +158,10 @@ namespace murumsWiiModStudio
                 finally { release(pointer); }
             }
         }
-        static void Visit(Scene scene, IntPtr pointer, double[] parent, CharacterModelImport result, HashSet<IntPtr> seen, int depth, PreviewData preview)
+        static void Visit(Scene scene, IntPtr pointer, CharacterModelImport result, PreviewData preview, Dictionary<IntPtr, double[]> transforms)
         {
-            if (depth > 128 || !seen.Add(pointer) || seen.Count > 50000) throw new InvalidDataException("Invalid or excessively deep scene hierarchy.");
             Node node = Read<Node>(pointer);
-            double[] world = Multiply(parent, node.Transform.Select(v => (double)v).ToArray());
+            double[] world = transforms[pointer];
             if (node.MeshCount > scene.MeshCount || node.ChildCount > 50000) throw new InvalidDataException("Invalid model node.");
             for (int i = 0; i < node.MeshCount; i++)
             {
@@ -159,6 +173,7 @@ namespace murumsWiiModStudio
                 int start = result.Points.Count;
                 var points = new float[checked((int)mesh.VertexCount * 3)];
                 Marshal.Copy(mesh.Vertices, points, 0, points.Length);
+                var skinned = SkinPreview(mesh, points, transforms);
                 var uvs = new float[points.Length];
                 if (mesh.Uvs[0] != IntPtr.Zero) Marshal.Copy(mesh.Uvs[0], uvs, 0, uvs.Length);
                 for (int v = 0; v < mesh.VertexCount; v++)
@@ -168,6 +183,8 @@ namespace murumsWiiModStudio
                     {
                         double value = world[axis * 4 + 3];
                         for (int k = 0; k < 3; k++) value += world[axis * 4 + k] * points[v * 3 + k];
+                        if (skinned != null && skinned[v * 4 + 3] > 0)
+                            value = skinned[v * 4 + axis] / skinned[v * 4 + 3];
                         if (Double.IsNaN(value) || Double.IsInfinity(value) || Math.Abs(value) > 1e12) throw new InvalidDataException("Invalid model coordinate.");
                         transformed[axis] = (float)value;
                     }
@@ -194,8 +211,55 @@ namespace murumsWiiModStudio
                     preview.FaceMaterials.Add(mesh.Material < scene.MaterialCount ? (int)mesh.Material : 0);
                 }
             }
-            for (int i = 0; i < node.ChildCount; i++) Visit(scene, Marshal.ReadIntPtr(node.Children, i * IntPtr.Size), world, result, seen, depth + 1, preview);
+            for (int i = 0; i < node.ChildCount; i++) Visit(scene, Marshal.ReadIntPtr(node.Children, i * IntPtr.Size), result, preview, transforms);
         }
+        static void CollectTransforms(IntPtr pointer, double[] parent, Dictionary<IntPtr, double[]> transforms, HashSet<IntPtr> seen, int depth)
+        {
+            if (pointer == IntPtr.Zero || depth > 128 || !seen.Add(pointer) || seen.Count > 50000)
+                throw new InvalidDataException("Invalid model hierarchy.");
+            Node node = Read<Node>(pointer);
+            if (node.ChildCount > 50000 || node.ChildCount > 0 && node.Children == IntPtr.Zero)
+                throw new InvalidDataException("Invalid model children.");
+            double[] world = Multiply(parent, node.Transform.Select(v => (double)v).ToArray());
+            transforms.Add(pointer, world);
+            for (int i = 0; i < node.ChildCount; i++)
+                CollectTransforms(Marshal.ReadIntPtr(node.Children, i * IntPtr.Size), world, transforms, seen, depth + 1);
+        }
+
+        static double[] SkinPreview(Mesh mesh, float[] points, Dictionary<IntPtr, double[]> transforms)
+        {
+            if (mesh.BoneCount == 0) return null;
+            var result = new double[checked((int)mesh.VertexCount * 4)];
+            int weightSize = Marshal.SizeOf(typeof(VertexWeight));
+            for (int b = 0; b < mesh.BoneCount; b++)
+            {
+                Bone bone = Read<Bone>(Marshal.ReadIntPtr(mesh.Bones, b * IntPtr.Size));
+                if (bone.WeightCount == 0) continue;
+                double[] world;
+                if (bone.WeightCount > mesh.VertexCount || bone.Weights == IntPtr.Zero
+                    || !transforms.TryGetValue(bone.Node, out world))
+                    throw new InvalidDataException("Missing source joint: " + bone.Name);
+                // Gelenkweltmatrix mal inverse Bindematrix liefert bereits Weltkoordinaten.
+                var matrix = Multiply(world, bone.Offset.Select(v => (double)v).ToArray());
+                for (int i = 0; i < bone.WeightCount; i++)
+                {
+                    var influence = Read<VertexWeight>(IntPtr.Add(bone.Weights, i * weightSize));
+                    if (influence.Vertex >= mesh.VertexCount || Single.IsNaN(influence.Weight)
+                        || Single.IsInfinity(influence.Weight) || influence.Weight < 0)
+                        throw new InvalidDataException("Invalid source skin weights.");
+                    int v = (int)influence.Vertex;
+                    for (int axis = 0; axis < 3; axis++)
+                    {
+                        double value = matrix[axis * 4 + 3];
+                        for (int k = 0; k < 3; k++) value += matrix[axis * 4 + k] * points[v * 3 + k];
+                        result[v * 4 + axis] += value * influence.Weight;
+                    }
+                    result[v * 4 + 3] += influence.Weight;
+                }
+            }
+            return result;
+        }
+
         static ModelRig.Material[] ReadMaterials(Scene scene, string source, string folder)
         {
             if (scene.MaterialCount == 0 || scene.MaterialCount > 1024 || scene.TextureCount > 4096) throw new InvalidDataException("Invalid material count.");

@@ -47,7 +47,7 @@ namespace murumsWiiModStudio
             string full = Path.GetFullPath(path);
             if (string.Equals(full, Source, StringComparison.OrdinalIgnoreCase) || otherSources.Any(p => string.Equals(full, Path.GetFullPath(p), StringComparison.OrdinalIgnoreCase)))
                 throw new IOException("Choose a separate output file. The opened sources must remain unchanged.");
-            BackupManager.WriteAllBytesSafely(full, Build());
+            ArchiveCopyExport.SaveCopy(Source, Original, Build(), full);
         }
     }
 }

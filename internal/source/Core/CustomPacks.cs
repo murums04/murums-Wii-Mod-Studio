@@ -33,11 +33,38 @@ namespace murumsWiiModStudio
         {
             if (!File.Exists(StorePath))
                 return new List<CustomPack>();
-            return new JavaScriptSerializer().Deserialize<List<CustomPack>>(File.ReadAllText(StorePath)) ?? new List<CustomPack>();
+            try
+            {
+                var packs = new JavaScriptSerializer().Deserialize<List<CustomPack>>(File.ReadAllText(StorePath));
+                Validate(packs);
+                return packs;
+            }
+            catch (ArgumentException error) { throw InvalidStore(error); }
+            catch (InvalidOperationException error) { throw InvalidStore(error); }
+            catch (FormatException error) { throw InvalidStore(error); }
+        }
+
+        static InvalidDataException InvalidStore(Exception error)
+        {
+            return new InvalidDataException(L.T("Die gespeicherte Pack-Liste ist beschädigt. Die Datei bleibt unverändert: ",
+                "The saved pack list is invalid. The file was kept unchanged: ") + StorePath, error);
+        }
+
+        static void Validate(List<CustomPack> packs)
+        {
+            if (packs == null) throw InvalidStore(null);
+            foreach (var pack in packs)
+            {
+                if (pack == null || String.IsNullOrWhiteSpace(pack.Name) || String.IsNullOrWhiteSpace(pack.FilesFolder)
+                    || !Path.IsPathRooted(pack.FilesFolder))
+                    throw InvalidStore(null);
+                Path.GetFullPath(pack.FilesFolder);
+            }
         }
 
         internal static void Register(CustomPack pack)
         {
+            if (pack == null) throw new ArgumentNullException("pack");
             var packs = Load();
             packs.RemoveAll(p => String.Equals(p.FilesFolder, pack.FilesFolder, StringComparison.OrdinalIgnoreCase));
             packs.Add(pack);
@@ -54,12 +81,9 @@ namespace murumsWiiModStudio
         static void Save(List<CustomPack> packs)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(StorePath));
-            string temporary = StorePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(packs), new UTF8Encoding(false));
-            if (File.Exists(StorePath))
-                File.Replace(temporary, StorePath, null);
-            else
-                File.Move(temporary, StorePath);
+            Validate(packs);
+            BackupManager.WriteAllBytesSafely(StorePath,
+                new UTF8Encoding(false).GetBytes(new JavaScriptSerializer().Serialize(packs)));
         }
 
         internal static string DefaultRoot(bool retroRewind)

@@ -218,6 +218,34 @@ namespace murumsWiiModStudio
             return required.Where(p => !paths.Contains(p)).ToList();
         }
 
+        internal static void SaveProject(string path, Func<string, byte[]> prepare)
+        {
+            path = Path.GetFullPath(path);
+            string parent = Path.GetDirectoryName(path), sidecar;
+            do
+            {
+                sidecar = Path.Combine(parent, Path.GetFileNameWithoutExtension(path) + "-files-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            } while (Directory.Exists(sidecar) || File.Exists(sidecar));
+            RrMissingFiles.ValidatePath(parent, sidecar);
+            Directory.CreateDirectory(sidecar);
+            bool saved = false;
+            try
+            {
+                BackupManager.WriteAllBytesSafely(path, prepare(sidecar));
+                saved = true;
+            }
+            finally
+            {
+                // Nur die Beilagen des fehlgeschlagenen Speichervorgangs entfernen.
+                if (!saved)
+                {
+                    try { Directory.Delete(sidecar, true); }
+                    catch (IOException error) { System.Diagnostics.Trace.WriteLine(error.Message); }
+                    catch (UnauthorizedAccessException error) { System.Diagnostics.Trace.WriteLine(error.Message); }
+                }
+            }
+        }
+
         internal static void WriteNew(string destination, IDictionary<string, byte[]> files)
         {
             string root = Path.GetFullPath(destination);

@@ -126,12 +126,17 @@ namespace murumsWiiModStudio
             return Yaz0.IsYaz0(original) ? Yaz0.Compress(data) : data;
         }
 
+        internal byte[] PrepareCopy(string destination, bool hideShadow)
+        {
+            return ArchiveCopyExport.PrepareCopy(Source, original, Build(hideShadow), destination);
+        }
+
         public string Save(string folder, bool hideShadow)
         {
             string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(Source)));
             if (string.Equals(dest, Source, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Choose a separate output folder. The source archive is preserved.");
-            byte[] data = Build(hideShadow);
+            byte[] data = PrepareCopy(dest, hideShadow);
             Directory.CreateDirectory(folder);
             BackupManager.WriteAllBytesSafely(dest, data);
             return dest;

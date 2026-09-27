@@ -69,9 +69,9 @@ namespace murumsWiiModStudio
             }
         }
 
-        internal static Dictionary<string, byte[]> Generate(string folder, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
+        internal static Dictionary<string, StudioArchiveCopy> Generate(string folder, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
         {
-            var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, StudioArchiveCopy>(StringComparer.OrdinalIgnoreCase);
             if (!Directory.Exists(folder)) return result;
             var paths = Directory.GetFiles(folder, "*.szs").Where(p =>
                 Regex.IsMatch(Path.GetFileName(p), @"^Race(?:_[A-Za-z]+)?.szs$", RegexOptions.IgnoreCase)).ToList();
@@ -86,9 +86,9 @@ namespace murumsWiiModStudio
             return Generate(paths, ttf, fill, outline, stroke, hint);
         }
 
-        internal static Dictionary<string, byte[]> Generate(IEnumerable<string> paths, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
+        internal static Dictionary<string, StudioArchiveCopy> Generate(IEnumerable<string> paths, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
         {
-            var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, StudioArchiveCopy>(StringComparer.OrdinalIgnoreCase);
             foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 string name = Path.GetFileNameWithoutExtension(path);
@@ -104,7 +104,7 @@ namespace murumsWiiModStudio
                         entry.Value.Data = TplTextureEditor.ReplaceFirstImage(entry.Value.Data, bitmap, true);
                 if (result.Keys.Any(p => Path.GetFileName(p).Equals(Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidDataException("Two HUD sources share the same output filename.");
-                result.Add(path, archive.Build());
+                result.Add(path, archive);
             }
             return result;
         }

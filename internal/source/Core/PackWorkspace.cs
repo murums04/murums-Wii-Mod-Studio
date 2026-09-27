@@ -84,7 +84,7 @@ namespace murumsWiiModStudio
                     byte[] data = File.ReadAllBytes(file);
                     if (new[] { ".szs", ".arc", ".u8" }.Contains(Path.GetExtension(file).ToLowerInvariant()))
                     {
-                        byte[] header = Yaz0.IsYaz0(data) ? Yaz0.Decompress(data) : data;
+                        byte[] header = Yaz0.IsYaz0(data) ? Yaz0.ReadMagic(data) : data;
                         if (header.Length >= 4 && Encoding.ASCII.GetString(header, 0, 4) == "bres")
                             throw new NotSupportedException(L.T(
                                 "BRRES-Modellcontainer, kein U8-Archiv. Modell- und Animationsdaten wurden nicht geprüft.",

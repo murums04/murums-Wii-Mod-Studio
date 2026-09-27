@@ -50,7 +50,8 @@ namespace murumsWiiModStudio
                 Points.Clear(); Faces.Clear(); FaceColors.Clear(); BoneNames.Clear();
                 Joints = Skins = 0; Rig = null;
                 string preview = ModelRuntime.SimplifyPreview(input, cancellation);
-                IntegratedModelImport.ReadModel(preview, this);
+                try { IntegratedModelImport.ReadModel(preview, this); }
+                finally { ModelRuntime.DeleteWorkFolder(Path.GetDirectoryName(preview)); }
                 Warnings.Add(L.T("Vorschau automatisch vereinfacht. Die Originaldatei bleibt erhalten und wird für die RR-Konvertierung verwendet.",
                     "Preview simplified automatically. The original file is preserved and used for RR conversion."));
             }

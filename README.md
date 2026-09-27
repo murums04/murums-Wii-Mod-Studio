@@ -1,7 +1,7 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
 A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta5**. Developed by murums with AI assistance.
+Current release: **2.1.0-beta6**. Developed by murums with AI assistance.
 
 ## Features
 
@@ -40,7 +40,7 @@ Game files are not included. The installer bundles the model runtime components 
 
 ## Character models
 
-Choose your custom pack and the installed RR variant to replace. In Character Builder, use **Load model → Pose & movement → Export character**. Open saved `.murcharacter` work with **Open project**.
+Choose your custom pack and the installed RR variant to replace. In Character Builder, use **Load model → Pose & movement → Export character**. Open saved `.murcharacter` work with **Open project**. Use **Solid surface** in the model or pose preview to inspect the body shape without textures.
 Copy the contents of `MUR_EDITED/Character replacement files` into your custom-pack root, then relaunch the enabled pack.
 Automatic binding is a starting point. Strongly posed unrigged models and some RR skeletons are not yet handled reliably; Baby Daisy and King Boo remain unsupported by the tested automatic export path. Closed finger grips and performance with multiple imported characters still need further work. Not every model, vehicle or animation has been tested in-game.
 

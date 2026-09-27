@@ -215,18 +215,19 @@ namespace murumsWiiModStudio
             foreach (string path in changed.Select(k => owners[k]).Distinct())
             {
                 string dest = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(path)));
-                if (dest.Equals(path, StringComparison.OrdinalIgnoreCase)) throw new IOException("Choose a separate output folder.");
+                if (archives.Keys.Any(p => dest.Equals(Path.GetFullPath(p), StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException("Choose a separate output folder.");
                 var archive = archives[path];
                 if (archive == null) outputs.Add(dest, encoded.First(p => owners[p.Key] == path).Value);
                 else
                 {
                     var copy = new StudioArchiveCopy(path, archive.Original);
                     foreach (var entry in encoded.Where(p => owners[p.Key] == path)) copy.Files[entryKeys[entry.Key]].Data = entry.Value;
-                    outputs.Add(dest, copy.Build());
+                    outputs.Add(dest, ArchiveCopyExport.PrepareCopy(path, archive.Original, copy.Build(), dest));
                 }
             }
             Directory.CreateDirectory(folder);
-            foreach (var output in outputs) BackupManager.WriteAllBytesSafely(output.Key, output.Value);
+            BackupManager.WriteBatch(outputs);
             dirty = false;
             Status.Text = "Saved copies: " + folder + "\nCheck message lengths in-game; this table does not simulate menu layout wrapping.";
             ExportHelp.Show(this, folder);

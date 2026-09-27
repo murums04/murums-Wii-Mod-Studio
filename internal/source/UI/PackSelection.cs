@@ -190,7 +190,14 @@ namespace murumsWiiModStudio
                         state.Pack = null;
                     }
                 }
-                catch (Exception error) { state.Pack = null; StudioMessageBox.Show(form, error.Message, "Custom packs", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                catch (Exception error)
+                {
+                    state.Pack = null;
+                    choice.Items.Clear();
+                    choice.Items.Add(L.T("Custom Pack auswählen oder erstellen", "Select or create a Custom Pack"));
+                    choice.SelectedIndex = 0;
+                    StudioMessageBox.Show(form, error.Message, "Custom packs", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
                 finally { loading = false; updateGate(); }
             };
             choice.SelectedIndexChanged += delegate

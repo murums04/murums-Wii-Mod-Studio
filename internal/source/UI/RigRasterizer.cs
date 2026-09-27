@@ -22,7 +22,13 @@ namespace murumsWiiModStudio
                 using (var source = new Bitmap(Path.Combine(model.Folder, m.Texture)))
                 using (var bitmap = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb))
                 {
-                    using (var graphics = Graphics.FromImage(bitmap)) graphics.DrawImageUnscaled(source, 0, 0);
+                    using (var graphics = Graphics.FromImage(bitmap))
+                    {
+                        // Bild-DPI darf die UV-Zuordnung nicht veraendern.
+                        graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+                        graphics.DrawImage(source, new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                            0, 0, source.Width, source.Height, GraphicsUnit.Pixel);
+                    }
                     var result = new Texture { Width = bitmap.Width, Height = bitmap.Height, Pixels = new int[bitmap.Width * bitmap.Height] };
                     var bits = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
                     try { Marshal.Copy(bits.Scan0, result.Pixels, 0, result.Pixels.Length); }
@@ -31,7 +37,7 @@ namespace murumsWiiModStudio
                 }
             }).ToArray();
         }
-        internal Bitmap Draw(Size size, PointF[] points, double[] depths, int selectedBone, bool weights)
+        internal Bitmap Draw(Size size, PointF[] points, double[] depths, int selectedBone, bool weights, bool solid = false)
         {
             int width = Math.Max(1, size.Width), height = Math.Max(1, size.Height);
             var pixels = Enumerable.Repeat(unchecked((int)0xff23242c), width * height).ToArray();
@@ -54,6 +60,12 @@ namespace murumsWiiModStudio
                 int bottom = Math.Min(height - 1, (int)Math.Ceiling(Math.Max(a.Y, Math.Max(b.Y, c.Y))));
                 var texture = textures[rig.FaceMaterials[f]];
                 var baseColor = rig.Materials[rig.FaceMaterials[f]].Color;
+                double nx = (b.Y - a.Y) * (depths[ic] - depths[ia]) - (depths[ib] - depths[ia]) * (c.Y - a.Y);
+                double ny = (depths[ib] - depths[ia]) * (c.X - a.X) - (b.X - a.X) * (depths[ic] - depths[ia]);
+                double nz = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+                double length = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                double light = length > 0 ? Math.Abs((nx * -.3 + ny * -.5 + nz * .81) / length) : 1;
+                int shade = (int)(105 + 115 * light);
                 for (int y = top; y <= bottom; y++) for (int x = left; x <= right; x++)
                 {
                     float wa = ((b.Y - c.Y) * (x + .5f - c.X) + (c.X - b.X) * (y + .5f - c.Y)) / denominator;
@@ -63,20 +75,23 @@ namespace murumsWiiModStudio
                     double depth = depths[ia] * wa + depths[ib] * wb + depths[ic] * wc;
                     int pixel = y * width + x;
                     if (depth <= zbuffer[pixel]) continue;
+                    int texel = 0;
+                    if (texture != null && !(weights && selectedBone >= 0))
+                    {
+                        float u = rig.Uvs[ia][0] * wa + rig.Uvs[ib][0] * wb + rig.Uvs[ic][0] * wc;
+                        float v = rig.Uvs[ia][1] * wa + rig.Uvs[ib][1] * wb + rig.Uvs[ic][1] * wc;
+                        u -= (float)Math.Floor(u); v -= (float)Math.Floor(v);
+                        texel = texture.Pixels[Math.Min(texture.Height - 1, (int)((1 - v) * texture.Height)) * texture.Width + Math.Min(texture.Width - 1, (int)(u * texture.Width))];
+                        if ((uint)texel >> 24 < 128) continue;
+                    }
                     int color;
                     if (weights && selectedBone >= 0)
                     {
                         float amount = influence[ia] * wa + influence[ib] * wb + influence[ic] * wc;
                         color = Color.FromArgb(255, (int)(40 + 210 * amount), (int)(75 + 85 * (1 - amount)), (int)(70 + 130 * (1 - amount))).ToArgb();
                     }
-                    else if (texture != null)
-                    {
-                        float u = rig.Uvs[ia][0] * wa + rig.Uvs[ib][0] * wb + rig.Uvs[ic][0] * wc;
-                        float v = rig.Uvs[ia][1] * wa + rig.Uvs[ib][1] * wb + rig.Uvs[ic][1] * wc;
-                        u -= (float)Math.Floor(u); v -= (float)Math.Floor(v);
-                        color = texture.Pixels[Math.Min(texture.Height - 1, (int)((1 - v) * texture.Height)) * texture.Width + Math.Min(texture.Width - 1, (int)(u * texture.Width))];
-                        if ((uint)color >> 24 < 128) continue;
-                    }
+                    else if (solid) color = Color.FromArgb(255, shade, shade, Math.Min(255, shade + 8)).ToArgb();
+                    else if (texture != null) color = texel;
                     else color = Color.FromArgb(255, (int)(255 * Math.Max(0, Math.Min(1, baseColor[0]))), (int)(255 * Math.Max(0, Math.Min(1, baseColor[1]))), (int)(255 * Math.Max(0, Math.Min(1, baseColor[2])))).ToArgb();
                     pixels[pixel] = color; zbuffer[pixel] = depth; SurfaceFaces[pixel] = f;
                 }

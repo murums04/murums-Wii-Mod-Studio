@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -14,11 +15,79 @@ namespace murumsWiiModStudio
     {
         internal static string RootOverride, BlenderOverride;
         internal static string Root { get { return RootOverride ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "internal", "model"); } }
+        [ThreadStatic] static List<string> operationFolders;
+        static readonly object workGate = new object();
+        static readonly HashSet<string> workFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static ModelRuntime()
+        {
+            AppDomain.CurrentDomain.ProcessExit += delegate { CleanupWorkFolders(); };
+        }
+
         internal static string NewWorkFolder()
         {
-            string folder = Path.Combine(Path.GetTempPath(), "murums-models", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(folder);
+            string folder = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "murums-models", Guid.NewGuid().ToString("N")));
+            lock (workGate)
+            {
+                Directory.CreateDirectory(folder);
+                workFolders.Add(folder);
+                if (operationFolders != null) operationFolders.Add(folder);
+            }
             return folder;
+        }
+
+        internal static T RunOperation<T>(Func<T> operation)
+        {
+            var previous = operationFolders;
+            var created = new List<string>();
+            operationFolders = created;
+            try { return operation(); }
+            catch (OperationCanceledException)
+            {
+                foreach (string folder in created) DeleteWorkFolder(folder);
+                throw;
+            }
+            finally
+            {
+                operationFolders = previous;
+                if (previous != null) previous.AddRange(created);
+            }
+        }
+
+        internal static void DeleteWorkFolder(string folder)
+        {
+            folder = Path.GetFullPath(folder);
+            lock (workGate)
+            {
+                // Nur selbst angelegte Arbeitsordner entfernen, niemals Projekt- oder Runtime-Pfade.
+                if (!workFolders.Contains(folder)) return;
+                try
+                {
+                    if (Directory.Exists(folder)) DeleteWorkTree(folder);
+                    workFolders.Remove(folder);
+                }
+                catch (IOException error) { Trace.WriteLine("Model cleanup: " + error.Message); }
+                catch (UnauthorizedAccessException error) { Trace.WriteLine("Model cleanup: " + error.Message); }
+            }
+        }
+
+        static void DeleteWorkTree(string folder)
+        {
+            if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
+            {
+                Directory.Delete(folder);
+                return;
+            }
+            foreach (string child in Directory.GetDirectories(folder)) DeleteWorkTree(child);
+            foreach (string file in Directory.GetFiles(folder)) File.Delete(file);
+            Directory.Delete(folder);
+        }
+
+        internal static void CleanupWorkFolders()
+        {
+            string[] folders;
+            lock (workGate) folders = workFolders.ToArray();
+            foreach (string folder in folders) DeleteWorkFolder(folder);
         }
         internal static string Prepare(string source, CancellationToken cancellation)
         {
@@ -101,6 +170,7 @@ namespace murumsWiiModStudio
             info.EnvironmentVariables["BLENDER_USER_CONFIG"] = Path.Combine(work, "config");
             info.EnvironmentVariables["BLENDER_USER_SCRIPTS"] = Path.Combine(work, "scripts");
             info.EnvironmentVariables["STUDIO_MODEL_RUNTIME"] = Root;
+            info.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"] = "1";
             var log = new StringBuilder();
             using (var process = new Process { StartInfo = info })
             {

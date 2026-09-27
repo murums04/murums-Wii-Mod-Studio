@@ -52,13 +52,13 @@ namespace murumsWiiModStudio
             if (File.Exists(Path.Combine(cache, "race.brres"))) result.BaseRace = RigPoseReference.Load(Path.Combine(cache, "race.brres"), "model", "drive", 16, true);
             return result;
         }
-        internal static RigPoseReference ReadVehicle(string path)
+        internal static RigPoseReference ReadVehicle(string path, bool visual = true)
         {
             var archive = new StudioArchiveCopy(path);
             var entry = archive.Files.Single(p => Path.GetFileName(p.Key) == "driver_model.brres");
             string model = Path.Combine(ModelRuntime.NewWorkFolder(), "driver_model.brres");
             File.WriteAllBytes(model, entry.Value.Data);
-            var result = RigPoseReference.Load(model, "model", "drive", 16, true);
+            var result = RigPoseReference.Load(model, "model", "drive", 16, visual);
             result.VehicleCode = Path.GetFileNameWithoutExtension(path).Split('-')[0];
             return result;
         }

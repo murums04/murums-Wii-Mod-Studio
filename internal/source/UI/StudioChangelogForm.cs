@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Text.RegularExpressions;
@@ -113,12 +113,23 @@ namespace murumsWiiModStudio
 
         private static string CurrentHeading()
         {
-            return L.T("2.1.0-beta5 — Release", "2.1.0-beta5 — Release");
+            return "2.1.0-beta6 — Release";
         }
 
         internal static string HistoryText()
         {
             return CurrentHeading() + "\n\n" + L.T(
+                "• Character Builder: Texturen unabhängig von Bild-DPI korrekt darstellen; vorhandene Skelette korrekt voranzeigen, bessere Ansichtsgröße und schattierte Formansicht. Geschätzte Gelenke klar kennzeichnen; Vollautomatik ungeriggter Sonderposen bleibt offen.\n\n",
+                "• Character Builder: display textures correctly regardless of image DPI; correct source skeleton preview, improved framing and shaded solid view. Identify estimated joints clearly; fully automatic rigging of unrigged special poses remains unresolved.\n\n") + L.T(
+                "• Zuverlässigkeit: fehlgeschlagene mehrteilige Exporte zurücknehmen; nötige Wiederherstellungsdateien behalten. Unveränderte Dateien nicht erneut schreiben und Charakterexporte auf eine vorherige Sicherung begrenzen. Pack-Listen validieren, Einstellungen sicher speichern und fehlgeschlagene Projektbeilagen aufräumen. Pack-Prüfung ohne doppelte Dekomprimierung.\n\n",
+                "• Reliability: roll back failed multi-file exports and keep needed recovery files. Skip unchanged files and retain one previous character backup. Validate pack lists, save settings safely and clean up failed project sidecars. Pack checks no longer decompress archives twice.\n\n") + L.T(
+                "• Modellverarbeitung: eigene Arbeitsordner aufräumen, Fahrzeugreferenzen wiederverwenden und Exportdaten ohne unnötige Kopien schreiben. Modellvorschau ohne zusätzliche Blender-Startgeometrie und mit korrekten Modellgrenzen.\n\n"
+                + "• Tool-Exporte: Font-, Race-, Game-HUD- und Menütext-Änderungen in vorhandenen Ausgabearchiven erhalten; nur bearbeitete Ressourcen ersetzen.\n\n"
+                + "• Speichern: nur den direkten Sicherungsstand behalten; reine Dateiöffnungen erzeugen keine Sicherungskopien mehr.\n\n",
+                "• Model processing: clean up owned work folders, reuse vehicle references and write export data without unnecessary copies. Model previews exclude Blender startup geometry and use the correct model bounds.\n\n"
+                + "• Tool exports: preserve font, race, game HUD and menu text edits in existing output archives; replace only edited resources.\n\n"
+                + "• Saving: keep only the previous backup; opening a file no longer creates backup copies.\n\n")
+                + "2.1.0-beta5 — Release\n\n" + L.T(
                 "• Installer: vollständiges Updatepaket mit Modelloptimierung akzeptieren; Paketinhalt beim Erstellen prüfen.\n\n• Character Builder: sparsamere Spielmodelle mit erhaltenen Gesichts- und Kleidungsdetails; Exportbeleuchtung, gemischte Materialfarben und glTF/USDZ-Import korrigiert. Stabilere Körperbindung bei geteilten Meshes; sichtbare Peach-Gelenke auch in der Fahrzeugauswahl korrekt übernehmen. Fahrhaltungen erhalten das Volumen gebeugter Gliedmaßen; tiefere Ellbogen, Handflächen am Griff und eigene Kontaktpunkte für die Fahrzeugauswahl. Einzelne Menü-/Fahrzeugbewegungen mit Schlüsselbildern bearbeiten und exportieren. Ungewöhnliche Ausgangsposen und einzelne RR-Skelette bleiben eingeschränkt. Fingergriff und Leistung mit mehreren importierten Figuren sind noch nicht abschließend geprüft.\n\n",
                 "• Installer: accept the complete update package with model optimization; verify package contents during packaging.\n\n• Character Builder: lighter game models with preserved face and clothing details; corrected export lighting, mixed material colours and glTF/USDZ import. More stable binding of split meshes; correctly use visible Peach joints in vehicle selection. Driving poses preserve bent limb volume, lower the elbows and align palms with grips; vehicle selection uses its own contact points. Edit and export individual menu/vehicle movements with keyframes. Unusual starting poses and some RR skeletons remain limited. Closed finger grips and performance with multiple imported characters are not yet fully verified.\n\n") + "2.1.0-beta4 — Release\n\n" + L.T(
                 "• Font Tool: geprüfte Schriftbereiche, Archivauswahl korrigiert, sichere Abstände und Textfeld-Vergleich.\n\n"

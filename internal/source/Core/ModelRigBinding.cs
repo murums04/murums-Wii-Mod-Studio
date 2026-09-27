@@ -111,6 +111,7 @@ namespace murumsWiiModStudio
                 BoneWeights[v] = (float[])vertex.Weights.Clone();
             }
             BindingWarning = null;
+            ModelRuntime.DeleteWorkFolder(work);
             BindingMethod = "Blender bone heat";
             AlignToReference = true;
             InvalidateAlignment();

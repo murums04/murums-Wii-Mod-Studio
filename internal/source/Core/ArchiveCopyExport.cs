@@ -37,12 +37,25 @@ namespace murumsWiiModStudio
             return target.Build();
         }
 
-        internal static void SaveCopy(string source, byte[] edited, string destination)
+        internal static byte[] PrepareCopy(string source, byte[] original, byte[] edited, string destination)
         {
             string full = Path.GetFullPath(destination);
-            if (full.Equals(Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase)) throw new IOException("Choose a separate output file.");
+            if (full.Equals(Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Choose a separate output file.");
             RrMissingFiles.ValidatePath(Path.GetDirectoryName(full), full);
-            byte[] data = File.Exists(full) ? Merge(File.ReadAllBytes(source), edited, File.ReadAllBytes(full)) : edited;
+            if (Directory.Exists(full)) throw new IOException("A folder occupies the output file: " + full);
+            return File.Exists(full) ? Merge(original, edited, File.ReadAllBytes(full)) : edited;
+        }
+
+        internal static void SaveCopy(string source, byte[] edited, string destination)
+        {
+            SaveCopy(source, File.ReadAllBytes(source), edited, destination);
+        }
+
+        internal static void SaveCopy(string source, byte[] original, byte[] edited, string destination)
+        {
+            string full = Path.GetFullPath(destination);
+            byte[] data = PrepareCopy(source, original, edited, full);
             Directory.CreateDirectory(Path.GetDirectoryName(full));
             BackupManager.WriteAllBytesSafely(full, data);
         }
@@ -51,6 +64,7 @@ namespace murumsWiiModStudio
         {
             var sources = archives.ToArray();
             var writes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+            var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var source in sources)
             {
                 string target = Path.GetFullPath(Path.Combine(folder, Path.GetFileName(source.Source)));
@@ -59,10 +73,21 @@ namespace murumsWiiModStudio
                 var original = new StudioArchiveCopy(source.Source, source.Original);
                 if (source.Files.All(p => original.Files.ContainsKey(p.Key) && p.Value.Data.SequenceEqual(original.Files[p.Key].Data))) continue;
                 byte[] modified = source.Build();
-                writes.Add(target, File.Exists(target) ? Merge(source.Original, modified, File.ReadAllBytes(target)) : modified);
+                byte[] pending;
+                if (writes.TryGetValue(target, out pending))
+                {
+                    if (!owners[target].Equals(source.Source, StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("Two sources share the same output filename: " + Path.GetFileName(target));
+                    writes[target] = Merge(source.Original, modified, pending);
+                }
+                else
+                {
+                    writes.Add(target, PrepareCopy(source.Source, source.Original, modified, target));
+                    owners.Add(target, source.Source);
+                }
             }
             Directory.CreateDirectory(folder);
-            foreach (var write in writes) BackupManager.WriteAllBytesSafely(write.Key, write.Value);
+            BackupManager.WriteBatch(writes);
         }
     }
 }

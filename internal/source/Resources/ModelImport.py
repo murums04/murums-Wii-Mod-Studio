@@ -47,10 +47,12 @@ def normalize_specular_slots(path):
 arguments = sys.argv[sys.argv.index('--') + 1:]
 source, destination = arguments[:2]
 limit = int(arguments[2]) if len(arguments) > 2 else 0
+# Fremdmodelle ohne Blender-Startobjekte laden; BLEND bringt seine eigene Szene mit.
+if not source.lower().endswith('.blend'):
+    bpy.ops.wm.read_factory_settings(use_empty=True)
 if source.lower().endswith('.blend'):
     bpy.ops.wm.open_mainfile(filepath=source, load_ui=False, use_scripts=False)
 elif source.lower().endswith('.usdz'):
-    bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.wm.usd_import(filepath=source, import_textures_mode='IMPORT_PACK')
 elif source.lower().endswith(('.glb', '.gltf')):
     bpy.ops.import_scene.gltf(filepath=source)

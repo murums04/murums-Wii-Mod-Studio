@@ -8,14 +8,14 @@ namespace murumsWiiModStudio
 {
     internal static class MenuTimerFonts
     {
-        internal static Dictionary<string, byte[]> Generate(string folder, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
+        internal static Dictionary<string, StudioArchiveCopy> Generate(string folder, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
         {
             return Generate(Directory.Exists(folder) ? Directory.GetFiles(folder, "*.szs") : new string[0], ttf, fill, outline, stroke, hint);
         }
 
-        internal static Dictionary<string, byte[]> Generate(IEnumerable<string> paths, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
+        internal static Dictionary<string, StudioArchiveCopy> Generate(IEnumerable<string> paths, string ttf, Color fill, Color outline, float stroke, GlyphHinting hint)
         {
-            var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, StudioArchiveCopy>(StringComparer.OrdinalIgnoreCase);
             var stems = new[] { "Title", "MenuSingle", "MenuMulti", "Globe", "Channel", "Award" };
             foreach (string path in paths)
             {
@@ -31,7 +31,7 @@ namespace murumsWiiModStudio
                     using (var bitmap = HudNumberFontForm.Generate(entry.Value.Data, ttf, text, fill, outline, stroke, hint))
                         entry.Value.Data = TplTextureEditor.ReplaceFirstImage(entry.Value.Data, bitmap, true);
                 }
-                result.Add(path, archive.Build());
+                result.Add(path, archive);
             }
             return result;
         }

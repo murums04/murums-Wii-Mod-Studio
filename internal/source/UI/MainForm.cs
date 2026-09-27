@@ -725,7 +725,6 @@ namespace murumsWiiModStudio
             ResourceInfo info = ResourceDetector.Detect(path);
             if (info.Kind == ResourceKind.Brlan)
             {
-                BackupManager.CreateBackup(path);
                 using (murumsWiiModStudio.Brlan.MainForm editor = new murumsWiiModStudio.Brlan.MainForm())
                 {
                     editor.OpenFromPath(path);
@@ -734,7 +733,6 @@ namespace murumsWiiModStudio
             }
             else if (info.Kind == ResourceKind.Brlyt)
             {
-                BackupManager.CreateBackup(path);
                 using (murumsWiiModStudio.Brlan.BrlytEditorForm editor = new murumsWiiModStudio.Brlan.BrlytEditorForm(path))
                     editor.ShowDialog(this);
             }

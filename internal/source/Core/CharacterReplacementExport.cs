@@ -21,44 +21,10 @@ namespace murumsWiiModStudio
                 if (flat.ContainsKey(name)) throw new InvalidDataException("Duplicate character filename: " + name);
                 flat.Add(name, file.Value);
             }
-            Directory.CreateDirectory(folder);
-            var before = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-            var written = new List<string>();
-            string backupFolder = Path.Combine(Path.GetFullPath(editedFolder), ".murums_backups");
-            string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff") + "-" + Guid.NewGuid().ToString("N");
-            try
-            {
-                foreach (var file in flat)
-                {
-                    string path = Path.Combine(folder, file.Key);
-                    RrMissingFiles.ValidatePath(folder, path);
-                    before[path] = File.Exists(path) ? File.ReadAllBytes(path) : null;
-                }
-                foreach (var file in flat)
-                {
-                    string path = Path.Combine(folder, file.Key);
-                    if (before[path] != null && before[path].SequenceEqual(file.Value)) continue;
-                    string temporary = Path.Combine(folder, ".mur-character-" + Guid.NewGuid().ToString("N") + ".tmp");
-                    try
-                    {
-                        File.WriteAllBytes(temporary, file.Value);
-                        if (before[path] == null) File.Move(temporary, path);
-                        else
-                        {
-                            Directory.CreateDirectory(backupFolder);
-                            File.Replace(temporary, path, Path.Combine(backupFolder, file.Key + "." + stamp + ".bak"));
-                        }
-                        written.Add(path);
-                    }
-                    finally { if (File.Exists(temporary)) File.Delete(temporary); }
-                }
-            }
-            catch
-            {
-                foreach (string path in written.AsEnumerable().Reverse())
-                    if (before[path] == null) File.Delete(path); else File.WriteAllBytes(path, before[path]);
-                throw;
-            }
+            var writes = flat.ToDictionary(file => Path.Combine(folder, file.Key), file => file.Value,
+                StringComparer.OrdinalIgnoreCase);
+            foreach (string path in writes.Keys) RrMissingFiles.ValidatePath(folder, path);
+            BackupManager.WriteBatch(writes, null, Path.Combine(Path.GetFullPath(editedFolder), ".murums_backups"));
             return folder;
         }
     }

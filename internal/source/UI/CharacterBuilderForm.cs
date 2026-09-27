@@ -144,6 +144,9 @@ namespace murumsWiiModStudio
             Button(scaleBar, L.T("Skalierte Kopie speichern…", "Save scaled copy…"), SaveScaledModel);
             var wire = new CheckBox { Text = L.T("Drahtgitter", "Wireframe"), AutoSize = true, Margin = new Padding(12, 7, 3, 3) };
             wire.CheckedChanged += delegate { modelPreview.Wireframe = wire.Checked; modelPreview.Invalidate(); };
+            var solid = new CheckBox { Text = L.T("Form ohne Textur", "Solid surface"), AutoSize = true, Margin = new Padding(12, 7, 3, 3) };
+            solid.CheckedChanged += delegate { modelPreview.SolidSurface = solid.Checked; modelPreview.Invalidate(); };
+            scaleBar.Controls.Add(solid);
             scaleBar.Controls.Add(wire);
             Button(scaleBar, L.T("Ansicht zurücksetzen", "Reset view"), delegate { modelPreview.ResetView(); });
             var modelLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Margin = new Padding(0) };
@@ -719,30 +722,35 @@ namespace murumsWiiModStudio
         {
             RequireTarget();
             var data = new Project { Version = 2, RRRoot = catalog.Root, Character = Selected.Id, Slot = Slot, Archives = archives.Values.ToArray(), ScalePercent = modelScale.Value, FitScale = model == null ? 1 : model.FitScale, ReferenceHeight = model == null ? 0 : model.ReferenceHeight, Names = ReadNames(), ModelNeedsConversion = modelNeedsConversion };
-            string sidecar = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path) + "-files-" + Guid.NewGuid().ToString("N").Substring(0, 8));
-            Directory.CreateDirectory(sidecar);
-            var savedFiles = new List<string>();
-            foreach (var asset in assets)
+            CharacterPackage.SaveProject(path, sidecar =>
             {
-                string copy = Path.Combine(sidecar, asset.Target.Replace('/', Path.DirectorySeparatorChar) + ".murasset");
-                Directory.CreateDirectory(Path.GetDirectoryName(copy));
-                File.WriteAllBytes(copy, asset.Data); savedFiles.Add(copy);
-            }
-            data.Files = savedFiles.ToArray();
-            if (model != null && Path.GetExtension(model.Source) != ".json")
-            {
-                data.Model = Path.Combine(sidecar, "source.glb");
-                IntegratedModelImport.ExportCopy(model.PreparedSource ?? model.Source, data.Model, 1, "glb2");
-            }
-            if (reviewedRig != null)
-            {
-                string folder = Path.Combine(sidecar, "movement"); Directory.CreateDirectory(folder);
-                foreach (string texture in reviewedRig.Materials.Select(m => m.Texture).Where(t => t != null).Distinct())
-                    File.Copy(Path.Combine(reviewedRig.Folder, texture), Path.Combine(folder, texture));
-                File.Copy(reviewedRig.Reference, Path.Combine(folder, "reference.dae"));
-                data.Rig = Path.Combine(folder, "rig.json"); reviewedRig.Save(data.Rig);
-            }
-            BackupManager.WriteAllBytesSafely(path, Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(data)));
+                var savedFiles = new List<string>();
+                foreach (var asset in assets)
+                {
+                    string copy = ThemeProject.Child(sidecar, asset.Target + ".murasset");
+                    Directory.CreateDirectory(Path.GetDirectoryName(copy));
+                    File.WriteAllBytes(copy, asset.Data); savedFiles.Add(copy);
+                }
+                data.Files = savedFiles.ToArray();
+                if (model != null && Path.GetExtension(model.Source) != ".json")
+                {
+                    data.Model = Path.Combine(sidecar, "source.glb");
+                    IntegratedModelImport.ExportCopy(model.PreparedSource ?? model.Source, data.Model, 1, "glb2");
+                }
+                if (reviewedRig != null)
+                {
+                    string folder = Path.Combine(sidecar, "movement"); Directory.CreateDirectory(folder);
+                    foreach (string texture in reviewedRig.Materials.Select(m => m.Texture).Where(t => t != null).Distinct())
+                    {
+                        string copy = ThemeProject.Child(folder, texture);
+                        Directory.CreateDirectory(Path.GetDirectoryName(copy));
+                        File.Copy(Path.Combine(reviewedRig.Folder, texture), copy);
+                    }
+                    File.Copy(reviewedRig.Reference, Path.Combine(folder, "reference.dae"));
+                    data.Rig = Path.Combine(folder, "rig.json"); reviewedRig.Save(data.Rig);
+                }
+                return Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(data));
+            });
             dirty = false;
             Status.Text = reviewedRig == null && model != null
                 ? L.T("Projekt gespeichert. Nächster Schritt: 2 · Haltung & Bewegung.", "Project saved. Next: 2 · Pose & movement.")

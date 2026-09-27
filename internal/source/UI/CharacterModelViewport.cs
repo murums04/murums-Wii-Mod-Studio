@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Collections.Generic;
 using System.Drawing.Drawing2D;
@@ -62,6 +62,7 @@ namespace murumsWiiModStudio
         }
 
         internal bool Wireframe { get; set; }
+        internal bool SolidSurface { get; set; }
         internal void ResetView()
         {
             yaw = -.55f; pitch = .3f; zoom = 1; pan = PointF.Empty;
@@ -231,11 +232,12 @@ namespace murumsWiiModStudio
             }
             float[] min = { model.Points.Min(p => p[0]), model.Points.Min(p => p[1]), model.Points.Min(p => p[2]) };
             float[] max = { model.Points.Max(p => p[0]), model.Points.Max(p => p[1]), model.Points.Max(p => p[2]) };
-            double radius = Math.Sqrt(Enumerable.Range(0, 3).Sum(i => Math.Pow((double)max[i] - min[i], 2)));
-            double fit = Math.Min(Width, Height) * .75 / Math.Max(radius * model.FitScale, .0001);
-            if (GameContext > 0)
-                fit = Math.Min(Width / Math.Max(.0001, max[0] - min[0] + max[2] - min[2]), Height / Math.Max(.0001, max[1] - min[1])) * .9 / Math.Max(.0001, model.FitScale);
             double cy = Math.Cos(yaw), sy = Math.Sin(yaw), cp = Math.Cos(pitch), sp = Math.Sin(pitch);
+            double projectedWidth = Math.Abs(cy) * (max[0] - min[0]) + Math.Abs(sy) * (max[2] - min[2]);
+            double projectedHeight = Math.Abs(cp) * (max[1] - min[1])
+                + Math.Abs(sp) * (Math.Abs(sy) * (max[0] - min[0]) + Math.Abs(cy) * (max[2] - min[2]));
+            double fit = .92 * Math.Min(Math.Max(1, Width - 32) / Math.Max(projectedWidth * model.FitScale, .0001),
+                Math.Max(1, Height - 72) / Math.Max(projectedHeight * model.FitScale, .0001));
             projectionScale = fit * zoom * modelScale;
             projectionYaw = yaw; projectionPitch = pitch;
             var display = AnimationPoints ?? (model.Rig == null ? model.Points.ToArray() : GameContext > 0 ? model.Rig.GameGeometry(GameContext, false) : model.Rig.Pose(SelectedBone, PoseDegrees, ReferencePose));
@@ -249,7 +251,7 @@ namespace murumsWiiModStudio
                 double z = (p[2] - ((double)min[2] + max[2]) / 2) * modelScale;
                 double rx = x * cy + z * sy, rz = -x * sy + z * cy;
                 double ry = y * cp - rz * sp;
-                depths[i] = y * sp + rz * cp;
+                depths[i] = (y * sp + rz * cp) * fit * zoom;
                 points[i] = new PointF((float)(Width / 2.0 + pan.X + rx * fit * zoom), (float)(Height / 2.0 + pan.Y - ry * fit * zoom));
             }
             using (var grid = new Pen(Color.FromArgb(55, 57, 67)))
@@ -259,7 +261,7 @@ namespace murumsWiiModStudio
             }
             projected = points;
             if (rasterizer != null && !Wireframe)
-                using (var bitmap = rasterizer.Draw(ClientSize, points, depths, SelectedBone, ShowWeights)) g.DrawImageUnscaled(bitmap, 0, 0);
+                using (var bitmap = rasterizer.Draw(ClientSize, points, depths, SelectedBone, ShowWeights, SolidSurface)) g.DrawImage(bitmap, ClientRectangle, 0, 0, bitmap.Width, bitmap.Height, GraphicsUnit.Pixel);
             var faceColors = rasterizer == null || Wireframe
                 ? model.Faces.Select((face, index) => new { face, index }).ToDictionary(p => p.face, p => p.index) : null;
             using (var edge = new Pen(Color.FromArgb(145, 119, 210)))
