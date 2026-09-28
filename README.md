@@ -1,90 +1,79 @@
 <h1 align="left"><img src="assets/murums_logo.png" width="64" height="64" align="middle" alt="murums Wii Mod Studio logo">&nbsp; murums Wii Mod Studio</h1>
 
-A Windows desktop editor for Wii archives, textures, menu layouts and animations.
-Current release: **2.1.0-beta6**. Developed by murums with AI assistance.
+Windows desktop editor for Wii modding and Mario Kart Wii custom packs.
+
+**[Download for Windows](https://github.com/murums04/murums-Wii-Mod-Studio/releases)** · [Install](#install) · [Report a bug](https://github.com/murums04/murums-Wii-Mod-Studio/issues)
+
+Current release: **2.1.0-beta6**. By murums, with AI assistance.
 
 ## Features
 
-- MKWii Race HUD Tool and MKWii Game HUD Tool: visual movement, resizing, colours and texture replacement.
-- Custom Pack Maker: start from your Retro Rewind installation; copy only supplied RR files. Choose PAL, USA or Japan to name Title/Race/Common region files correctly. ISO/WBFS adds only missing Earth.szs, BackModel.szs and globe.arc; required sources must be complete before creating a pack.
-- Archives and textures: open, inspect, edit, replace and export supported resources.
-- Fonts and messages: selectable menu/HUD fonts, Unicode character checks, symbol editing and RR game text support.
-- Backgrounds and animation: menu backgrounds, GIF import and BRLAN editing.
-- Audio and projects: WAV loop preview, theme projects and supporting workflows.
-- Character Builder: replace installed RR variants, import GLB/glTF/BLEND/USDZ/DAE/OBJ models, review body assignment, edit menu/driving poses and customize individual movements with keyframes. Export a flat Character replacement files folder for your custom pack.
-- Race Effects: grouped categories including slipstream, texture previews and colour editing.
-- Pack Workshop and Mod Merge: inspect pack changes, keep snapshots and resolve archive conflicts.
-- Integrated help, previews and optional external tools.
-
-Some workflows require optional tools or original game resources. Previews approximate the game; runtime code and animations can affect the result. Keep backups and test edited copies in-game.
+- **HUD & menus:** positions, sizes, colours, textures and fonts.
+- **Archives & graphics:** resource editing, backgrounds, GIF import and BRLAN animations.
+- **Characters:** model import, body assignment, poses, keyframes and replacement export.
+- **Race effects & audio:** effect textures, colours and WAV loop previews.
+- **Custom packs:** Retro Rewind (RR) pack creation, theme projects, snapshots and mod merging.
+- **Text & help:** game messages, Unicode checks, symbol editing and integrated guides.
 
 ## Install
 
-Download **murums.Wii.Mod.Studio.exe** from [Releases](https://github.com/murums04/murums-Wii-Mod-Studio/releases).
+1. Download and run **murums.Wii.Mod.Studio.exe** from [Releases](https://github.com/murums04/murums-Wii-Mod-Studio/releases).
+2. Choose an empty installation folder and optional tools; only Wiimms tools are preselected.
+3. Select **Install**, then **Launch program**.
 
-1. Run it and choose an empty installation folder.
-2. Select optional tools. Only Wiimms tools are preselected; uncheck all for Studio alone.
-3. Install and select Launch program.
+- **Requirements:** 64-bit Windows; .NET Framework 4.7.2 or newer for the bundled model components.
+- **Resources:** game files not included; additional optional tools need internet and may have further requirements.
+- **Updates:** startup notification or **Help > Check for updates**.
 
-Later, the same download launches a detected installation. Pass --setup to reopen installation.
+<details>
+<summary>Updates & uninstall</summary>
 
-Beta2 adds startup update notifications and **Help > Check for updates**.
-Public Beta 1 users need to download the next installer once; a newer installer upgrades their existing installation.
-Downloads are verified against GitHub's SHA-256 digest. Close Studio, then choose **Install and restart**.
-Projects, settings and optional tools are preserved. If file replacement fails, the updater restores the previous program files.
-Offline or up-to-date startup checks do not interrupt the user. Beta builds also check for newer beta releases.
-Uninstall through Windows Installed Apps or the installed Uninstall.exe.
+- Close Studio, then choose **Install and restart**; projects, settings and optional tools preserved.
+- Downloads checked against GitHub's SHA-256 digest; failed file replacement restores previous program files.
+- Public Beta 1: download a newer installer once to enable the update workflow.
+- Installer download also launches an existing installation; use `--setup` to reopen setup.
+- Uninstall through **Windows Installed Apps** or `Uninstall.exe`.
 
-Requires Windows and .NET Framework 4.x. Optional tools have their own requirements.
-Game files are not included. The installer bundles the model runtime components and their notices/source packages; additional optional tools require internet. See [THIRD_PARTY.md](THIRD_PARTY.md).
+</details>
 
-## Character models
+## Known limitations
 
-Choose your custom pack and the installed RR variant to replace. In Character Builder, use **Load model → Pose & movement → Export character**. Open saved `.murcharacter` work with **Open project**. Use **Solid surface** in the model or pose preview to inspect the body shape without textures.
-Copy the contents of `MUR_EDITED/Character replacement files` into your custom-pack root, then relaunch the enabled pack.
-Automatic binding is a starting point. Strongly posed unrigged models and some RR skeletons are not yet handled reliably; Baby Daisy and King Boo remain unsupported by the tested automatic export path. Closed finger grips and performance with multiple imported characters still need further work. Not every model, vehicle or animation has been tested in-game.
+- **Previews:** approximate; keep backups and test edited copies in-game.
+- **Character binding:** strongly posed unrigged models and some RR skeletons remain unreliable; Baby Daisy and King Boo unsupported by the tested automatic export path.
+- **Still in progress:** closed finger grips and performance with multiple imported characters; incomplete in-game coverage of models, vehicles and animations.
 
-## Build
+<details>
+<summary>Pack creation & character export</summary>
 
-Use Windows PowerShell and the .NET Framework C# compiler at
-%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe.
+- **Custom Pack Maker:** select your RR installation and PAL, USA or Japan; copy supplied RR files with matching Title/Race/Common region names.
+- **ISO/WBFS:** only supplements missing `Earth.szs`, `BackModel.szs` and `globe.arc`; complete required sources before pack creation.
+- **Character Builder:** select a custom pack and installed RR variant → **Load model → Pose & movement → Export character**.
+- **Formats:** GLB, glTF, BLEND, USDZ, DAE and OBJ; saved `.murcharacter` files via **Open project**.
+- **Preview:** **Solid surface** for checking shape without textures; automatic binding still needs review.
+- **Export:** copy the contents of `MUR_EDITED/Character replacement files` into the custom-pack root, then relaunch the enabled pack.
+
+</details>
+
+<details>
+<summary>Build from source</summary>
+
+Windows PowerShell and the .NET Framework C# compiler at `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe` required. Prepare the [model dependencies](internal/model/README.md) first; third-party binaries excluded from this repository.
 
 From the repository root:
 
-    .\internal\build.ps1
-    .\internal\build-setup.ps1 -OutputPath "$PWD\dist\murums.Wii.Mod.Studio.exe"
+```powershell
+.\internal\build.ps1
+.\internal\build-setup.ps1 -OutputPath "$PWD\dist\murums.Wii.Mod.Studio.exe"
+```
 
-The first command builds the editor under internal/build.
-The second builds the downloadable installer/launcher under dist.
-No game assets are needed. Prepare the model build dependencies described in [internal/model/README.md](internal/model/README.md); third-party binaries are excluded from this repository.
+- Editor output: `internal/build`; installer output: `dist`.
+- Game assets not required for building.
 
-## Source layout
+</details>
 
-- internal/source: editor source, manifest and Studio icon.
-- internal/tools: installer and optional tool download scripts.
-- internal/model: model adapter source, build instructions and dependency notices.
-- internal/build.ps1 and internal/build-setup.ps1: builds.
-- THIRD_PARTY.md: external tools and documented research references.
+## Feedback & license
 
-Generated files, third-party binaries, game assets and private development artifacts are excluded.
-
-## Contributing
-
-Include reproduction steps, the version and the affected file format when reporting bugs.
-Do not attach commercial game archives, credentials or private files.
-Only share screenshots and assets you have permission to publish.
-
-## License
-
-Copyright (c) 2026 murums04.
-
-This distribution is licensed under **PolyForm Noncommercial 1.0.0**.
-Use, modification and redistribution are allowed only for purposes permitted by that license.
-Commercial use, including selling Studio or modified versions, is not granted by this license.
-See [LICENSE](LICENSE) for the complete terms.
-
-This is **source-available software**, not OSI-approved open source.
-Earlier MIT distributions retain their existing license grants.
-Credits, external tool licenses and research references are listed in [THIRD_PARTY.md](THIRD_PARTY.md)
-and in **Help > About > Credits & licenses**.
-External programs retain their own licenses.
+- **Bug reports:** version, reproduction steps and affected format; no commercial game archives, credentials or private files.
+- **License:** [PolyForm Noncommercial 1.0.0](LICENSE); source-available, not OSI-approved open source. Commercial use not granted; earlier MIT grants remain valid.
+- **Credits:** [third-party licenses and references](THIRD_PARTY.md) and **Help > About > Credits & licenses**; external tools retain their own licenses.
+- Copyright (c) 2026 murums04.
