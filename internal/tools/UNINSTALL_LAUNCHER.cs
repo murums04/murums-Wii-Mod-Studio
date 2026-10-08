@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
@@ -8,6 +8,8 @@ static class UninstallLauncher
     [STAThread]
     static void Main()
     {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
         try
         {
             string root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
@@ -15,7 +17,7 @@ static class UninstallLauncher
         }
         catch (Exception e)
         {
-            MessageBox.Show(e.Message, "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            murumsWiiModStudio.Setup.SetupChrome.ShowMessage(e.Message, "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

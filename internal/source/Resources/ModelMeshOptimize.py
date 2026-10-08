@@ -1,4 +1,4 @@
-import ctypes
+﻿import ctypes
 import os
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
@@ -79,7 +79,9 @@ def simplify(data, limit, texture_folder, distant=False):
     for material, faces in grouped.items():
         welded, originals, mapping, local_locks = {}, [], {}, []
         for vertex in sorted({v for face in faces for v in face}):
-            key = (tuple(round(n, 5) for n in data['Points'][vertex]),
+            key = (data['VertexComponents'][vertex] if 'VertexComponents' in data else 0,
+                   data['SourceWeightedVertices'][vertex] if 'SourceWeightedVertices' in data else False,
+                   tuple(round(n, 5) for n in data['Points'][vertex]),
                    tuple(round(n, 6) for n in data['Uvs'][vertex]),
                    tuple(round(n, 4) for n in data['Normals'][vertex]),
                    tuple(zip(data['BoneIndices'][vertex], (round(n, 4) for n in data['BoneWeights'][vertex]))))
@@ -115,6 +117,8 @@ def simplify(data, limit, texture_folder, distant=False):
     used = sorted({v for face in result_faces for v in face})
     remap = {vertex: index for index, vertex in enumerate(used)}
     data['Faces'] = [[remap[v] for v in face] for face in result_faces]
-    for key in ('Points', 'Normals', 'Uvs', 'BoneIndices', 'BoneWeights', 'SourceBoneIndices', 'SourceBoneWeights'):
+    if data.get('GripVertices'):
+        data['GripVertices'] = [dict(v, Index=remap[v['Index']]) for v in data['GripVertices'] if v['Index'] in remap]
+    for key in ('Points', 'Normals', 'Uvs', 'BoneIndices', 'BoneWeights', 'SourceBoneIndices', 'SourceBoneWeights', 'SourceWeightedVertices', 'VertexComponents'):
         if data.get(key) is not None:
             data[key] = [data[key][v] for v in used]

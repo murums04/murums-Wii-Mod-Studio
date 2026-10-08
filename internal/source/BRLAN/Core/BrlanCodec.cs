@@ -614,6 +614,10 @@ namespace murumsWiiModStudio.Brlan
                             KeyframeModel key = entry.Keys[q];
                             if (Single.IsNaN(key.Frame) || Single.IsInfinity(key.Frame))
                                 issues.Add(new ValidationIssue("Fehler", entryLoc, L.T("Keyframe ", "Keyframe ") + q.ToString() + L.T(" besitzt ungültigen Frame-Wert.", " has an invalid frame value.")));
+                            if (entry.KeyType == 2 && (Single.IsNaN(key.FloatValue) || Single.IsInfinity(key.FloatValue)
+                                || Single.IsNaN(key.Blend) || Single.IsInfinity(key.Blend)))
+                                issues.Add(new ValidationIssue("Fehler", entryLoc, L.T("Keyframe ", "Keyframe ") + q.ToString()
+                                    + L.T(" besitzt einen ungültigen Wert oder eine ungültige Steigung.", " has an invalid value or slope.")));
                             if (key.Frame < last)
                                 issues.Add(new ValidationIssue("Warnung", entryLoc, L.T("Keyframes sind nicht aufsteigend sortiert.", "Keyframes are not sorted in ascending order.")));
                             last = key.Frame;

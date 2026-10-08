@@ -172,6 +172,9 @@ namespace murumsWiiModStudio
             {
                 if (info.Format == 8 || info.Format == 9)
                     return ReplaceIndexed(targetTpl, prepared, info, imageIndex);
+                if (SharesImageStorage(targetTpl, imageIndex))
+                    return ReplaceImage(targetTpl, prepared, false, imageIndex,
+                        new TplTextureImportOptions { Format = info.Format });
                 byte[] texels = EncodeBaseLevel(prepared, info.Format);
                 if (texels.Length != info.PayloadLength)
                     throw new InvalidDataException(L.T("Die erzeugte TPL-Datenmenge stimmt nicht mit der Zieltextur überein.", "The encoded TPL payload does not match the target texture."));
@@ -195,6 +198,21 @@ namespace murumsWiiModStudio
                 if (resized != null)
                     resized.Dispose();
             }
+        }
+
+        private static bool SharesImageStorage(byte[] data, int imageIndex)
+        {
+            TplLayout layout = ReadImportLayout(data, true);
+            TplImageRecord selectedImage = layout.Images[imageIndex];
+            for (int i = 0; i < layout.Images.Length; i++)
+            {
+                if (i == imageIndex) continue;
+                TplImageRecord other = layout.Images[i];
+                if (Object.ReferenceEquals(selectedImage.Header, other.Header)
+                    || Object.ReferenceEquals(selectedImage.ImageData, other.ImageData))
+                    return true;
+            }
+            return false;
         }
 
         private static Bitmap Resize(Bitmap source, int width, int height)
@@ -538,8 +556,8 @@ namespace murumsWiiModStudio
             {
                 for (int c = 0; c < 3; c++)
                 {
-                    p[2, c] = (byte)((2 * p[0, c] + p[1, c]) / 3);
-                    p[3, c] = (byte)((p[0, c] + 2 * p[1, c]) / 3);
+                    p[2, c] = (byte)((5 * p[0, c] + 3 * p[1, c]) >> 3);
+                    p[3, c] = (byte)((3 * p[0, c] + 5 * p[1, c]) >> 3);
                 }
 
                 p[2, 3] = p[3, 3] = 255;

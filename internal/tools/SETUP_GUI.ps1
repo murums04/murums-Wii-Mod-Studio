@@ -37,12 +37,12 @@ function Read-SharedText([string]$Path) {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'murums Wii Mod Studio - Setup'
 $form.StartPosition = 'CenterScreen'
-$form.Size = New-Object System.Drawing.Size(920,820)
-$form.MinimumSize = New-Object System.Drawing.Size(860,800)
-$form.BackColor = [Drawing.Color]::FromArgb(29,30,37)
+$form.Size = New-Object System.Drawing.Size(1000,760)
+$form.MinimumSize = New-Object System.Drawing.Size(820,620)
+$form.BackColor = [murumsWiiModStudio.Setup.SetupChrome]::Back
 $form.ForeColor = [Drawing.Color]::White
 $form.Font = New-Object Drawing.Font('Segoe UI',10)
-$form.MaximizeBox = $false
+$form.MaximizeBox = $true
 
 $iconPath = Join-Path $Internal 'source\App\murums.ico'
 $iconObj = $null
@@ -54,7 +54,7 @@ if (Test-Path $iconPath) {
 }
 
 $header = New-Object Windows.Forms.Panel
-$header.Dock='Top'; $header.Height=120; $header.BackColor=[Drawing.Color]::FromArgb(27,29,36)
+$header.Dock='Top'; $header.Height=84; $header.BackColor=[murumsWiiModStudio.Setup.SetupChrome]::Panel
 if(-not $iconObj -and (Test-Path $ExePath)){$iconObj=[Drawing.Icon]::ExtractAssociatedIcon($ExePath);$form.Icon=$iconObj}
 $form.Controls.Add($header)
 
@@ -88,10 +88,13 @@ foreach($height in @(22,34,24)){[void]$textLayout.RowStyles.Add((New-Object Wind
 $brand=New-Object Windows.Forms.Label
 $brand.Text='murums Wii Mod Studio';$brand.Dock='Fill';$brand.Font=New-Object Drawing.Font('Segoe UI',10,[Drawing.FontStyle]::Bold)
 $title=New-Object Windows.Forms.Label
-$title.Text='Install your modding studio';$title.Dock='Fill';$title.AutoEllipsis=$true;$title.Font=New-Object Drawing.Font('Segoe UI',17,[Drawing.FontStyle]::Bold)
+$title.Text=[murumsWiiModStudio.Setup.SetupChrome]::L('Studio und Programme einrichten','Set up Studio and tools');$title.Dock='Fill';$title.AutoEllipsis=$true;$title.Font=New-Object Drawing.Font('Segoe UI',12,[Drawing.FontStyle]::Bold)
 $sub=New-Object Windows.Forms.Label
-$sub.Text='Set up the editor and optional modding tools';$sub.Dock='Fill';$sub.AutoEllipsis=$true;$sub.ForeColor=[Drawing.Color]::FromArgb(185,187,198)
+$sub.Text=[murumsWiiModStudio.Setup.SetupChrome]::L('Programme auswählen und Installation starten','Choose tools and start installing');$sub.Dock='Fill';$sub.AutoEllipsis=$true;$sub.ForeColor=[murumsWiiModStudio.Setup.SetupChrome]::Muted
 $textLayout.Controls.Add($brand,0,0);$textLayout.Controls.Add($title,0,1);$textLayout.Controls.Add($sub,0,2)
+$brand.Visible=$false
+$textLayout.RowStyles[0].Height=0
+$textLayout.RowStyles[1].Height=26
 $headerLayout.Controls.Add($textLayout,1,0)
 $version=New-Object Windows.Forms.Label
 $version.Dock='Fill';$version.TextAlign='MiddleRight';$version.Font=New-Object Drawing.Font('Segoe UI',10,[Drawing.FontStyle]::Bold)
@@ -105,14 +108,12 @@ $accent=New-Object murumsWiiModStudio.Setup.AccentStrip
 $header.Controls.Add($accent);$headerLayout.BringToFront()
 
 $panel = New-Object Windows.Forms.Panel
-$panel.Left=0; $panel.Top=120
-$panel.Width=$form.ClientSize.Width; $panel.Height=$form.ClientSize.Height-120
-$panel.Anchor='Top,Bottom,Left,Right'
+$panel.Dock='Fill'
 $panel.Padding=New-Object Windows.Forms.Padding(22,16,22,16)
-$form.Controls.Add($panel); $header.BringToFront()
+$form.Controls.Add($panel); $panel.BringToFront(); $header.SendToBack()
 
 $info = New-Object Windows.Forms.Label
-$info.Text="Already included: HUD editing, textures, Font Changer and WAV loop preview.`r`nChoose extra tools only for the tasks below. Uncheck all to install just murums Wii Mod Studio."
+$info.Text=[murumsWiiModStudio.Setup.SetupChrome]::L("HUD, Texturen, Schriften und WAV-Loops sind bereits im Studio enthalten.`r`nWähle zusätzliche Programme passend zu deinen Aufgaben.","HUD editing, textures, fonts and WAV loops are already included.`r`nChoose extra tools for the tasks you need.")
 $info.Left=22; $info.Top=14; $info.Width=748; $info.Height=48; $info.ForeColor=[Drawing.Color]::FromArgb(220,220,225)
 $panel.Controls.Add($info)
 
@@ -143,17 +144,20 @@ foreach($spec in @(@('Tool',210),@('When to install',145),@('What it adds',0))){
  if($spec[1] -eq 0){$column.AutoSizeMode='Fill'}else{$column.Width=$spec[1]}
  [void]$tools.Columns.Add($column)
 }
-foreach($entry in $toolCatalog){[void]$tools.Rows.Add([object[]]@($entry.Default,$entry.Name,$entry.Recommendation,$entry.Details))}
+foreach($entry in $toolCatalog){[void]$tools.Rows.Add([object[]]@($entry.Default,$entry.Name,[murumsWiiModStudio.Setup.SetupChrome]::ToolRecommendation($entry.Id,$entry.Recommendation),[murumsWiiModStudio.Setup.SetupChrome]::ToolPurpose($entry.Id,$entry.Details)))}
+$tools.Columns[1].HeaderText=[murumsWiiModStudio.Setup.SetupChrome]::L('Programm','Tool')
+$tools.Columns[2].HeaderText=[murumsWiiModStudio.Setup.SetupChrome]::L('Empfehlung','When to install')
+$tools.Columns[3].HeaderText=[murumsWiiModStudio.Setup.SetupChrome]::L('Verwendungszweck','What it adds')
 $tools.add_CurrentCellDirtyStateChanged({if($tools.IsCurrentCellDirty){[void]$tools.CommitEdit([Windows.Forms.DataGridViewDataErrorContexts]::Commit)}})
 $panel.Controls.Add($tools)
 
 $status = New-Object Windows.Forms.Label
-$status.Text='Ready to install.'; $status.Left=22; $status.Top=402; $status.Width=748; $status.Height=28
+$status.Text=[murumsWiiModStudio.Setup.SetupChrome]::L('Bereit zur Installation.','Ready to install.'); $status.Left=22; $status.Top=402; $status.Width=748; $status.Height=28
 $status.ForeColor=[Drawing.Color]::FromArgb(194,194,205)
 $panel.Controls.Add($status)
 
-$progress = New-Object Windows.Forms.ProgressBar
-$progress.Left=22; $progress.Top=432; $progress.Width=748; $progress.Height=18; $progress.Style='Continuous'; $progress.Value=0
+$progress = New-Object murumsWiiModStudio.Setup.SetupProgressBar
+$progress.Left=22; $progress.Top=432; $progress.Width=748; $progress.Height=4; $progress.Value=0
 $panel.Controls.Add($progress)
 
 $log = New-Object Windows.Forms.TextBox
@@ -164,18 +168,18 @@ $log.Anchor='Top,Bottom,Left,Right'
 $panel.Controls.Add($log)
 
 $install = New-Object Windows.Forms.Button
-$install.Text='Install'; $install.Left=476; $install.Top=494; $install.Width=140; $install.Height=40
-$install.Anchor='Bottom,Right'; $install.FlatStyle='Flat'; $install.BackColor=[Drawing.Color]::FromArgb(139,92,246); $install.ForeColor=[Drawing.Color]::White
+$install.Text=[murumsWiiModStudio.Setup.SetupChrome]::L('Installieren','Install'); $install.Left=476; $install.Top=494; $install.Width=140; $install.Height=40
+$install.Anchor='Bottom,Right'; $install.FlatStyle='Flat'; $install.BackColor=[murumsWiiModStudio.Setup.SetupChrome]::Primary; $install.ForeColor=[Drawing.Color]::White
 $panel.Controls.Add($install)
 
 $start = New-Object Windows.Forms.Button
-$start.Text='Launch program'; $start.Left=324; $start.Top=494; $start.Width=140; $start.Height=40
-$start.Anchor='Bottom,Right'; $start.FlatStyle='Flat'; $start.BackColor=[Drawing.Color]::FromArgb(139,92,246); $start.ForeColor=[Drawing.Color]::White; $start.Visible=(Test-Path $ExePath)
+$start.Text=[murumsWiiModStudio.Setup.SetupChrome]::L('Studio starten','Launch Studio'); $start.Left=324; $start.Top=494; $start.Width=140; $start.Height=40
+$start.Anchor='Bottom,Right'; $start.FlatStyle='Flat'; $start.BackColor=[murumsWiiModStudio.Setup.SetupChrome]::Primary; $start.ForeColor=[Drawing.Color]::White; $start.Visible=(Test-Path $ExePath)
 $panel.Controls.Add($start)
 if (Test-Path -LiteralPath $ExePath) { $install.Text='Reinstall' }
 
 $close = New-Object Windows.Forms.Button
-$close.Text='Close'; $close.Left=628; $close.Top=494; $close.Width=142; $close.Height=40
+$close.Text=[murumsWiiModStudio.Setup.SetupChrome]::L('Schliessen','Close'); $close.Left=628; $close.Top=494; $close.Width=142; $close.Height=40
 $close.Anchor='Bottom,Right'; $close.FlatStyle='Flat'; $close.BackColor=[Drawing.Color]::FromArgb(45,47,57); $close.ForeColor=[Drawing.Color]::White
 $panel.Controls.Add($close)
 $layoutContent={
@@ -185,7 +189,11 @@ $layoutContent={
  $install.Left=$close.Left-12-$install.Width
  $start.Left=$install.Left-12-$start.Width
  foreach($button in @($start,$install,$close)){$button.Top=$panel.ClientSize.Height-16-$button.Height}
- $log.Height=[Math]::Max(80,$install.Top-16-$log.Top)
+ $tools.Height=[Math]::Max(140,[int](($panel.ClientSize.Height-200)*0.68))
+ $status.Top=$tools.Bottom+10
+ $progress.Top=$status.Bottom+4
+ $log.Top=$progress.Bottom+12
+ $log.Height=[Math]::Max(40,$install.Top-12-$log.Top)
 }
 $panel.add_Resize($layoutContent)
 & $layoutContent
@@ -227,10 +235,10 @@ $timer.add_Tick({
             } elseif (Test-Path $ExePath) {
                 $status.Text='Update failed. The previous program is still available; see the log.'
                 $progress.Value=0
-                [Windows.Forms.MessageBox]::Show($form,'The update failed. Your previous program was preserved. Close the editor before retrying; see the log for details.','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+                [murumsWiiModStudio.Setup.SetupChrome]::ShowMessage($form,'The update failed. Your previous program was preserved. Close the editor before retrying; see the log for details.','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
             } else {
                 $status.Text='Setup failed. See the log for details.'
-                [Windows.Forms.MessageBox]::Show($form,'Setup failed. Copy the log text from this window if you need help.','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+                [murumsWiiModStudio.Setup.SetupChrome]::ShowMessage($form,'Setup failed. Copy the log text from this window if you need help.','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
             }
         }
     } catch { }
@@ -239,7 +247,7 @@ $timer.add_Tick({
 $install.add_Click({
     if ($script:proc -ne $null) { return }
     if (-not (Test-Path $Worker)) {
-        [Windows.Forms.MessageBox]::Show($form,'The internal setup worker is missing. Please fully extract the ZIP.','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+        [murumsWiiModStudio.Setup.SetupChrome]::ShowMessage($form,'The internal setup worker is missing. Please fully extract the ZIP.','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null
         return
     }
     Remove-Item -LiteralPath $StatusFile -Force -ErrorAction SilentlyContinue
@@ -264,12 +272,12 @@ $install.add_Click({
 
 $start.add_Click({
     try { if (Test-Path $ExePath) { Start-Process -FilePath $ExePath -WorkingDirectory $Root; $form.Close() } }
-    catch { [Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null }
+    catch { [murumsWiiModStudio.Setup.SetupChrome]::ShowMessage($form,$_.Exception.Message,'murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Error) | Out-Null }
 })
 $close.add_Click({ $form.Close() })
 $form.add_FormClosing({
     if ($script:proc -ne $null -and -not $script:proc.HasExited) {
-        $r=[Windows.Forms.MessageBox]::Show($form,'Installation is still running. Close setup anyway?','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Question)
+        $r=[murumsWiiModStudio.Setup.SetupChrome]::ShowMessage($form,'Installation is still running. Close setup anyway?','murums Wii Mod Studio Setup',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Question)
         if ($r -ne [Windows.Forms.DialogResult]::Yes) { $_.Cancel=$true }
         else { try { $script:proc.Kill() } catch { } }
     }
@@ -282,12 +290,15 @@ $form.add_FormClosed({
     if ($iconObj -ne $null) { $iconObj.Dispose() }
 })
 
+[murumsWiiModStudio.Setup.SetupChrome]::Apply($form)
+$form.CancelButton=$close
+
 if($VerifyLayoutOutput){
  [void][IO.Directory]::CreateDirectory($VerifyLayoutOutput)
- $form.ShowInTaskbar=$false;$form.StartPosition='Manual';$form.Location=New-Object Drawing.Point(-30000,-30000)
+ $form.ShowInTaskbar=$false;$form.Opacity=0;$form.StartPosition='Manual';$form.Location=New-Object Drawing.Point(-30000,-30000)
  $form.Show();[Windows.Forms.Application]::DoEvents()
- if($accent.Height -ne 4 -or -not $accent.Visible){throw 'Missing animated accent strip'}
- foreach($size in @((New-Object Drawing.Size(920,820)),(New-Object Drawing.Size(860,800)))){
+ if($accent.Height -ne 1 -or -not $accent.Visible){throw 'Missing neutral separator'}
+ foreach($size in @((New-Object Drawing.Size(1000,760)),(New-Object Drawing.Size(820,620)))){
   $form.Size=$size;[Windows.Forms.Application]::DoEvents()
   foreach($button in @($start,$install,$close,$tools,$status,$progress,$log)){if(-not $panel.ClientRectangle.Contains($button.Bounds)){throw 'Clipped setup button'}}
   for($frame=0;$frame -lt 2;$frame++){
@@ -299,6 +310,6 @@ if($VerifyLayoutOutput){
   }
  }
  $form.Close();$form.Dispose()
- Write-Output 'PASS setup layout at default/minimum sizes; animation frames captured; no installer worker started.'
+ Write-Output 'PASS setup layout at default/minimum sizes; neutral styling captured; no installer worker started.'
 }else{[void]$form.ShowDialog();$form.Dispose()}
 

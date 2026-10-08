@@ -20,6 +20,17 @@ namespace murumsWiiModStudio.Brlan
         internal string ExternalGifOutputFolder { get; set; }
         internal Action<GifImportResult> ExternalGifCompleted { get; set; }
         internal bool ExternalHostAutoSave { get; set; }
+        internal Func<GifStagedState> CaptureExternalGifState { get; set; }
+        internal Action<GifStagedState> RestoreExternalGifState { get; set; }
+        private sealed class EditorSnapshot
+        {
+            public BrlanDocument Document;
+            public GifStagedState Staged;
+        }
+        private readonly EditHistory<EditorSnapshot> _history = new EditHistory<EditorSnapshot>(delegate(EditorSnapshot a, EditorSnapshot b) { return BrlanEditSnapshots.Equal(a.Document, b.Document) && BrlanEditSnapshots.Equal(a.Staged, b.Staged); });
+        private StudioUndoRedo _historyActions;
+        private bool _restoringHistory;
+        private ToolStripButton _undoHistory, _redoHistory;
 
         private MenuStrip _menu;
         private ToolStrip _toolbar;
@@ -50,7 +61,7 @@ namespace murumsWiiModStudio.Brlan
         {
             Text = AppName + " v" + AppVersion;
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(1100, 720);
+            MinimumSize = new Size(920, 620);
             Size = new Size(1380, 860);
             BackColor = DarkTheme.Back;
             ForeColor = DarkTheme.Fore;
@@ -68,6 +79,8 @@ namespace murumsWiiModStudio.Brlan
 
             BuildUi();
             ApplyTheme();
+            _historyActions = new StudioUndoRedo(this, null, delegate { return _history.CanUndo || _keys.IsCurrentCellDirty; }, delegate { return _history.CanRedo; }, delegate { NavigateEditHistory(false); }, delegate { NavigateEditHistory(true); });
+            _history.Changed += delegate { _undoHistory.Enabled = _history.CanUndo; _redoHistory.Enabled = _history.CanRedo; _historyActions.Refresh(); };
             DragEnter += OnDragEnter;
             DragDrop += OnDragDrop;
             FormClosing += OnFormClosing;
@@ -84,7 +97,7 @@ namespace murumsWiiModStudio.Brlan
             shell.ColumnCount = 1;
             shell.RowCount = 5;
             shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F)); // Branding
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, murumsWiiModStudio.StudioChrome.HeaderHeight)); // Branding
             shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F)); // Menü
             shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F)); // Toolbar
             shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // Workspace
@@ -234,6 +247,10 @@ namespace murumsWiiModStudio.Brlan
             {
                 OpenDialog();
             }));
+            _undoHistory = StudioHistorySymbols.Tool(MakeToolButton(StudioHistorySymbols.Undo, delegate { NavigateEditHistory(false); }), false, L.T("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)"));
+            _redoHistory = StudioHistorySymbols.Tool(MakeToolButton(StudioHistorySymbols.Redo, delegate { NavigateEditHistory(true); }), true, L.T("Wiederholen (Strg+Y / Strg+Umschalt+Z)", "Redo (Ctrl+Y / Ctrl+Shift+Z)"));
+            _undoHistory.Enabled = _redoHistory.Enabled = false;
+            _toolbar.Items.Add(_undoHistory); _toolbar.Items.Add(_redoHistory);
             _toolbar.Items.Add(MakeToolButton(L.T("Speichern", "Save"), delegate
             {
                 Save();
@@ -285,6 +302,11 @@ namespace murumsWiiModStudio.Brlan
                 RunRoundtripSelfTest();
             }));
             shell.Controls.Add(_toolbar, 0, 2);
+            StudioActions.Tool(_toolbar.Items[0], StudioIcon.Open, true);
+            StudioActions.Tool(_toolbar.Items[3], StudioIcon.Save, true);
+            StudioActions.Tool(_toolbar.Items[4], StudioIcon.SaveAs, true);
+            StudioActions.Tool(_toolbar.Items[10], StudioIcon.Delete, true);
+            StudioActions.Tool(_toolbar.Items[15], StudioIcon.Check, true);
             SplitContainer mainSplit = new SplitContainer();
             mainSplit.Dock = DockStyle.Fill;
             mainSplit.Margin = new Padding(0);
@@ -365,7 +387,7 @@ namespace murumsWiiModStudio.Brlan
             _tree.DragDrop += OnTreeDragDrop;
             leftLayout.Controls.Add(_tree, 0, 1);
             mainSplit.Panel1.Controls.Add(leftLayout);
-            _tabs = new DarkTabControl();
+            _tabs = new murumsWiiModStudio.DarkTabControl();
             _tabs.Dock = DockStyle.Fill;
             _tabs.Margin = new Padding(0);
             _tabs.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
@@ -554,6 +576,7 @@ namespace murumsWiiModStudio.Brlan
             buttons.Margin = new Padding(0);
             buttons.FlowDirection = FlowDirection.TopDown;
             buttons.WrapContents = false;
+            buttons.AutoScroll = true;
             buttons.Padding = new Padding(8);
             buttons.BackColor = DarkTheme.Panel2;
             Label textureHint = new Label();
@@ -744,6 +767,8 @@ namespace murumsWiiModStudio.Brlan
                 parsed.SourcePath = path;
                 _doc = parsed;
                 _sourcePath = path;
+                if (RestoreExternalGifState != null) RestoreExternalGifState(new GifStagedState());
+                _history.Reset(CaptureEditSnapshot());
                 Text = AppName + " v" + AppVersion + " — " + Path.GetFileName(path);
                 RefreshAllUi();
                 SetStatus(L.T("Geöffnet: ", "Opened: ") + Path.GetFileName(path) + " | Version " + _doc.Version.ToString() + " | " + _doc.Pai.Frames.ToString() + " Frames | " + _doc.Pai.Animations.Count.ToString() + L.T(" Animation(en)", " animation(s)"));
@@ -1818,6 +1843,7 @@ namespace murumsWiiModStudio.Brlan
 
                 _gridEntry.Keys.Clear();
                 _gridEntry.Keys.AddRange(parsed);
+                RecordEditHistory("keys:" + (_tree.SelectedNode == null ? "" : _tree.SelectedNode.FullPath));
                 return true;
             }
             catch (Exception ex)
@@ -2431,7 +2457,11 @@ namespace murumsWiiModStudio.Brlan
                 RefreshTextureList();
                 ValidateDocument();
                 SetStatus(L.T("GIF-Import übernommen. TPL-Liste und RLTP wurden aktualisiert.", "GIF import applied. TPL list and RLTP were updated."));
-            }, ExternalGifOutputFolder, ExternalGifCompleted))
+            }, ExternalGifOutputFolder, delegate(GifImportResult result)
+            {
+                if (ExternalGifCompleted != null) ExternalGifCompleted(result);
+                RecordEditHistory(null);
+            }))
             {
                 importer.ShowDialog(this);
             }
@@ -2675,7 +2705,7 @@ namespace murumsWiiModStudio.Brlan
             _helpHeading.Dock = DockStyle.Fill;
             _helpHeading.TextAlign = ContentAlignment.MiddleLeft;
             _helpHeading.Padding = new Padding(16, 0, 12, 0);
-            _helpHeading.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            _helpHeading.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             _helpHeading.BackColor = DarkTheme.Panel2;
             _helpHeading.ForeColor = Color.White;
             content.Controls.Add(_helpHeading, 0, 0);
@@ -3191,6 +3221,62 @@ Validator -> Self-test -> Save / Save As -> test";
         private void SetStatus(string text)
         {
             _status.Text = text;
+            RecordEditHistory(null);
+        }
+
+        private EditorSnapshot CaptureEditSnapshot()
+        {
+            return new EditorSnapshot { Document = CloneDocument(_doc), Staged = CaptureExternalGifState == null ? null : CaptureExternalGifState() };
+        }
+
+        private BrlanDocument CloneDocument(BrlanDocument source)
+        {
+            if (source == null) return null;
+            var copy = new BrlanDocument { Bom = source.Bom, LittleEndian = source.LittleEndian, Version = source.Version, HeaderSize = source.HeaderSize,
+                HeaderRaw = BrlanCodec.Clone(source.HeaderRaw), OriginalBytes = BrlanCodec.Clone(source.OriginalBytes),
+                TrailingFileData = BrlanCodec.Clone(source.TrailingFileData), SourcePath = source.SourcePath };
+            foreach (var section in source.Sections) copy.Sections.Add(new BrlanSection { Magic = section.Magic, Raw = BrlanCodec.Clone(section.Raw), TrailingPadding = BrlanCodec.Clone(section.TrailingPadding), IsPai = section.IsPai });
+            if (source.Pai != null)
+            {
+                copy.Pai = new PaiSection { Frames = source.Pai.Frames, Flags = source.Pai.Flags, UnknownByte = source.Pai.UnknownByte, OriginalRaw = BrlanCodec.Clone(source.Pai.OriginalRaw) };
+                copy.Pai.Textures.AddRange(source.Pai.Textures);
+                foreach (var animation in source.Pai.Animations) copy.Pai.Animations.Add(DeepCloneAnimation(animation));
+            }
+            return copy;
+        }
+
+        private void RecordEditHistory(string group)
+        {
+            if (_doc == null || _restoringHistory) return;
+            _history.Record(CaptureEditSnapshot(), group);
+        }
+
+        private void NavigateEditHistory(bool redo)
+        {
+            if (_keys.IsCurrentCellInEditMode)
+            {
+                _keys.EndEdit();
+                if (!CommitGridToEntry(false)) return;
+            }
+            RecordEditHistory(null);
+            if (redo ? !_history.CanRedo : !_history.CanUndo) return;
+            var path = new List<int>();
+            for (TreeNode node = _tree.SelectedNode; node != null; node = node.Parent) path.Insert(0, node.Index);
+            EditorSnapshot snapshot = redo ? _history.Redo() : _history.Undo();
+            _restoringHistory = true;
+            try
+            {
+                _gridEntry = null; _gridTag = null;
+                _doc = CloneDocument(snapshot.Document);
+                if (RestoreExternalGifState != null && snapshot.Staged != null) RestoreExternalGifState(snapshot.Staged.Clone());
+                RefreshAllUi();
+                TreeNodeCollection nodes = _tree.Nodes;
+                TreeNode selected = null;
+                foreach (int index in path) { if (index >= nodes.Count) break; selected = nodes[index]; nodes = selected.Nodes; }
+                if (selected != null) { _tree.SelectedNode = selected; selected.EnsureVisible(); }
+                _status.Text = redo ? L.T("Wiederholt", "Redo") : L.T("Rückgängig", "Undo");
+            }
+            finally { _restoringHistory = false; }
         }
     }
 }

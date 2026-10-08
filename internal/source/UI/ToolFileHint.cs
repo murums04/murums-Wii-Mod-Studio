@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
@@ -16,18 +16,22 @@ namespace murumsWiiModStudio
             };
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
             panel.Controls.Add(header, 0, 0);
             var hint = new Label
             {
                 Name = "ToolFileExamples",
                 Text = (recommendDisc && examples.Contains(".szs") ? L.T("ISO/WBFS empfohlen · ", "ISO/WBFS recommended · ") : L.T("Dateien / Beispiele: ", "Files / examples: ")) + examples,
                 Font = new Font("Segoe UI", 9F),
-                AutoSize = true,
+                ForeColor = DarkTheme.Muted,
+                AutoSize = false,
+                AutoEllipsis = true,
+                TextAlign = ContentAlignment.MiddleLeft,
                 Dock = DockStyle.Fill,
                 UseMnemonic = false,
-                Margin = new Padding(8, 5, 8, 5)
+                Margin = new Padding(4, 0, 4, 0)
             };
+            StudioUx.SetHelp(hint, hint.Text);
             panel.Controls.Add(hint, 0, 1);
             return panel;
         }

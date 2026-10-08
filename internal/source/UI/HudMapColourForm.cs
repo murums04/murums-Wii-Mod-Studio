@@ -10,6 +10,7 @@ namespace murumsWiiModStudio
 {
     internal sealed class HudMapColourForm : StudioToolForm
     {
+        SpecialEditorHistory editHistory;
         readonly List<HudTexture> entries;
         readonly ComboBox targets = new ComboBox
         {
@@ -31,7 +32,7 @@ namespace murumsWiiModStudio
             Width = 170,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
-        readonly Button chooseColour, uniformColour;
+        readonly Button chooseColour, uniformColour, restoreMap, apply;
         Color[] colours;
         Color foreground;
         bool loading;
@@ -44,18 +45,18 @@ namespace murumsWiiModStudio
             }
         }
 
-        public HudMapColourForm(List<HudTexture> layouts) : base("Map Colours", "Edit minimap colour and four-corner gradient • Review a sample • Apply, then save in Race HUD")
+        public HudMapColourForm(List<HudTexture> layouts) : base(L.T("RR-MKWii Kartenfarben Tool", "RR-MKWii Map Colours Tool"), L.T("Minimap färben • Beispiel prüfen • Übernehmen und im HUD-Tool speichern", "Edit minimap colour and four-corner gradient • Review a sample • Apply, then save in Race HUD"))
         {
-            entries = layouts;
+            entries = layouts ?? new List<HudTexture>();
             Actions.Controls.Add(targets);
             foreach (var e in entries)
                 targets.Items.Add(e);
             Actions.SetFlowBreak(targets, true);
-            channel.Items.AddRange(new object[] { "Map base", "Top left", "Top right", "Bottom left", "Bottom right" });
+            channel.Items.AddRange(new object[] { L.T("Kartenbasis", "Map base"), L.T("Oben links", "Top left"), L.T("Oben rechts", "Top right"), L.T("Unten links", "Bottom left"), L.T("Unten rechts", "Bottom right") });
             Actions.Controls.Add(channel);
-            chooseColour = Action("Choose colour…", "Edit the map material or one gradient corner.", delegate
+            chooseColour = Action(L.T("Farbe wählen…", "Choose colour…"), L.T("Kartenbasis oder eine Ecke des Farbverlaufs färben.", "Edit the map material or one gradient corner."), delegate
             {
-                if (colours == null)
+                if (colours == null || channel.SelectedIndex < 0)
                     return;
                 using (var d = new ColorDialog
                 {
@@ -71,9 +72,9 @@ namespace murumsWiiModStudio
                         Changed();
                     }
             });
-            Actions.Controls.Add(new Label { Text = "Opacity (0–255)", AutoSize = true, Margin = new Padding(8, 12, 0, 0) });
+            Actions.Controls.Add(new Label { Text = L.T("Deckkraft (0–255)", "Opacity (0–255)"), AutoSize = true, Margin = new Padding(8, 12, 0, 0) });
             Actions.Controls.Add(alpha);
-            uniformColour = Action("Uniform colour…", "Choose one base colour and clear the corner gradient to white.", delegate
+            uniformColour = Action(L.T("Einheitliche Farbe…", "Uniform colour…"), L.T("Eine Basisfarbe wählen und alle Verlaufsecken auf Weiß setzen.", "Choose one base colour and clear the corner gradient to white."), delegate
             {
                 if (colours == null) return;
                 using (var d = new ColorDialog
@@ -92,14 +93,16 @@ namespace murumsWiiModStudio
                         LoadChannel();
                     }
             });
-            Action("Restore opened map", "Restore this layout to the source opened in Race HUD.", delegate
+            restoreMap = Action(L.T("Geladene Karte wiederherstellen", "Restore opened map"), L.T("Dieses Layout auf die im HUD-Tool geladene Quelle zurücksetzen.", "Restore this layout to the source opened in Race HUD."), delegate
             {
-                var t = (HudTexture)targets.SelectedItem;
+                var t = targets.SelectedItem as HudTexture;
+                if (t == null) return;
                 pending[t] = (byte[])t.Archive.Files[t.Key].Data.Clone();
                 LoadTarget();
             });
-            ExportAction("Apply map changes", "Queue map layout changes. Save edited archives in Race HUD writes separate archive copies.", delegate
+            apply = ExportAction(L.T("Kartenfarben übernehmen", "Apply map changes"), L.T("Änderungen ins HUD-Tool übernehmen. Dort Archive als getrennte Kopien speichern.", "Queue map layout changes. Save edited archives in Race HUD writes separate archive copies."), delegate
             {
+                if (pending.Count == 0) return;
                 DialogResult = DialogResult.OK;
                 Close();
             });
@@ -114,30 +117,50 @@ namespace murumsWiiModStudio
             };
             alpha.ValueChanged += delegate
             {
-                if (loading || colours == null)
+                if (loading || colours == null || channel.SelectedIndex < 0)
                     return;
                 colours[channel.SelectedIndex] = Color.FromArgb((int)alpha.Value, colours[channel.SelectedIndex]);
                 Changed();
             };
             channel.SelectedIndex = 0;
             Finish();
-            RefreshColourButtons();
+            UpdateActions();
+            Status.Text = L.T("Kein Kartenlayout geladen. Ein Layout im HUD-Tool auswählen.", "No map layout loaded. Select a layout in the HUD tool.");
             if (entries.Count > 0)
                 targets.SelectedIndex = 0;
+            editHistory = new SpecialEditorHistory(this, Actions,
+                delegate { return new object[] { SpecialEditorHistory.Copy(pending) }; },
+                delegate(object[] state) {
+                    SpecialEditorHistory.Replace(pending, (Dictionary<HudTexture, byte[]>)state[0]); LoadTarget();
+                });
         }
 
         void LoadTarget()
         {
             var t = targets.SelectedItem as HudTexture;
-            if (t == null)
-                return;
+            colours = null;
+            if (preview.Image != null) { preview.Image.Dispose(); preview.Image = null; }
+            UpdateActions();
+            if (t == null) return;
             byte[] b;
             if (!pending.TryGetValue(t, out b) && !t.Archive.Generated.TryGetValue(t.Key, out b))
                 b = t.Archive.Files[t.Key].Data;
             colours = HudMapColours.Read(b);
             foreground = HudMapColours.Foreground(b);
+            UpdateActions();
             LoadChannel();
             DrawPreview();
+        }
+
+        void UpdateActions()
+        {
+            chooseColour.Enabled = colours != null && channel.SelectedIndex >= 0;
+            uniformColour.Enabled = colours != null;
+            alpha.Enabled = colours != null;
+            channel.Enabled = colours != null;
+            restoreMap.Enabled = targets.SelectedItem != null;
+            apply.Enabled = pending.Count > 0;
+            RefreshColourButtons();
         }
 
         void RefreshColourButtons()
@@ -159,11 +182,13 @@ namespace murumsWiiModStudio
         void Changed()
         {
             RefreshColourButtons();
-            var t = (HudTexture)targets.SelectedItem;
+            var t = targets.SelectedItem as HudTexture;
+            if (t == null || colours == null) return;
             byte[] b;
             if (!pending.TryGetValue(t, out b) && !t.Archive.Generated.TryGetValue(t.Key, out b))
                 b = t.Archive.Files[t.Key].Data;
             pending[t] = HudMapColours.Apply(b, colours);
+            UpdateActions();
             DrawPreview();
         }
 
@@ -196,7 +221,7 @@ namespace murumsWiiModStudio
             preview.Image = image;
             if (old != null)
                 old.Dispose();
-            Status.Text = "Illustrative track with 35% shade; not the loaded course. Approximate material/gradient.\nGame rendering and animations may alter the result. Changes apply only to the selected layout.";
+            Status.Text = L.T("Beispielstrecke mit 35 % Schattierung; Material und Verlauf sind angenähert.\nSpiel und Animationen können anders aussehen. Änderungen gelten für das gewählte Layout.", "Illustrative track with 35% shade; not the loaded course. Approximate material/gradient.\nGame rendering and animations may alter the result. Changes apply only to the selected layout.");
         }
 
         static Color Blend(Color a, Color b, float t)

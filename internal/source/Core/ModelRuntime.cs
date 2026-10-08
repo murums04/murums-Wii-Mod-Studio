@@ -16,6 +16,7 @@ namespace murumsWiiModStudio
         internal static string RootOverride, BlenderOverride;
         internal static string Root { get { return RootOverride ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "internal", "model"); } }
         [ThreadStatic] static List<string> operationFolders;
+        [ThreadStatic] static Action<int, string> operationProgress;
         static readonly object workGate = new object();
         static readonly HashSet<string> workFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -36,13 +37,20 @@ namespace murumsWiiModStudio
             return folder;
         }
 
-        internal static T RunOperation<T>(Func<T> operation)
+        internal static void ReportProgress(int percent, string message)
+        {
+            if (operationProgress != null) operationProgress(percent, message);
+        }
+
+        internal static T RunOperation<T>(Func<T> operation, Action<int, string> progress = null)
         {
             var previous = operationFolders;
+            var previousProgress = operationProgress;
+            if (progress != null) operationProgress = progress;
             var created = new List<string>();
             operationFolders = created;
             try { return operation(); }
-            catch (OperationCanceledException)
+            catch
             {
                 foreach (string folder in created) DeleteWorkFolder(folder);
                 throw;
@@ -50,6 +58,7 @@ namespace murumsWiiModStudio
             finally
             {
                 operationFolders = previous;
+                operationProgress = previousProgress;
                 if (previous != null) previous.AddRange(created);
             }
         }

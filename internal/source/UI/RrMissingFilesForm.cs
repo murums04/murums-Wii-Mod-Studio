@@ -32,7 +32,7 @@ namespace murumsWiiModStudio
             StartPosition = FormStartPosition.CenterParent; ShowInTaskbar = false;
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(16) };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -116,6 +116,7 @@ namespace murumsWiiModStudio
             {
                 SelectedPaths = RrMissingFiles.CopyMissing(pack, list.CheckedIndices.Cast<int>().Select(i => plan[i]));
                 DialogResult = DialogResult.OK;
+                Close();
             }
             catch (Exception error) { ShowError(error.Message); }
         }

@@ -87,6 +87,10 @@ namespace murumsWiiModStudio
         static ErrorDelegate error;
         static ExportDelegate export;
         static ColorDelegate materialColor;
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int IntegerDelegate(IntPtr material, byte[] key, uint type, uint index, [Out] int[] values, ref uint maximum);
+        static IntegerDelegate materialInteger;
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int FloatDelegate(IntPtr material, byte[] key, uint type, uint index, [Out] float[] values, ref uint maximum);
+        static FloatDelegate materialFloat;
         static StringDelegate materialString;
         static readonly object gate = new object();
 
@@ -108,6 +112,8 @@ namespace murumsWiiModStudio
             import = Bind<ImportDelegate>("aiImportFile"); release = Bind<ReleaseDelegate>("aiReleaseImport");
             error = Bind<ErrorDelegate>("aiGetErrorString"); export = Bind<ExportDelegate>("aiExportScene");
             materialColor = Bind<ColorDelegate>("aiGetMaterialColor");
+            materialInteger = Bind<IntegerDelegate>("aiGetMaterialIntegerArray");
+            materialFloat = Bind<FloatDelegate>("aiGetMaterialFloatArray");
             materialString = Bind<StringDelegate>("aiGetMaterialString");
         }
         static IntPtr Open(string path, uint extraFlags = 0)
@@ -269,10 +275,27 @@ namespace murumsWiiModStudio
                 IntPtr material = Marshal.ReadIntPtr(scene.Materials, i * IntPtr.Size);
                 var color = new[] { 1f, 1f, 1f, 1f };
                 materialColor(material, Utf8("$clr.diffuse"), 0, 0, color);
+                var opacity = new float[1]; uint opacityCount = 1;
+                if (materialFloat(material, Utf8("$mat.opacity"), 0, 0, opacity, ref opacityCount) == 0
+                    && opacityCount == 1 && !Single.IsNaN(opacity[0]) && !Single.IsInfinity(opacity[0]))
+                    color[3] = Math.Min(color[3], Math.Max(0, Math.Min(1, opacity[0])));
                 AiString texture;
                 string texturePath = null;
                 if (materialString(material, Utf8("$tex.file"), 12, 0, out texture) == 0 || materialString(material, Utf8("$tex.file"), 1, 0, out texture) == 0)
                     texturePath = texture.ToString();
+                // Reine Emissionsmaterialien tragen ihre sichtbare Farbe nicht im Grundfarbkanal.
+                if (texturePath == null && color.Take(3).All(value => Math.Abs(value) < 0.000001f))
+                {
+                    var emission = new float[4];
+                    if (materialColor(material, Utf8("$clr.emissive"), 0, 0, emission) == 0
+                        && emission.Take(3).Any(value => value > 0))
+                    {
+                        Array.Copy(emission, color, 3);
+                        if (materialString(material, Utf8("$tex.file"), 4, 0, out texture) == 0
+                            || materialString(material, Utf8("$tex.file"), 14, 0, out texture) == 0)
+                            texturePath = texture.ToString();
+                    }
+                }
                 string name = "surface-" + i + ".png";
                 bool saved = false;
                 try
@@ -297,7 +320,11 @@ namespace murumsWiiModStudio
                 }
                 catch (ArgumentException) { }
                 catch (IOException) { }
-                result[i] = new ModelRig.Material { Name = "surface-" + i, Texture = saved ? name : null, Color = color };
+                var sided = new int[1]; uint maximum = 1;
+                bool? doubleSided = materialInteger(material, Utf8("$mat.twosided"), 0, 0, sided, ref maximum) == 0 && maximum == 1 ? (bool?)(sided[0] != 0) : null;
+                AiString sourceName;
+                string label = materialString(material, Utf8("?mat.name"), 0, 0, out sourceName) == 0 ? sourceName.ToString() : "surface-" + i;
+                result[i] = new ModelRig.Material { Name = "surface-" + i, SourceName = label, DoubleSided = doubleSided, Texture = saved ? name : null, Color = color };
             }
             return result;
         }

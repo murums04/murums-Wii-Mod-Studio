@@ -45,7 +45,7 @@ namespace murumsWiiModStudio
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            grid.RowStyles.Insert(0, new RowStyle(SizeType.Absolute, 118));
+            grid.RowStyles.Insert(0, new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
             grid.Controls.Add(StudioChrome.Header(L.T("Archive auswählen", "Choose archives"),
                 L.T("Fehlende Originaldateien ergänzen • RR-Dateien bleiben erhalten", "Add missing original files • Keep RR files intact")), 0, 0);
             grid.Controls.Add(new Label { AutoSize = true, Text = L.T(
@@ -56,17 +56,9 @@ namespace murumsWiiModStudio
             archives.Columns.Add(L.T("Verwendung", "Purpose"), 270);
             archives.Columns.Add(L.T("Pfad in ISO", "Path in ISO"), 350);
             archives.Columns.Add(L.T("Empfehlung", "Recommendation"), 145);
-            archives.OwnerDraw = true;
-            archives.DrawColumnHeader += delegate(object sender, DrawListViewColumnHeaderEventArgs e)
-            {
-                using (var brush = new SolidBrush(DarkTheme.Panel2)) e.Graphics.FillRectangle(brush, e.Bounds);
-                TextRenderer.DrawText(e.Graphics, e.Header.Text, archives.Font, e.Bounds, DarkTheme.Fore,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            };
-            archives.DrawItem += delegate(object sender, DrawListViewItemEventArgs e) { e.DrawDefault = true; };
-            archives.DrawSubItem += delegate(object sender, DrawListViewSubItemEventArgs e) { e.DrawDefault = true; };
+            DarkTheme.StyleListView(archives);
             grid.Controls.Add(archives, 0, 3);
-            grid.Controls.Add(status, 0, 4);
+            grid.Controls.Add(ToolStatus.Wrap(this, status), 0, 4);
             var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
             var cancel = new Button { Text = L.T("Abbrechen", "Cancel"), AutoSize = true, DialogResult = DialogResult.Cancel };
             add.Text = L.T("Auswahl hinzufügen", "Add selected");
@@ -94,7 +86,7 @@ namespace murumsWiiModStudio
                 status.Text = L.T("ISO-Dateiliste wird gelesen…", "Reading ISO file list…");
                 try
                 {
-                    available = await Task.Run(() => GameArchiveImport.List(imagePath, true));
+                    available = await ToolStatus.RunAsync(this, () => GameArchiveImport.List(imagePath, true));
                     if (rrNames != null) available = available.Where(p => RetroRewindSource.AllowIso(p, rrNames)).ToArray();
                     foreach (string entry in available.Where(IsRecommended)) selected.Add(entry);
                     RefreshFiles();
@@ -202,13 +194,14 @@ namespace murumsWiiModStudio
                 "murums Wii Mod Studio", "GameSources", Guid.NewGuid().ToString("N"));
             try
             {
-                await Task.Run(() => GameArchiveImport.Extract(imagePath, paths, cache, true));
+                await ToolStatus.RunAsync(this, () => GameArchiveImport.Extract(imagePath, paths, cache, true));
                 ImportedPaths = paths.Select(p => Path.Combine(cache, Path.GetFileName(p))).ToArray();
                 busy = false;
                 DialogResult = DialogResult.OK;
+                Close();
             }
             catch (Exception error) { status.Text = error.Message; }
-            finally { busy = false; Enabled = true; }
+            finally { busy = false; if (!IsDisposed) Enabled = true; }
         }
     }
 }

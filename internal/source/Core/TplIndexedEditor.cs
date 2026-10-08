@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Drawing;
@@ -64,99 +64,156 @@ namespace murumsWiiModStudio
             return da * da * 3 + dr * dr + dg * dg + db * db;
         }
 
+        sealed class PaletteCandidate
+        {
+            internal ushort Value;
+            internal int Count;
+            internal Color Colour;
+        }
+
+        static List<ushort> BuildImportPalette(Dictionary<ushort, int> counts, int capacity, int kind)
+        {
+            var candidates = counts.OrderByDescending(p => p.Value).ThenBy(p => p.Key)
+                .Select(p => new PaletteCandidate { Value = p.Key, Count = p.Value, Colour = PaletteColour(p.Key, kind) }).ToList();
+            if (candidates.Count <= capacity) return candidates.Select(p => p.Value).ToList();
+            var transparent = candidates.FirstOrDefault(p => p.Colour.A == 0);
+            var values = new List<ushort> { transparent == null ? candidates[0].Value : transparent.Value };
+            var distances = new long[candidates.Count];
+            var weights = new double[candidates.Count];
+            for (int i = 0; i < candidates.Count; i++) { distances[i] = Int64.MaxValue; weights[i] = Math.Sqrt(candidates[i].Count); }
+            while (values.Count < capacity)
+            {
+                Color newest = PaletteColour(values[values.Count - 1], kind);
+                double score = -1;
+                int best = 0;
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    distances[i] = Math.Min(distances[i], ColourDistance(candidates[i].Colour, newest));
+                    double weight = distances[i] * weights[i];
+                    if (weight > score) { score = weight; best = i; }
+                }
+                if (score <= 0) break;
+                values.Add(candidates[best].Value);
+            }
+            return values;
+        }
+        static void EncodeIndexedImage(Bitmap bitmap, int format, int kind, int maxLod, out byte[] imageBytes, out byte[] paletteBytes, bool includeMipPalette = true)
+        {
+            if ((format != 8 && format != 9) || kind < 0 || kind > 2) throw new ArgumentException("Invalid indexed TPL format.");
+            var counts = new Dictionary<ushort, int>();
+            var levels = new List<Bitmap>();
+            try
+            {
+                levels.Add(bitmap);
+                for (int level = 1; level <= maxLod; level++)
+                    levels.Add(Resize(bitmap, Math.Max(1, bitmap.Width >> level), Math.Max(1, bitmap.Height >> level)));
+                foreach (Bitmap mip in includeMipPalette ? levels : new List<Bitmap> { bitmap })
+                    using (var px = new PixelReader(mip))
+                        for (int y = 0; y < mip.Height; y++)
+                            for (int x = 0; x < mip.Width; x++)
+                            {
+                                ushort value = PaletteValue(px.Get(x, y), kind);
+                                int count; counts.TryGetValue(value, out count);
+                                counts[value] = count + 1;
+                            }
+                List<ushort> values = BuildImportPalette(counts, format == 8 ? 16 : 256, kind);
+                Color[] colours = values.Select(v => PaletteColour(v, kind)).ToArray();
+                var nearest = new Dictionary<int, int>();
+                using (var payload = new MemoryStream())
+                {
+                    foreach (Bitmap mip in levels)
+                        using (var px = new PixelReader(mip))
+                        {
+                            int bh = format == 8 ? 8 : 4;
+                            for (int by = 0; by < px.Height; by += bh)
+                                for (int bx = 0; bx < px.Width; bx += 8)
+                                    for (int y = 0; y < bh; y++)
+                                        for (int x = 0; x < 8; x += format == 8 ? 2 : 1)
+                                        {
+                                            int first = CachedNearestPalette(px.Get(bx + x, by + y), colours, nearest);
+                                            payload.WriteByte((byte)(format == 8 ? (first << 4) | CachedNearestPalette(px.Get(bx + x + 1, by + y), colours, nearest) : first));
+                                        }
+                        }
+                    imageBytes = payload.ToArray();
+                }
+                paletteBytes = new byte[values.Count * 2];
+                for (int i = 0; i < values.Count; i++)
+                {
+                    paletteBytes[i * 2] = (byte)(values[i] >> 8); paletteBytes[i * 2 + 1] = (byte)values[i];
+                }
+            }
+            finally { for (int i = 1; i < levels.Count; i++) levels[i].Dispose(); }
+        }
+
+        static int CachedNearestPalette(Color colour, Color[] palette, Dictionary<int, int> nearest)
+        {
+            int index, key = colour.ToArgb();
+            if (!nearest.TryGetValue(key, out index))
+            {
+                index = NearestPalette(colour, palette);
+                if (nearest.Count < 65536) nearest.Add(key, index);
+            }
+            return index;
+        }
+
         static byte[] ReplaceIndexed(byte[] target, Bitmap bitmap, TplTextureInfo info, int index)
         {
-            int table = checked((int)ReadU32(target, 8) + index * 8), oldPalette = ValidatePalette(target, table, info.Format), kind = checked((int)ReadU32(target, oldPalette + 4)), capacity = info.Format == 8 ? 16 : 256;
-            var counts = new Dictionary<ushort, int>();
-            using (var px = new PixelReader(bitmap))
-                for (int y = 0; y < bitmap.Height; y++)
-                    for (int x = 0; x < bitmap.Width; x++)
-                    {
-                        ushort v = PaletteValue(px.Get(x, y), kind);
-                        int n;
-                        counts.TryGetValue(v, out n);
-                        counts[v] = n + 1;
-                    }
+            int table = checked((int)ReadU32(target, 8) + index * 8);
+            int oldPalette = ValidatePalette(target, table, info.Format), kind = checked((int)ReadU32(target, oldPalette + 4));
+            byte[] payload, palette;
+            EncodeIndexedImage(bitmap, info.Format, kind, info.MaxLod, out payload, out palette, false);
+            TplLayout layout;
+            try { layout = ReadImportLayout(target); }
+            catch (InvalidDataException) { return ReplaceIndexedWithAncillaryData(target, info, index, table, oldPalette, payload, palette); }
+            return RepackImport(layout, index, info.Format, info.MaxLod, payload, palette, kind, false);
+        }
 
-            var candidates = counts.OrderByDescending(p => p.Value).ThenBy(p => p.Key).ToList();
-            var values = new List<ushort>();
-            if (candidates.Count <= capacity)
-                values.AddRange(candidates.Select(p => p.Key));
-            else
+        static byte[] ReplaceIndexedWithAncillaryData(byte[] target, TplTextureInfo info, int index, int table, int oldPalette, byte[] payload, byte[] palette)
+        {
+            TplLayout layout = ReadImportLayout(target, true);
+            TplImageRecord selected = layout.Images[index];
+            bool shared = false;
+            for (int i = 0; i < layout.Images.Length; i++)
             {
-                var transparent = candidates.FirstOrDefault(p => PaletteColour(p.Key, kind).A == 0);
-                if (transparent.Value > 0)
-                    values.Add(transparent.Key);
-                else
-                    values.Add(candidates[0].Key);
-                while (values.Count < capacity)
-                {
-                    ushort best = 0;
-                    double score = -1;
-                    foreach (var p in candidates)
-                    {
-                        Color c = PaletteColour(p.Key, kind);
-                        long distance = values.Min(v => ColourDistance(c, PaletteColour(v, kind)));
-                        double weight = distance * Math.Sqrt(p.Value);
-                        if (weight > score)
-                        {
-                            score = weight;
-                            best = p.Key;
-                        }
-                    }
-
-                    values.Add(best);
-                }
+                if (i == index) continue;
+                TplImageRecord other = layout.Images[i];
+                if (other.Header == selected.Header || other.ImageData == selected.ImageData
+                    || other.PaletteHeader == selected.PaletteHeader || other.PaletteData == selected.PaletteData) shared = true;
             }
-
-            Color[] colours = values.Select(v => PaletteColour(v, kind)).ToArray();
-            var payload = new List<byte>();
-            for (int level = 0; level <= info.MaxLod; level++)
-            {
-                Bitmap mip = level == 0 ? null : Resize(bitmap, Math.Max(1, info.Width >> level), Math.Max(1, info.Height >> level));
-                try
-                {
-                    using (var px = new PixelReader(mip ?? bitmap))
-                    {
-                        int bh = info.Format == 8 ? 8 : 4;
-                        for (int by = 0; by < px.Height; by += bh)
-                            for (int bx = 0; bx < px.Width; bx += 8)
-                                for (int y = 0; y < bh; y++)
-                                    for (int x = 0; x < 8; x += info.Format == 8 ? 2 : 1)
-                                    {
-                                        int first = NearestPalette(px.Get(bx + x, by + y), colours);
-                                        payload.Add((byte)(info.Format == 8 ? (first << 4) | NearestPalette(px.Get(bx + x + 1, by + y), colours) : first));
-                                    }
-                    }
-                }
-                finally
-                {
-                    if (mip != null)
-                        mip.Dispose();
-                }
-            }
-
-            int imageHeader = Align32(target.Length), paletteHeader = imageHeader + 36, paletteData = Align32(paletteHeader + 12), imageData = Align32(paletteData + values.Count * 2);
-            byte[] output = new byte[checked(imageData + payload.Count)];
-            Buffer.BlockCopy(target, 0, output, 0, target.Length);
-            Buffer.BlockCopy(target, info.ImageHeaderOffset, output, imageHeader, 36);
-            Buffer.BlockCopy(target, oldPalette, output, paletteHeader, 12);
-            Put32(output, table, imageHeader);
-            Put32(output, table + 4, paletteHeader);
-            Put32(output, imageHeader + 8, imageData);
-            output[paletteHeader] = (byte)(values.Count >> 8);
-            output[paletteHeader + 1] = (byte)values.Count;
-            Put32(output, paletteHeader + 8, paletteData);
-            for (int i = 0; i < values.Count; i++)
-            {
-                output[paletteData + i * 2] = (byte)(values[i] >> 8);
-                output[paletteData + i * 2 + 1] = (byte)values[i];
-            }
-
-            Buffer.BlockCopy(payload.ToArray(), 0, output, imageData, payload.Count);
+            int start = selected.PaletteData.Offset;
+            bool fits = (long)start + palette.Length <= target.Length;
+            foreach (TplBlock block in layout.Blocks)
+                if (block != selected.PaletteData && (long)start < (long)block.Offset + block.Bytes.Length && (long)block.Offset < (long)start + palette.Length)
+                    fits = false;
+            if (fits)
+                for (int p = selected.PaletteData.Bytes.Length; p < palette.Length; p++)
+                    if (target[start + p] != 0) { fits = false; break; }
+            if (shared || !fits) return AppendIndexedImport(target, info, table, oldPalette, payload, palette);
+            byte[] output = (byte[])target.Clone();
+            Buffer.BlockCopy(payload, 0, output, info.DataOffset, payload.Length);
+            Array.Clear(output, start, Math.Max(selected.PaletteData.Bytes.Length, palette.Length));
+            Buffer.BlockCopy(palette, 0, output, start, palette.Length);
+            output[oldPalette] = (byte)((palette.Length / 2) >> 8); output[oldPalette + 1] = (byte)(palette.Length / 2);
             return output;
         }
 
+        static byte[] AppendIndexedImport(byte[] target, TplTextureInfo info, int table, int oldPalette, byte[] payload, byte[] palette)
+        {
+            // Unbekannte Zusatzdaten bleiben beim bisherigen Originalprofil unangetastet.
+            int imageHeader = Align32(target.Length), paletteHeader = imageHeader + 36;
+            int paletteData = Align32(paletteHeader + 12), imageData = Align32(paletteData + (info.Format == 8 ? 16 : 256) * 2);
+            byte[] output = new byte[checked(imageData + payload.Length)];
+            Buffer.BlockCopy(target, 0, output, 0, target.Length);
+            Buffer.BlockCopy(target, info.ImageHeaderOffset, output, imageHeader, 36);
+            Buffer.BlockCopy(target, oldPalette, output, paletteHeader, 12);
+            Put32(output, table, imageHeader); Put32(output, table + 4, paletteHeader);
+            Put32(output, imageHeader + 8, imageData);
+            output[paletteHeader] = (byte)((palette.Length / 2) >> 8); output[paletteHeader + 1] = (byte)(palette.Length / 2);
+            Put32(output, paletteHeader + 8, paletteData);
+            Buffer.BlockCopy(palette, 0, output, paletteData, palette.Length);
+            Buffer.BlockCopy(payload, 0, output, imageData, payload.Length);
+            return output;
+        }
         static int NearestPalette(Color c, Color[] palette)
         {
             int best = 0;

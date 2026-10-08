@@ -84,7 +84,9 @@ namespace murumsWiiModStudio
                     foreach (string target in Targets(Path.GetFileName(file), relative, documents))
                         xmlText.Append("<file disc=\"").Append(SecurityElement.Escape(target))
                             .Append("\" external=\"").Append(SecurityElement.Escape("/files/" + relative))
-                            .Append("\"/>");
+                            .Append(CharacterReplacementExport.SourceFolder(Path.GetFileName(file)) != null
+                                && (target.StartsWith("/Race/", StringComparison.OrdinalIgnoreCase) || target.StartsWith("/Scene/Model/", StringComparison.OrdinalIgnoreCase))
+                                ? "\" create=\"true\"/>" : "\"/>");
                 }
                 xmlText.Append("</patch></wiidisc>");
                 File.WriteAllText(Path.Combine(stage, "studio-test.xml"), xmlText.ToString(), new UTF8Encoding(false));
@@ -130,10 +132,10 @@ namespace murumsWiiModStudio
             }
             string normalized = relative.Replace('\\', '/');
             int characterIndex = normalized.IndexOf("Character/", StringComparison.OrdinalIgnoreCase);
-            if (characterIndex >= 0)
+            string sourceFolder = characterIndex >= 0 ? normalized.Substring(characterIndex, normalized.LastIndexOf('/') - characterIndex)
+                : CharacterReplacementExport.SourceFolder(name);
+            if (sourceFolder != null)
             {
-                string sourceFolder = normalized.Substring(characterIndex);
-                sourceFolder = sourceFolder.Substring(0, sourceFolder.LastIndexOf('/'));
                 foreach (var document in documents)
                     foreach (XmlElement folder in document.SelectNodes("/wiidisc/patch/folder"))
                         if (folder.GetAttribute("external").TrimEnd('/').EndsWith("/" + sourceFolder, StringComparison.OrdinalIgnoreCase))

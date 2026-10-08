@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import json
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -49,12 +49,19 @@ source, reference, destination = arguments[:3]
 limit = int(arguments[3]) if len(arguments) > 3 else 0
 with open(source, encoding='utf-8-sig') as stream:
     data = json.load(stream)
+visible = [(face, material) for face, material in zip(data['Faces'], data['FaceMaterials'])
+           if data['Materials'][material]['Color'][3] > 0]
+if not visible:
+    raise ValueError('The model has no visible material surfaces.')
+data['Faces'] = [face for face, _ in visible]
+data['FaceMaterials'] = [material for _, material in visible]
 # Identische Materialdefinitionen gemeinsam exportieren, damit Namen stabil bleiben.
 canonical_materials = {}
 material_aliases = {}
 for index in sorted(set(data['FaceMaterials'])):
     material = data['Materials'][index]
     key = ('texture', material['Texture']) if material['Texture'] else ('color', tuple(material['Color']))
+    key = (key, material.get('DoubleSided'))
     if key not in canonical_materials:
         canonical_materials[key] = index
     material_aliases[index] = canonical_materials[key]
@@ -94,7 +101,10 @@ for element in ref.findall('./library_visual_scenes/visual_scene/node'):
     read_bone(element, -1, Matrix.Identity(4))
 if not reference_bones:
     raise ValueError('The RR detail model has no skeleton.')
-if [bone['Name'] for bone in reference_bones] != [bone['Name'] for bone in data['Bones']]:
+export_bone_names = data.pop('ExportBoneNames', None)
+if export_bone_names is not None and len(export_bone_names) != len(data['Bones']):
+    raise ValueError('The reviewed export bone mapping is incomplete.')
+if export_bone_names is not None or [bone['Name'] for bone in reference_bones] != [bone['Name'] for bone in data['Bones']]:
     target_names = {bone['Name']: i for i, bone in enumerate(reference_bones)}
     mapping = {}
     used_bones = {bone for indices, weights in zip(data['BoneIndices'], data['BoneWeights'])
@@ -102,6 +112,16 @@ if [bone['Name'] for bone in reference_bones] != [bone['Name'] for bone in data[
     for old, bone in enumerate(data['Bones']):
         if old not in used_bones:
             mapping[old] = 0
+            continue
+        if export_bone_names is not None:
+            # Dieselbe sichtbare Knochenzuordnung wie in Vorschau und Ruecktransformation.
+            name = export_bone_names[old]
+            if name not in target_names:
+                raise ValueError('The RR detail skeleton cannot preserve the reviewed export bone mapping.')
+            mapping[old] = target_names[name]
+            continue
+        if bone['Name'] in target_names:
+            mapping[old] = target_names[bone['Name']]
             continue
         if bone['Name'].startswith('pcd_') and bone['Name'][4:] in target_names:
             mapping[old] = target_names[bone['Name'][4:]]
@@ -169,6 +189,9 @@ for material_index, material in enumerate(data['Materials']):
     texture = material['Texture']
     mat = node(materials,'material',id=name,name=name)
     node(mat,'instance_effect',url='#'+name+'-fx')
+    if material.get('DoubleSided') is not None:
+        extra = node(node(mat, 'extra'), 'technique', profile='STUDIO')
+        node(extra, 'double_sided', 'true' if material['DoubleSided'] else 'false')
     effect = node(effects,'effect',id=name+'-fx')
     profile = node(effect,'profile_COMMON')
     if texture:

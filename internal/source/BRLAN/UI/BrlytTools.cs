@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -43,6 +43,7 @@ namespace murumsWiiModStudio.Brlan
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(14);
             root.ColumnCount = 1;
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             root.RowCount = 5;
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -53,12 +54,13 @@ namespace murumsWiiModStudio.Brlan
             Label title = new Label();
             title.Text = L.T("BRLYT → Material / TPL Zuordnung", "BRLYT → material / TPL mapping");
             title.AutoSize = true;
-            title.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             title.ForeColor = Color.White;
             root.Controls.Add(title, 0, 0);
             Label hint = new Label();
             hint.AutoSize = true;
-            hint.MaximumSize = new Size(900, 0);
+            hint.MaximumSize = new Size(700, 0);
+            root.SizeChanged += delegate { hint.MaximumSize = new Size(Math.Max(100, root.ClientSize.Width - root.Padding.Horizontal - 6), 0); };
             hint.Margin = new Padding(0, 4, 0, 12);
             hint.ForeColor = DarkTheme.Muted;
             hint.Text = L.T("Zeigt, welches BRLYT-Material welchen TPL-Dateinamen in welchem Texture-Slot benutzt. Genau dieser Materialname muss als RLTP-Ziel verwendet werden.", "Shows which BRLYT material uses which TPL filename and texture slot. This material name is the correct RLTP target.");

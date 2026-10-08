@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Drawing;
@@ -13,26 +13,34 @@ namespace murumsWiiModStudio
         {
             Dock = DockStyle.Fill,
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Color.FromArgb(48, 48, 54)
+            BackColor = DarkTheme.Panel2
         };
-        readonly TextBox text = new TextBox
+        readonly StudioReadOnlyText text = new StudioReadOnlyText
         {
             Dock = DockStyle.Fill,
             Multiline = true,
             ReadOnly = true,
-            ScrollBars = ScrollBars.Both
+            ScrollBars = RichTextBoxScrollBars.Both,
+            WordWrap = false
         };
+        readonly Panel textSurface;
+        readonly StudioEmptyState empty = new StudioEmptyState(String.Empty, delegate { });
         readonly Label caption = new Label
         {
             Dock = DockStyle.Top,
             Height = 48,
-            AutoEllipsis = true
+            AutoEllipsis = true,
+            Padding = new Padding(14, 6, 14, 6),
+            BackColor = DarkTheme.Panel2
         };
         public ResourcePreviewPanel()
         {
             Dock = DockStyle.Fill;
             Controls.Add(image);
-            Controls.Add(text);
+            textSurface = StudioReadOnlyText.Surface(text);
+            Controls.Add(textSurface);
+            Controls.Add(empty);
+            ShowResource(String.Empty, null);
             Controls.Add(caption);
         }
 
@@ -42,9 +50,12 @@ namespace murumsWiiModStudio
             image.Image = null;
             if (old != null)
                 old.Dispose();
-            caption.Text = name + "\n" + (bytes == null ? "No resource selected" : bytes.Length + " bytes");
+            caption.Text = name + "\n" + (bytes == null ? String.Empty : bytes.Length + " bytes");
+            caption.Visible = bytes != null;
+            empty.SetContent(L.T("Wähle eine Ressource für die Vorschau aus.", "Select a resource to preview."), false);
+            empty.Visible = bytes == null;
             image.Visible = false;
-            text.Visible = true;
+            textSurface.Visible = bytes != null;
             text.Text = "";
             if (bytes == null)
                 return;
@@ -59,7 +70,7 @@ namespace murumsWiiModStudio
                 }
 
                 image.Visible = true;
-                text.Visible = false;
+                textSurface.Visible = false;
                 return;
             }
 
@@ -68,7 +79,7 @@ namespace murumsWiiModStudio
                 if (name.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase))
                 {
                     var layout = BrlytDocument.FromBytes(bytes);
-                    text.Text = "Layout structure (not a game render)\r\n" + string.Join("\r\n", layout.Panes.Select(p => p.Name + "  " + p.Magic + "  " + p.Width + " × " + p.Height + "  position " + p.X + ", " + p.Y).ToArray());
+                    text.Text = L.T("Layout-Struktur (keine Spielansicht)\r\n", "Layout structure (not a game render)\r\n") + string.Join("\r\n", layout.Panes.Select(p => p.Name + "  " + p.Magic + "  " + p.Width + " × " + p.Height + "  position " + p.X + ", " + p.Y).ToArray());
                     return;
                 }
             }
@@ -77,7 +88,7 @@ namespace murumsWiiModStudio
                 text.Text = e.Message + "\r\n";
             }
 
-            text.AppendText("Binary preview — first 512 bytes\r\n");
+            text.AppendText(L.T("Binärvorschau — erste 512 Bytes\r\n", "Binary preview — first 512 bytes\r\n"));
             for (int i = 0; i < Math.Min(bytes.Length, 512); i += 16)
                 text.AppendText(i.ToString("X6") + "  " + BitConverter.ToString(bytes, i, Math.Min(16, Math.Min(bytes.Length, 512) - i)).Replace('-', ' ') + "\r\n");
         }
@@ -97,7 +108,7 @@ namespace murumsWiiModStudio
     internal sealed class FilePreviewForm : StudioToolForm
     {
         readonly ResourcePreviewPanel view = new ResourcePreviewPanel();
-        public FilePreviewForm(string path) : base("File Preview", Path.GetFileName(path))
+        public FilePreviewForm(string path) : base(L.T("Dateivorschau", "File Preview"), Path.GetFileName(path))
         {
             Body.Controls.Add(view);
             string ext = Path.GetExtension(path).ToLowerInvariant();
@@ -124,7 +135,7 @@ namespace murumsWiiModStudio
             else
                 view.ShowResource(Path.GetFileName(path), File.ReadAllBytes(path));
             Finish();
-            Status.Text = "Decoded image or resource structure. This preview does not simulate game animations.";
+            Status.Text = L.T("Dekodiertes Bild oder Ressourcenstruktur. Diese Vorschau simuliert keine Spielanimationen.", "Decoded image or resource structure. This preview does not simulate game animations.");
         }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -9,6 +9,7 @@ namespace murumsWiiModStudio
 {
     internal sealed class FontSymbolsForm : StudioToolForm
     {
+        SpecialEditorHistory editHistory;
         sealed class Symbol
         {
             internal string Font;
@@ -26,12 +27,12 @@ namespace murumsWiiModStudio
             return code >= 0xE000 && code <= 0xF8FF || code >= 0x2000 && code <= 0x2BFF;
         }
 
-        internal FontSymbolsForm(Dictionary<string, byte[]> fonts) : base("Font symbols", "Browse stars, trophies and game icons • Replace individual symbols with PNG • No TTF conversion")
+        internal FontSymbolsForm(Dictionary<string, byte[]> fonts) : base(L.T("Schriftsymbole", "Font symbols"), L.T("Sterne, Pokale und Spielsymbole ansehen • Einzelne Symbole durch PNG ersetzen • Ohne TTF-Umwandlung", "Browse stars, trophies and game icons • Replace individual symbols with PNG • No TTF conversion"))
         {
             sources = fonts;
-            replace = Action("Replace PNG…", "Fit one PNG into the original glyph cell. Character mapping and spacing remain unchanged.", Replace);
-            export = Action("Export symbol PNG…", "Export the selected symbol as a transparent PNG.", Export);
-            apply = ExportAction("Apply symbol changes", "Queue changes in Font Changer. Save font copies there to export.", delegate { DialogResult = DialogResult.OK; Close(); });
+            replace = Action(L.T("PNG ersetzen…", "Replace PNG…"), L.T("Eine PNG in die ursprüngliche Zeichenfläche einpassen. Zeichenzuordnung und Abstände bleiben erhalten.", "Fit one PNG into the original glyph cell. Character mapping and spacing remain unchanged."), Replace);
+            export = Action(L.T("Symbol als PNG…", "Export symbol PNG…"), L.T("Das gewählte Symbol als transparente PNG exportieren.", "Export the selected symbol as a transparent PNG."), Export);
+            apply = ExportAction(L.T("Änderungen übernehmen", "Apply symbol changes"), L.T("Änderungen im Font Changer übernehmen. Dort Schriftkopien zum Export speichern.", "Queue changes in Font Changer. Save font copies there to export."), delegate { DialogResult = DialogResult.OK; Close(); });
             symbols.LargeImageList = images;
             IntPtr imageHandle = images.Handle;
             foreach (var pair in sources)
@@ -72,7 +73,32 @@ namespace murumsWiiModStudio
             symbols.BackColor = DarkTheme.Panel2;
             symbols.ForeColor = Color.White;
             replace.Enabled = export.Enabled = apply.Enabled = false;
-            Status.Text = "Symbols are never replaced by TTF import. Shared glyph aliases keep referring to the same symbol.";
+            editHistory = new SpecialEditorHistory(this, Actions,
+                delegate { return new object[] { SpecialEditorHistory.Copy(Changes) }; },
+                delegate(object[] state) {
+                    SpecialEditorHistory.Replace(Changes, (Dictionary<string, byte[]>)state[0]);
+                    apply.Enabled = Changes.Count > 0; RefreshSymbol(); RefreshThumbnails();
+                });
+            Status.Text = L.T("TTF-Import ersetzt keine Symbole. Gemeinsame Zeichenzuordnungen verweisen weiterhin auf dasselbe Symbol.", "Symbols are never replaced by TTF import. Shared glyph aliases keep referring to the same symbol.");
+        }
+
+        void RefreshThumbnails()
+        {
+            foreach (ListViewItem item in symbols.Items)
+            {
+                var symbol = (Symbol)item.Tag;
+                using (var glyph = new BrfntFont(Current(symbol)).GlyphImage(symbol.Code))
+                using (var thumbnail = new Bitmap(56, 56))
+                {
+                    using (var graphics = Graphics.FromImage(thumbnail))
+                    {
+                        graphics.Clear(DarkTheme.Panel2);
+                        float scale = Math.Min(52f / glyph.Width, 52f / glyph.Height);
+                        graphics.DrawImage(glyph, (56 - glyph.Width * scale) / 2, (56 - glyph.Height * scale) / 2, glyph.Width * scale, glyph.Height * scale);
+                    }
+                    images.Images[item.ImageIndex] = thumbnail;
+                }
+            }
         }
 
         byte[] Current(Symbol symbol)
@@ -91,13 +117,13 @@ namespace murumsWiiModStudio
             preview.Image = font.GlyphImage(symbol.Code);
             if (old != null) old.Dispose();
             Status.Text = Path.GetFileName(symbol.Font) + " • U+" + symbol.Code.ToString("X4")
-                + " • " + font.CellWidth + " × " + font.CellHeight + " • PNG keeps its aspect ratio.";
+                + " • " + font.CellWidth + " × " + font.CellHeight + L.T(" • Das PNG-Seitenverhältnis bleibt erhalten.", " • PNG keeps its aspect ratio.");
         }
 
         void Replace()
         {
             if (symbols.SelectedItems.Count != 1) return;
-            using (var picker = new OpenFileDialog { Filter = "PNG image|*.png" })
+            using (var picker = new OpenFileDialog { Filter = L.T("PNG-Bild|*.png", "PNG image|*.png") })
             {
                 if (picker.ShowDialog(this) != DialogResult.OK) return;
                 var symbol = (Symbol)symbols.SelectedItems[0].Tag;
@@ -123,10 +149,13 @@ namespace murumsWiiModStudio
         {
             if (symbols.SelectedItems.Count != 1) return;
             var symbol = (Symbol)symbols.SelectedItems[0].Tag;
-            using (var picker = new SaveFileDialog { Filter = "PNG image|*.png", FileName = "symbol-" + symbol.Code.ToString("X4") + ".png" })
+            using (var picker = new SaveFileDialog { Filter = L.T("PNG-Bild|*.png", "PNG image|*.png"), FileName = "symbol-" + symbol.Code.ToString("X4") + ".png" })
                 if (picker.ShowDialog(this) == DialogResult.OK)
+                {
                     using (var bitmap = new BrfntFont(Current(symbol)).GlyphImage(symbol.Code))
                         bitmap.Save(picker.FileName, System.Drawing.Imaging.ImageFormat.Png);
+                    StudioMessageBox.ShowPath(this, picker.FileName, L.T("Symbol exportiert.", "Symbol exported."), L.T("Export", "Export"));
+                }
         }
 
         protected override void Dispose(bool disposing)

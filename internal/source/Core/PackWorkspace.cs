@@ -65,8 +65,6 @@ namespace murumsWiiModStudio
             var findings = new List<PackFinding>();
             var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             int inspected = 0;
-            var availableResources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var references = new List<KeyValuePair<string, string>>();
             foreach (string file in Files(folder))
             {
                 cancel.ThrowIfCancellationRequested();
@@ -79,7 +77,7 @@ namespace murumsWiiModStudio
                 {
                     long length = new FileInfo(file).Length;
                     if (length == 0) throw new InvalidDataException(L.T("Leere Datei.", "Empty file."));
-                    if (!new[] { ".szs", ".arc", ".u8", ".brfnt", ".breff", ".tpl" }.Contains(Path.GetExtension(file).ToLowerInvariant())) continue;
+                    if (!new[] { ".szs", ".arc", ".u8", ".brfnt", ".breff", ".tpl", ".brlyt", ".brlan" }.Contains(Path.GetExtension(file).ToLowerInvariant())) continue;
                     if (length > 128L * 1024 * 1024) throw new NotSupportedException("File exceeds the 128 MiB inspection limit.");
                     byte[] data = File.ReadAllBytes(file);
                     if (new[] { ".szs", ".arc", ".u8" }.Contains(Path.GetExtension(file).ToLowerInvariant()))
@@ -90,27 +88,25 @@ namespace murumsWiiModStudio
                                 "BRRES-Modellcontainer, kein U8-Archiv. Modell- und Animationsdaten wurden nicht geprüft.",
                                 "BRRES model container, not a U8 archive. Model and animation data were not checked."));
                         var archive = new StudioArchiveCopy(file, data);
+                        var availableResources = new HashSet<string>(archive.Files.Keys.Select(Path.GetFileName), StringComparer.OrdinalIgnoreCase);
+                        var references = new List<KeyValuePair<string, string>>();
                         foreach (var entry in archive.Files)
                         {
                             cancel.ThrowIfCancellationRequested();
-                            availableResources.Add(Path.GetFileName(entry.Key));
                             try
                             {
-                                CheckResource(entry.Key, entry.Value.Data);
-                                if (entry.Key.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    var layout = BrlytDocument.FromBytes(entry.Value.Data);
-                                    foreach (string resource in layout.Textures.Concat(layout.Fonts).Where(r => !String.IsNullOrWhiteSpace(r)))
-                                        references.Add(new KeyValuePair<string, string>(relative + " / " + entry.Key, Path.GetFileName(resource)));
-                                }
+                                string source = relative + " / " + entry.Key;
+                                foreach (string resource in CheckResource(entry.Key, entry.Value.Data, source, findings))
+                                    references.Add(new KeyValuePair<string, string>(source, resource));
                             }
                             catch (Exception ex)
                             {
-                                if (!(ex is IOException || ex is InvalidDataException || ex is ArgumentException || ex is OverflowException || ex is NotSupportedException)) throw;
+                                if (!(ex is IOException || ex is InvalidDataException || ex is ArgumentException || ex is OverflowException || ex is NotSupportedException || ex is IndexOutOfRangeException)) throw;
                                 findings.Add(new PackFinding { Level = ex is NotSupportedException ? "Not checked" : "Error",
                                     File = relative + " / " + entry.Key, Detail = ex.Message });
                             }
                         }
+                        ReportMissingReferences(references, availableResources, findings);
                         foreach (var entry in archive.Files.Where(e => e.Key.EndsWith(".breff", StringComparison.OrdinalIgnoreCase)))
                         {
                             string texture = Path.ChangeExtension(entry.Key, ".breft").Replace('\\', '/');
@@ -119,7 +115,13 @@ namespace murumsWiiModStudio
                                     Detail = L.T("Zugehörige BREFT fehlt in diesem Archiv; externe Zuordnung prüfen.", "Matching BREFT is absent in this archive; check external mapping.") });
                         }
                     }
-                    else { CheckResource(file, data); availableResources.Add(name); }
+                    else
+                    {
+                        var resources = CheckResource(file, data, relative, findings);
+                        string directory = Path.GetDirectoryName(file);
+                        var available = new HashSet<string>(Directory.GetFiles(directory).Select(Path.GetFileName), StringComparer.OrdinalIgnoreCase);
+                        ReportMissingReferences(resources.Select(r => new KeyValuePair<string, string>(relative, r)), available, findings);
+                    }
                     inspected++;
                 }
                 catch (NotSupportedException ex) { findings.Add(new PackFinding { Level = "Not checked", File = relative, Detail = ex.Message }); }
@@ -129,20 +131,36 @@ namespace murumsWiiModStudio
                     findings.Add(new PackFinding { Level = "Error", File = relative, Detail = ex.Message });
                 }
             }
-            foreach (var reference in references.Where(r => !availableResources.Contains(r.Value)).Distinct())
-                findings.Add(new PackFinding { Level = "Warning", File = reference.Key,
-                    Detail = L.T("Referenz nicht in den geprüften Archiven gefunden: ", "Reference not found in the checked archives: ")
-                        + reference.Value + L.T(". Kann aus gemeinsamen Spiel-/RR-Dateien stammen; Quelle prüfen.", ". May come from shared game/RR files; check the source.") });
             findings.Insert(0, new PackFinding { Level = "Info", File = "", Detail = inspected + L.T(
                 " Dateien strukturell geprüft. RR-Laufzeit, gemeinsame Referenzen und Spielbarkeit separat testen.",
                 " files checked structurally. Test RR runtime, shared references and playability separately.") });
             return findings;
         }
-        static void CheckResource(string name, byte[] data)
+        static void ReportMissingReferences(IEnumerable<KeyValuePair<string, string>> references, HashSet<string> available, List<PackFinding> findings)
+        {
+            foreach (var reference in references.Where(r => !available.Contains(Path.GetFileName(r.Value))).Distinct())
+                findings.Add(new PackFinding { Level = "Warning", File = reference.Key, Detail =
+                    L.T("Referenz fehlt im selben Archiv bzw. Dateiordner: ", "Reference is absent from the same archive or file folder: ")
+                    + reference.Value + L.T(". Kann aus gemeinsamen Spiel-/RR-Dateien stammen; Quelle prüfen. Ein gleicher Name in einem anderen Archiv bestätigt keine Zuordnung.",
+                        ". May come from shared game/RR files; check the source. A matching name in another archive does not confirm a mapping.") });
+        }
+        static string[] CheckResource(string name, byte[] data, string source, List<PackFinding> findings)
         {
             if (name.EndsWith(".brfnt", StringComparison.OrdinalIgnoreCase)) new BrfntFont(data);
             else if (name.EndsWith(".breff", StringComparison.OrdinalIgnoreCase)) new ParticleEffects(data);
-            else if (name.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase)) BrlytDocument.FromBytes(data);
+            else if (name.EndsWith(".brlyt", StringComparison.OrdinalIgnoreCase))
+            {
+                var layout = BrlytDocument.FromBytes(data);
+                return layout.Textures.Concat(layout.Fonts).Where(r => !String.IsNullOrWhiteSpace(r)).ToArray();
+            }
+            else if (name.EndsWith(".brlan", StringComparison.OrdinalIgnoreCase))
+            {
+                var animation = BrlanCodec.Parse(data);
+                foreach (var issue in BrlanCodec.Validate(animation).Where(i => i.Severity != "OK"))
+                    findings.Add(new PackFinding { Level = issue.Severity == "Fehler" ? "Error" : issue.Severity == "Warnung" ? "Warning" : "Info",
+                        File = source, Detail = issue.Location + ": " + issue.Message });
+                return animation.Pai == null ? new string[0] : animation.Pai.Textures.Where(r => !String.IsNullOrWhiteSpace(r)).ToArray();
+            }
             else if (name.EndsWith(".tpl", StringComparison.OrdinalIgnoreCase))
             {
                 TexturePreviewResult image; string error;
@@ -156,6 +174,7 @@ namespace murumsWiiModStudio
                     image.Dispose();
                 }
             }
+            return new string[0];
         }
         internal static string Restore(string snapshot, string destination)
         {

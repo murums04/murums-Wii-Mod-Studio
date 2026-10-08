@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
@@ -31,36 +31,30 @@ namespace murumsWiiModStudio
                 {
                 }
 
+                var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 3 };
+                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 label.Text = message;
-                label.Left = 14;
-                label.Top = 14;
-                label.Width = 440;
-                label.ForeColor = DarkTheme.Fore;
-                textBox.Left = 14;
-                textBox.Top = 44;
-                textBox.Width = 440;
+                label.AutoSize = true; label.MaximumSize = new Size(438, 0); label.Dock = DockStyle.Fill;
+                label.Margin = new Padding(0, 0, 0, 8);
                 textBox.Text = initialValue ?? string.Empty;
-                textBox.BackColor = DarkTheme.Panel2;
-                textBox.ForeColor = DarkTheme.Fore;
+                textBox.Dock = DockStyle.Fill;
                 textBox.BorderStyle = BorderStyle.FixedSingle;
+                var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Margin = new Padding(0, 12, 0, 0) };
                 ok.Text = "OK";
-                ok.Left = 282;
-                ok.Top = 96;
-                ok.Width = 80;
-                ok.Height = 32;
+                ok.AutoSize = cancel.AutoSize = true;
+                ok.MinimumSize = cancel.MinimumSize = new Size(100, 36);
                 ok.DialogResult = DialogResult.OK;
-                StyleButton(ok, true);
                 cancel.Text = L.T("Abbrechen", "Cancel");
-                cancel.Left = 374;
-                cancel.Top = 96;
-                cancel.Width = 80;
-                cancel.Height = 32;
                 cancel.DialogResult = DialogResult.Cancel;
-                StyleButton(cancel, false);
-                form.Controls.Add(label);
-                form.Controls.Add(textBox);
-                form.Controls.Add(ok);
-                form.Controls.Add(cancel);
+                actions.Controls.Add(ok); actions.Controls.Add(cancel);
+                layout.Controls.Add(label, 0, 0); layout.Controls.Add(textBox, 0, 1); layout.Controls.Add(actions, 0, 2);
+                form.Controls.Add(layout);
+                form.ClientSize = new Size(470, System.Math.Max(170, layout.GetPreferredSize(new Size(470, 0)).Height));
+                DarkTheme.Apply(form);
+                StyleButton(ok, true); StyleButton(cancel, false);
                 form.AcceptButton = ok;
                 form.CancelButton = cancel;
                 DialogResult result = form.ShowDialog(owner);
@@ -74,6 +68,7 @@ namespace murumsWiiModStudio
             button.FlatAppearance.BorderColor = accent ? DarkTheme.Accent : DarkTheme.Border;
             button.BackColor = accent ? DarkTheme.Accent2 : DarkTheme.Panel2;
             button.ForeColor = DarkTheme.Fore;
+            if (accent) DarkTheme.StylePrimary(button);
         }
     }
 }

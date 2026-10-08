@@ -10,98 +10,87 @@ namespace murumsWiiModStudio
         public StudioChangelogForm()
         {
             Text = "Changelog — murums Wii Mod Studio";
-            Font = new Font("Segoe UI", 10F);
+            Font = new Font("Segoe UI", 10);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(740, 580);
-            MinimumSize = new Size(580, 440);
+            ClientSize = new Size(940, 670);
+            MinimumSize = new Size(720, 480);
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
             MinimizeBox = false;
-            Padding = new Padding(20);
-
-            var layout = new TableLayoutPanel
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Margin = Padding.Empty };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.Controls.Add(StudioChrome.Header(L.T("Was ist neu?", "What's new?"), L.T("Versionen, Änderungen und bekannte Grenzen", "Versions, changes and known limits")), 0, 0);
+            var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var sidebar = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 16, 8, 12), BackColor = DarkTheme.Panel, Margin = Padding.Empty };
+            var versions = new ListBox { Name = "ChangelogVersions", Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, IntegralHeight = false, AccessibleName = L.T("Version auswählen", "Choose a version") };
+            sidebar.Controls.Add(versions);
+            sidebar.Controls.Add(new Label { Text = L.T("VERSIONEN", "VERSIONS"), Dock = DockStyle.Top, Height = 30, Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = DarkTheme.Muted });
+            body.Controls.Add(sidebar, 0, 0);
+            var readerHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 18, 24, 12), Margin = Padding.Empty };
+            var history = new RichTextBox { Name = "ChangelogReader", ReadOnly = true, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.Vertical, WordWrap = true, DetectUrls = false, Text = HistoryText(), Font = new Font("Segoe UI", 10.5F), AccessibleName = L.T("Änderungen und bekannte Grenzen", "Changes and known limits") };
+            readerHost.Controls.Add(history);
+            readerHost.SizeChanged += delegate
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 3
+                int width = Math.Max(100, Math.Min(readerHost.ClientSize.Width - readerHost.Padding.Horizontal, 850 * history.Font.Height / 17));
+                history.Bounds = new Rectangle(readerHost.Padding.Left + Math.Max(0, (readerHost.ClientSize.Width - readerHost.Padding.Horizontal - width) / 2), readerHost.Padding.Top, width, Math.Max(1, readerHost.ClientSize.Height - readerHost.Padding.Vertical));
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.Controls.Add(new Label
-            {
-                Text = L.T("Was ist neu?", "What's new?"),
-                Font = new Font("Segoe UI", 19F, FontStyle.Bold),
-                Dock = DockStyle.Fill,
-                UseMnemonic = false
-            }, 0, 0);
-
-            var history = new RichTextBox
-            {
-                Dock = DockStyle.Fill,
-                ReadOnly = true,
-                BorderStyle = BorderStyle.None,
-                ScrollBars = RichTextBoxScrollBars.Vertical,
-                WordWrap = true,
-                DetectUrls = false,
-                Text = HistoryText()
-            };
-            layout.Controls.Add(history, 0, 1);
-            var close = new Button
-            {
-                Text = L.T("Schliessen", "Close"),
-                DialogResult = DialogResult.OK,
-                Anchor = AnchorStyles.Right,
-                AutoSize = true,
-                MinimumSize = new Size(120, 36),
-                FlatStyle = FlatStyle.Flat
-            };
-            var actions = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                ColumnCount = 2,
-                RowCount = 1,
-                Margin = new Padding(0),
-                Padding = new Padding(0, 8, 0, 0)
-            };
+            StudioUx.DisableHover(history);
+            body.Controls.Add(readerHost, 1, 0);
+            root.Controls.Add(body, 0, 1);
+            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 5, RowCount = 1, Padding = new Padding(18, 8, 18, 12), Margin = Padding.Empty };
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var profile = new LinkLabel
-            {
-                Text = "github.com/murums04",
-                AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                Margin = new Padding(4, 4, 12, 4),
-                LinkColor = Color.FromArgb(190, 166, 255),
-                ActiveLinkColor = Color.White,
-                VisitedLinkColor = Color.FromArgb(190, 166, 255)
-            };
-            profile.LinkClicked += delegate
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/murums04") { UseShellExecute = true });
-            };
-            actions.Controls.Add(profile, 0, 0);
-            actions.Controls.Add(close, 1, 0);
-            layout.Controls.Add(actions, 0, 2);
-            Controls.Add(layout);
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.Controls.Add(new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty }, 0, 0);
+            actions.Controls.Add(CreateLink("GitHub ↗", "GitHub ↗", "https://github.com/murums04/murums-Wii-Mod-Studio"), 1, 0);
+            actions.Controls.Add(CreateLink("Fehler melden ↗", "Report a bug ↗", "https://github.com/murums04/murums-Wii-Mod-Studio/issues"), 2, 0);
+            actions.Controls.Add(CreateLink("Downloads & Versionen ↗", "Downloads & releases ↗", "https://github.com/murums04/murums-Wii-Mod-Studio/releases"), 3, 0);
+            var close = StudioChrome.ActionButton(L.T("Schließen", "Close"));
+            close.DialogResult = DialogResult.OK;
+            actions.Controls.Add(close, 4, 0);
+            root.Controls.Add(actions, 0, 2);
+            Controls.Add(root);
             AcceptButton = close;
             CancelButton = close;
             DarkTheme.Apply(this);
-
-            using (var headingFont = new Font(Font, FontStyle.Bold))
+            DarkTheme.StyleListBox(versions);
+            var headings = Regex.Matches(history.Text, @"^\d+\.\d+\.\d+(?:-[^\s]+)?(?:[ \t]+—[ \t]+[^\r\n]+)?$", RegexOptions.Multiline);
+            using (var headingFont = new Font(history.Font, FontStyle.Bold))
             {
                 // Alle Versionsüberschriften erkennen, damit neue Releases nicht vergessen gehen.
-                foreach (Match heading in Regex.Matches(history.Text, @"^\d+\.\d+\.\d+(?:-[^\s]+)?[ \t]+—[ \t]+[^\r\n]+", RegexOptions.Multiline))
+                foreach (Match heading in headings)
                 {
                     history.Select(heading.Index, heading.Length);
                     history.SelectionFont = headingFont;
                     history.SelectionColor = DarkTheme.Accent;
+                    versions.Items.Add(heading.Value.Split(new[] { ' ' }, 2)[0]);
                 }
             }
+            versions.SelectedIndexChanged += delegate
+            {
+                if (versions.SelectedIndex < 0) return;
+                history.Select(headings[versions.SelectedIndex].Index, 0);
+                history.ScrollToCaret();
+            };
+            if (versions.Items.Count > 0) versions.SelectedIndex = 0;
             history.Select(0, 0);
+        }
+
+        LinkLabel CreateLink(string german, string english, string address)
+        {
+            var link = new LinkLabel { Text = L.T(german, english), AutoSize = true, Anchor = AnchorStyles.Left,
+                Margin = new Padding(12, 3, 0, 3), LinkColor = DarkTheme.Accent, ActiveLinkColor = DarkTheme.Fore, VisitedLinkColor = DarkTheme.Accent,
+                AccessibleName = L.T(german, english) };
+            link.LinkClicked += delegate { StudioChrome.OpenLink(this, address); };
+            return link;
         }
 
         protected override void OnShown(EventArgs e)
@@ -113,76 +102,106 @@ namespace murumsWiiModStudio
 
         private static string CurrentHeading()
         {
-            return "2.1.0-beta6 — Release";
+            return StudioVersion.Current + L.T(" — Release", " — Release");
         }
 
         internal static string HistoryText()
         {
-            return CurrentHeading() + "\n\n" + L.T(
-                "• Character Builder: Texturen unabhängig von Bild-DPI korrekt darstellen; vorhandene Skelette korrekt voranzeigen, bessere Ansichtsgröße und schattierte Formansicht. Geschätzte Gelenke klar kennzeichnen; Vollautomatik ungeriggter Sonderposen bleibt offen.\n\n",
-                "• Character Builder: display textures correctly regardless of image DPI; correct source skeleton preview, improved framing and shaded solid view. Identify estimated joints clearly; fully automatic rigging of unrigged special poses remains unresolved.\n\n") + L.T(
-                "• Zuverlässigkeit: fehlgeschlagene mehrteilige Exporte zurücknehmen; nötige Wiederherstellungsdateien behalten. Unveränderte Dateien nicht erneut schreiben und Charakterexporte auf eine vorherige Sicherung begrenzen. Pack-Listen validieren, Einstellungen sicher speichern und fehlgeschlagene Projektbeilagen aufräumen. Pack-Prüfung ohne doppelte Dekomprimierung.\n\n",
-                "• Reliability: roll back failed multi-file exports and keep needed recovery files. Skip unchanged files and retain one previous character backup. Validate pack lists, save settings safely and clean up failed project sidecars. Pack checks no longer decompress archives twice.\n\n") + L.T(
-                "• Modellverarbeitung: eigene Arbeitsordner aufräumen, Fahrzeugreferenzen wiederverwenden und Exportdaten ohne unnötige Kopien schreiben. Modellvorschau ohne zusätzliche Blender-Startgeometrie und mit korrekten Modellgrenzen.\n\n"
-                + "• Tool-Exporte: Font-, Race-, Game-HUD- und Menütext-Änderungen in vorhandenen Ausgabearchiven erhalten; nur bearbeitete Ressourcen ersetzen.\n\n"
-                + "• Speichern: nur den direkten Sicherungsstand behalten; reine Dateiöffnungen erzeugen keine Sicherungskopien mehr.\n\n",
-                "• Model processing: clean up owned work folders, reuse vehicle references and write export data without unnecessary copies. Model previews exclude Blender startup geometry and use the correct model bounds.\n\n"
-                + "• Tool exports: preserve font, race, game HUD and menu text edits in existing output archives; replace only edited resources.\n\n"
-                + "• Saving: keep only the previous backup; opening a file no longer creates backup copies.\n\n")
-                + "2.1.0-beta5 — Release\n\n" + L.T(
-                "• Installer: vollständiges Updatepaket mit Modelloptimierung akzeptieren; Paketinhalt beim Erstellen prüfen.\n\n• Character Builder: sparsamere Spielmodelle mit erhaltenen Gesichts- und Kleidungsdetails; Exportbeleuchtung, gemischte Materialfarben und glTF/USDZ-Import korrigiert. Stabilere Körperbindung bei geteilten Meshes; sichtbare Peach-Gelenke auch in der Fahrzeugauswahl korrekt übernehmen. Fahrhaltungen erhalten das Volumen gebeugter Gliedmaßen; tiefere Ellbogen, Handflächen am Griff und eigene Kontaktpunkte für die Fahrzeugauswahl. Einzelne Menü-/Fahrzeugbewegungen mit Schlüsselbildern bearbeiten und exportieren. Ungewöhnliche Ausgangsposen und einzelne RR-Skelette bleiben eingeschränkt. Fingergriff und Leistung mit mehreren importierten Figuren sind noch nicht abschließend geprüft.\n\n",
-                "• Installer: accept the complete update package with model optimization; verify package contents during packaging.\n\n• Character Builder: lighter game models with preserved face and clothing details; corrected export lighting, mixed material colours and glTF/USDZ import. More stable binding of split meshes; correctly use visible Peach joints in vehicle selection. Driving poses preserve bent limb volume, lower the elbows and align palms with grips; vehicle selection uses its own contact points. Edit and export individual menu/vehicle movements with keyframes. Unusual starting poses and some RR skeletons remain limited. Closed finger grips and performance with multiple imported characters are not yet fully verified.\n\n") + "2.1.0-beta4 — Release\n\n" + L.T(
-                "• Font Tool: geprüfte Schriftbereiche, Archivauswahl korrigiert, sichere Abstände und Textfeld-Vergleich.\n\n"
-                + "• RR-Effekte: getrennte Kategorien inklusive Windschatten, Originalfarben, echte Texturmuster und MUR_EDITED-Export.\n\n"
-                + "• Pack-Werkstatt: Prüfbericht, geprüfte Projektstände und getrenntes Dolphin-Testprofil.\n\n"
-                + "• Mod Merge: unabhängige Archivänderungen kombinieren, Konflikte bewusst auswählen.\n\n"
-                + "• Hintergründe: RR-Region automatisch (PAL/USA/Japan), Lizenz-Zuordnung korrigiert, getrennte Warteansichten, Himmel ohne verschachtelte Scrollleiste und echte Modellvorschau.\n\n"
-                + "• Audio: Loop-Punkte direkt in der Wellenform verschieben.\n\n"
-                + "• Oberfläche/Theme Project: einfacheres Sammeln, Farbränder, korrigiertes Vorschau-Icon und fehlende RR-Dateien nach Bestätigung ergänzen.\n\n"
-                + "• Character Builder: große Modelle automatisch voranzeigen, menschliche Quell-Rigs übernehmen, Blender-Körperbindung, korrigierte Schulterpunkte und direkter Export. Sechs Modellformate, korrigierte Materialien und RR-Konvertierung samt doppelten/ausgeblendeten Menüskeletten und gemeinsamem Wii-Matrixlimit; abschaltbare Zusatzteile, getrennte Bilder und klare Bewegungsschritte. Natürliche Menü- und Fahrzeughaltungen erhalten Größe und Proportionen, markieren unerreichbare Kontaktpunkte und bleiben korrigierbar. Fahrzeugauswahl-Animationen auch für manuell angepasste Haltungen korrigiert; einfacher Kopierordner und sichere Projektkopien.\n\n"
-                + "• Installer: Modellkomponenten enthalten; Update und Wiederherstellung für größere Pakete.\n\n",
-                "• Font Tool: checked script assignments, corrected archive selection, safer spacing and text-field comparison.\n\n"
-                + "• RR effects: separate categories including slipstream, original colours, actual texture samples and MUR_EDITED exports.\n\n"
-                + "• Pack Workshop: check reports, verified snapshots and an isolated Dolphin test profile.\n\n"
-                + "• Mod Merge: combine independent archive edits and resolve conflicts explicitly.\n\n"
-                + "• Backgrounds: automatic RR region (PAL/USA/Japan), corrected license target, separate waiting views, sky controls without nested scrolling and actual model previews.\n\n"
-                + "• Audio: drag loop points directly in the waveform.\n\n"
-                + "• UI/Theme Project: simpler collection, colour borders, corrected review icon and confirmed recovery of missing RR files.\n\n"
-                + "• Character Builder: automatic large-model previews, human source rigs, Blender body binding, corrected shoulders and direct export. Six model formats, corrected materials and RR conversion, including duplicate/hidden menu skeletons and the combined Wii matrix limit; optional-part toggles, separate images and clear movement steps. Natural menu and per-vehicle poses preserve size and proportions, flag unreachable contacts and remain editable. Corrected vehicle-selection animations, including manually adjusted poses; simple copy folder and safe project copies.\n\n"
-                + "• Installer: model components included; update and rollback support larger packages.\n\n") + "2.1.0-beta3 — Release\n\n" + L.T(
-                "• Font Tool: Menü-/HUD-Schriften wählbar, mehr Unicode-Zeichen, Symbolbearbeitung und bessere Vorschau. Positionsnummern bleiben erhalten; Ingame-Prüfung offen.\n\n"
-                + "• Vorschauen: Mausrad zoomt, gedrückt ziehen verschiebt, Mausrad-Doppelklick setzt zurück.\n\n"
-                + "• Archive: Mehrfachauswahl, passende Dateifilter und sicheres Leeren.\n\n"
-                + "• Menütexte: RR-Unterstützung und Import korrigiert.\n\n"
-                + "• Archivvergleich: geführte Auswahl zusammenpassender Dateien.\n\n",
-                "• Font Tool: selectable menu/HUD fonts, more Unicode characters, symbol editing and improved previews. Position numbers preserved; in-game checks pending.\n\n"
-                + "• Previews: wheel to zoom, middle-drag to pan, middle-double-click to reset.\n\n"
-                + "• Archives: multi-select, matching file filters and safe clearing.\n\n"
-                + "• Menu Text: improved RR support and import.\n\n"
-                + "• Archive Compare: guided selection of matching files.\n\n")
-                + "2.1.0-beta2 — Release\n\n" + L.T(
-                "• Custom Pack Maker: ISO-Dateiauswahl mit kurzen Erklärungen, .szs-Import und Beschreibung; Packs erstellen und in allen Tools verwalten.\n\n" + "• Updates: automatische/manuelle Prüfung, geprüfte Downloads; Projekte, Einstellungen und Tools bleiben erhalten.\n\n"
-                + "• Zugeordnete Dateien öffnen per Doppelklick direkt im Studio.\n\n"
-                + "• Custom Pack Maker: RR-Ordner erkennen oder auswählen, mit Standardpfaden für WheelWizard/Dolphin und Browse; RR-Dateien mit unveränderten Namen übernehmen; keine Sprachkopien erzeugen. ISO ergänzt nur fehlende Earth.szs, BackModel.szs und globe.arc. Bearbeitungs-Tools öffnen Dateien direkt, mit klaren Einstiegshinweisen und einheitlichen Bedienelementen.\n\n"
-                + "• Font Changer: RR-Sprach- und HOME-Schriften auswählen, einschließlich I4/I8-Schriftmasken. Export nach MUR_EDITED; Hinweise zum Sichern und Ersetzen der Pack-Dateien.\n\n"
-                + "• Race HUD: Teilwortsuche, Scrollvorschau, Itembox-/Glaskategorie sowie Slash, km/h und Input-Texturen in der Texturliste. ReplacedAssets.szs wird mitgeladen und der Slash beim Zahlenschriftwechsel berücksichtigt.\n\n"
-                + "• Menüs: Lizenzhintergrund, obere/untere Balken und weitere Wartefenster bearbeitbar. Backgrounds öffnet Earth/globe/BackModel direkt; beschädigte Quellen schalten den Editor nicht frei. RR-Hintergrundbilder benötigen RR-Menüarchive; abweichende Original-Titelarchive werden abgewiesen. Lizenz-Bildauswahl und Export freigeschaltet; Menü-Spracharchive ohne eigenen Hintergrund bleiben unverändert. Exportknöpfe in allen Hintergrund-Tabs sichtbar; Modell-Tabs übersichtlicher.\n\n"
-                + "• Himmel: vorerst nur Standbilder; bei GIFs das erste Bild. Animationen folgen später.\n\n"
-                + "• Oberfläche: einheitliche Pack-Auswahl und Statusleisten, kompaktere Anordnung, Hover-/Layoutkorrekturen, einheitliche MKWii-Namen und Dateihinweise in allen Tools.\n\n"
-                + "• Changelog mit GitHub-Link; Buttons im Über-Fenster korrigiert.\n\n",
-                "• Custom Pack Maker: ISO file selection with short descriptions, .szs import and pack descriptions; create packs and manage their shared list.\n\n" + "• Updates: automatic/manual checks, verified downloads; projects, settings and tools are preserved.\n\n"
-                + "• Associated files open directly in Studio on double-click.\n\n"
-                + "• Custom Pack Maker: select WheelWizard/Dolphin default paths or Browse for the RR folder and copy RR files with unchanged names; no generated language aliases. ISO adds only missing Earth.szs, BackModel.szs and globe.arc. Editing tools open files directly, with clear entry hints and consistent controls.\n\n"
-                + "• Font Changer: RR language and HOME fonts, including I4/I8 font masks. MUR_EDITED exports; guidance for backing up and replacing pack files.\n\n"
-                + "• Race HUD: substring search, scrolling preview, item box/glass category; slash, km/h and input textures in the texture list. ReplacedAssets.szs loads automatically and its slash is included when changing number fonts.\n\n"
-                + "• Menus: edit license backgrounds, top/bottom bars and additional waiting screens. Backgrounds opens Earth/globe/BackModel directly; damaged sources do not unlock the editor. RR backgrounds require RR menu archives; incompatible original title archives are rejected. License picture selection and export enabled; menu language archives without a background remain unchanged. Export actions stay visible in every background tab; model tabs have a clearer layout.\n\n"
-                + "• Sky: still images only for now; GIFs use the first frame. Animation will follow later.\n\n"
-                + "• Interface: consistent pack selection and status bars, simpler layout, hover/layout fixes, consistent MKWii names and file hints in all tools.\n\n"
-                + "• Changelog with GitHub link; corrected About buttons.\n\n")
+            return CurrentHeading() + "\n\n"
+                + L.T("• Texturen/GIF: Sammelimport/-export; Format, Mips, Vorschau; Undo.\n", "• Textures/GIF: batch import/export; format, mipmaps, preview; undo.\n")
+                + L.T("• Texturvorschau: RGBA, RGB und Alphakanal getrennt ansehen.\n", "• Texture preview: inspect RGBA, RGB and alpha separately.\n")
+                + L.T("• Archive/Packs: Vergleich und Prüfung von Layouts, Animationen, Texturen und Verweisen.\n", "• Archives/packs: compare and check layouts, animations, textures and references.\n")
+                + L.T("• Archivvergleich: lesbare TXT-Berichte mit Änderungsdetails.\n", "• Archive comparison: readable TXT reports with change details.\n")
+                + L.T("• Musik: Samples/Sekunden; Kanalpegel; Nulldurchgangshilfe mit Undo; Laden abbrechbar.\n", "• Audio: samples/seconds; channel levels; zero-crossing assist with undo; cancellable loading.\n")
+                + L.T("• Modelle: Fahrhaltungen und manuelle Anpassungen beim Speichern erhalten.\n", "• Models: preserve driving poses and manual adjustments when saving.\n")
+                + L.T("• Rig/Export: Arm-/Fingerzuordnung; Kontaktprüfung; Knochenvorschau; Poseprüfung inkompatibler Rigs.\n", "• Rig/export: arm/finger mapping; contact checks; bone preview; review incompatible rigs.\n")
+                + L.T("• Bewegung: Menü-/Fahranimationen; Prüfablauf vor Export; Rückgängig.\n", "• Motion: menu/driving animations; pre-export review; undo.\n")
+                + L.T("• Charakter: geführter Editor; Texturen, Logos, Farben und Vorschau.\n", "• Character: guided editor; textures, logos, colours and preview.\n")
+                + L.T("• Studio: gemeinsame Arbeitsfläche; klare Bedienung; bebilderte DE/EN-Hilfe.\n", "• Studio: shared workspace; clear controls; illustrated DE/EN guides.\n")
+                + L.T("• Schriften: Zeichenprüfung auf Deutsch/Englisch; klarere Quellen- und Archivhinweise.\n", "• Fonts: German/English character checks; clearer source and archive guidance.\n")
+                + L.T("• Fenster: Wiederherstellung, Skalierung und Scrollleisten stabil; neutraler Startfokus.\n", "• Window: stable restore, scaling and scrollbars; neutral startup focus.\n")
+                + L.T("• Stil: Purpur-/Cyan-Elemente und Ladebalken; dunkle Tabellenköpfe und Bereichsnavigation; interaktive freie Flächen.\n", "• Style: purple/cyan controls and progress bars; dark table headers and section navigation; interactive open surfaces.\n")
+                + L.T("• Hilfe: aktuelle Programmbilder; geprüfte Werkzeugwege; GitHub und Fehlerberichte.\n", "• Help: current program pictures; verified tool guidance; GitHub and bug reports.\n")
+                + L.T("• Offen: Originalbewegungen; mehrdeutige Sonderposen und Fingerzuordnung.\n", "• Open: original motion; ambiguous special poses and finger mapping.\n")
+                + L.T("• Offen: Haar-/Kleidungskollisionen; allgemeine Mehrmodell-Leistung.\n", "• Open: hair/clothing collisions; general multi-model performance.\n")
+                + "\n\n"
+                + "2.1.0-beta6 — Release\n\n"
+                + L.T("• Character Builder: DPI-Texturen; Skelett- und Schattenansicht; geschätzte Gelenke markiert.\n", "• Character Builder: DPI textures; skeleton and shaded views; estimated joints marked.\n")
+                + L.T("• Zuverlässigkeit: Export-Rollback; sichere Einstellungen; Packprüfung und Projektbereinigung.\n", "• Reliability: export rollback; safe settings; pack checks and project cleanup.\n")
+                + L.T("• Modelle: Arbeitsordner; geteilte Fahrzeugreferenzen; weniger Kopien; passende Vorschaugrenzen.\n", "• Models: clean work folders; shared vehicle references; fewer copies; correct preview bounds.\n")
+                + L.T("• Tool-Exporte: Font-, Race-, HUD- und Menütext-Änderungen erhalten.\n", "• Tool exports: preserve font, race, HUD and menu text edits.\n")
+                + L.T("• Speichern: eine Vorgängersicherung; keine Sicherung beim Öffnen; Unverändertes übersprungen.\n", "• Saving: one previous backup; no backup on opening; unchanged files skipped.\n")
+                + L.T("• Offen: Automapping ungeriggter Sonderposen.\n\n", "• Open: automatic mapping of unrigged special poses.\n\n")
+                + "2.1.0-beta5 — Release\n\n"
+                + L.T("• Installer: vollständige, geprüfte Updatepakete.\n", "• Installer: complete, verified update packages.\n")
+                + L.T("• Character Builder: leichtere Modelle; Gesichts-/Kleidungsdetails; Licht, Materialien, glTF/USDZ.\n", "• Character Builder: lighter models; face/clothing detail; lighting, materials, glTF/USDZ.\n")
+                + L.T("• Haltung: stabilere Bindung; Peach-Gelenke; Gliedmaßenvolumen; Ellbogen; Handgriffe.\n", "• Poses: steadier binding; Peach joints; limb volume; elbows; hand grips.\n")
+                + L.T("• Animation: eigene Schlüsselbilder für Menü und Fahrzeug; Export.\n", "• Animation: custom menu and vehicle keyframes; export.\n")
+                + L.T("• Offen: Sonderposen, Fingergriffe, Mehrmodell-FPS, Mint-Zubehör, Baby Daisy und King Boo.\n\n", "• Open: special poses, finger grips, multi-model FPS, Mint accessories, Baby Daisy and King Boo.\n\n")
+                + "2.1.0-beta4 — Release\n\n"
+                + L.T("• Font Tool: Schriftbereiche; Archivauswahl; sichere Abstände; Textvergleich.\n", "• Font Tool: script assignments; archive selection; safe spacing; text comparison.\n")
+                + L.T("• RR-Effekte: Kategorien, Windschatten, Originalfarben, Vorschau und MUR_EDITED-Export.\n", "• RR effects: categories, slipstream, source colours, preview and MUR_EDITED export.\n")
+                + L.T("• Pack-Werkstatt/Mod Merge: Prüfberichte; Projektstände; Dolphin-Profil; Konfliktauswahl.\n", "• Pack Workshop/Mod Merge: reports; snapshots; Dolphin profile; conflict selection.\n")
+                + L.T("• Hintergründe/Theme Project: RR-Erkennung; Himmelsteuerung; Vorschau; Farbränder; fehlende Dateien.\n", "• Backgrounds/Theme Project: RR detection; sky controls; preview; colour borders; missing files.\n")
+                + L.T("• Audio: Loop-Punkte per Wellenform verschieben.\n", "• Audio: move loop points in the waveform.\n")
+                + L.T("• Character Builder: sechs Formate; Quell-Rigs; Körperbindung; Schulterkorrektur; direkter Export.\n", "• Character Builder: six formats; source rigs; body binding; shoulder correction; direct export.\n")
+                + L.T("• Haltungen/Export: getrennte Posen; Kontaktwarnungen; Material-, DAE/RR- und Matrixkorrekturen.\n", "• Poses/export: separate poses; contact warnings; material, DAE/RR and matrix fixes.\n")
+                + L.T("• Installer: Modellkomponenten; Update und Rollback großer Pakete.\n\n", "• Installer: model components; large-package update and rollback.\n\n")
+                + "2.1.0-beta3 — Release\n\n"
+                + L.T("• Font Tool: Menü-/HUD-Schriften; Unicode; Symbole; Positionsnummern. Ingame-Prüfung offen.\n", "• Font Tool: menu/HUD fonts; Unicode; symbols; position numbers. In-game checks pending.\n")
+                + L.T("• Vorschauen: Mausrad-Zoom; mittlere Maustaste zum Verschieben; Doppelklick zum Zurücksetzen.\n", "• Previews: wheel zoom; middle-drag pan; double-click reset.\n")
+                + L.T("• Archive: Mehrfachauswahl; Filter; sicheres Leeren. Menütexte: RR-Import korrigiert.\n", "• Archives: multi-select; filters; safe clearing. Menu text: corrected RR import.\n")
+                + L.T("• Archivvergleich: geführte Dateiauswahl.\n\n", "• Archive comparison: guided file selection.\n\n")
+                + "2.1.0-beta2 — Release\n\n"
+                + L.T("• Custom Pack Maker: RR-Ordner, Pack-Verwaltung, ISO/SZS-Import und fehlende Dateien ergänzen.\n", "• Custom Pack Maker: RR folders, pack management, ISO/SZS import and missing-file recovery.\n")
+                + L.T("• Updates: automatische/manuelle Prüfung; Downloads geprüft; Projekte, Einstellungen und Tools erhalten.\n", "• Updates: automatic/manual checks; verified downloads; preserve projects, settings and tools.\n")
+                + L.T("• Dateien: Doppelklick-Start; einheitliche Quellen; verständliche Einstiegshilfen.\n", "• Files: open by double-click; consistent sources; clear starting guidance.\n")
+                + L.T("• Font Changer: RR-Sprach-/HOME-Schriften; I4/I8-Masken; MUR_EDITED-Export.\n", "• Font Changer: RR language/HOME fonts; I4/I8 masks; MUR_EDITED export.\n")
+                + L.T("• Race HUD: Suche, Scrollvorschau, Itembox/Glas, Texturen und ReplacedAssets.\n", "• Race HUD: search, scrolling preview, item box/glass, textures and ReplacedAssets.\n")
+                + L.T("• Menüs: Hintergründe, Balken, Wartefenster; Quellenprüfung und sichtbare Exporte.\n", "• Menus: backgrounds, bars, waiting screens; source checks and visible exports.\n")
+                + L.T("• Himmel: Standbilder und erstes GIF-Bild; Animation offen.\n", "• Sky: still images and first GIF frame; animation pending.\n")
+                + L.T("• Oberfläche: Packwahl, Status, Layout/Hover, MKWii-Namen, Changelog und Über-Dialog.\n\n", "• Interface: pack choice, status, layout/hover, MKWii names, changelog and About dialog.\n\n")
                 + "2.1.0-beta1 — Release\n\n"
-                + L.T("Erste öffentliche Beta.", "First public beta.");
+                + L.T("• Erste öffentliche Beta.\n\n", "• First public beta.\n\n")
+                + "2.1.0-alpha56\n\n"
+                + L.T("• HUD-Zahlengruppen; gespeicherte Sitzungseinstellungen; sichtbare Ressourcenpfade.\n\n", "• HUD number groups; saved session settings; visible resource paths.\n\n")
+                + "2.1.0-alpha55\n\n"
+                + L.T("• Installer-Kopfbereich; violetter Akzent.\n\n", "• Installer header; violet accent.\n\n")
+                + "2.1.0-alpha54\n\n"
+                + L.T("• Weniger Scrollen in Meldungsdialogen.\n\n", "• Less scrolling in message dialogs.\n\n")
+                + "2.1.0-alpha53\n\n"
+                + L.T("• Sicherer Sprachwechsel in Haupt- und BRLAN-Editor.\n\n", "• Safe language switching in the main and BRLAN editors.\n\n")
+                + "2.1.0-alpha52\n\n"
+                + L.T("• TTF-Hinting; Race-HUD-Zahlenschriften.\n\n", "• TTF hinting; Race HUD number fonts.\n\n")
+                + "2.1.0-alpha51\n\n"
+                + L.T("• Schrift-/Konturfarben; Konturbreite.\n\n", "• Font/outline colours; outline width.\n\n")
+                + "2.1.0-alpha50\n\n"
+                + L.T("• TTF-Basislinienkorrektur für BRFNT.\n\n", "• TTF baseline correction for BRFNT.\n\n")
+                + "2.1.0-alpha49\n\n"
+                + L.T("• Hover-Flackern bei Fensterwechsel behoben.\n\n", "• Fixed hover flicker when switching windows.\n\n")
+                + "2.1.0-alpha48\n\n"
+                + L.T("• Keine Hover-Popups über Tabs.\n\n", "• No hover popups over tabs.\n\n")
+                + "2.1.0-alpha47\n\n"
+                + L.T("• Keine Hover-Hilfe auf leeren Flächen.\n\n", "• No hover help on empty areas.\n\n")
+                + "2.1.0-alpha46\n\n"
+                + L.T("• Regressionsprüfung; sichere Verwerfen-Vorgaben.\n\n", "• Regression checks; safe discard defaults.\n\n")
+                + "2.1.0-alpha45\n\n"
+                + L.T("• Hover-Flackern bei ruhender Maus behoben.\n\n", "• Fixed hover flicker with a stationary pointer.\n\n")
+                + "2.1.0-alpha44\n\n"
+                + L.T("• Einheitliche Exportaktionen; dunkle Bestätigungsdialoge.\n\n", "• Consistent export actions; dark confirmation dialogs.\n\n")
+                + "2.1.0-alpha43\n\n"
+                + L.T("• Hover-Absturz nach Tool-Schließen behoben.\n\n", "• Fixed hover crash after closing a tool.\n\n")
+                + "2.1.0-alpha42\n\n"
+                + L.T("• Durchklickbare Hover-Hinweise.\n\n", "• Click-through hover hints.\n\n")
+                + "2.1.0-alpha41\n\n"
+                + L.T("• Historischer Entwicklungsstand.\n\n", "• Historical development snapshot.\n\n")
+                + "2.1.0-alpha40\n\n"
+                + L.T("• Historischer Entwicklungsstand.\n\n", "• Historical development snapshot.\n\n")
+                + "2.1.0-alpha10\n\n"
+                + L.T("• BrawlCrate-EXE-Erkennung; Download-Fallback; unabhängige optionale Tools; Wiederholungsaktion.\n\n", "• BrawlCrate EXE detection; download fallback; optional tools; retry action.\n\n")
+                + "2.1.0-alpha7\n\n"
+                + L.T("• Toolchain-Parser korrigiert; parallele Tool-Installation; kleinerer FFmpeg-Download; Installer-Layout.\n\n", "• Toolchain parser; parallel tool installation; smaller FFmpeg download; installer layout.\n\n");
         }
     }
 }
-
 

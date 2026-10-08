@@ -137,10 +137,19 @@ namespace murumsWiiModStudio
         }
     }
 
+    internal sealed class CharacterLogoRegion
+    {
+        public string Texture;
+        public int X, Y, Width, Height;
+        internal System.Drawing.Rectangle Bounds { get { return new System.Drawing.Rectangle(X, Y, Width, Height); } }
+    }
+
     internal sealed class CharacterAsset
     {
         public string Source, Target, Role;
         public byte[] Data;
+        internal CharacterLogoRegion[] LogoRegions;
+        internal byte[] PaintBase;
     }
 
     internal static class CharacterPackage

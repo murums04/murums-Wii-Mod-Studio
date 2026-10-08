@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
@@ -20,7 +20,7 @@ namespace murumsWiiModStudio
             BorderStyle = BorderStyle.None,
             DetectUrls = false
         };
-        readonly ProgressBar progress = new ProgressBar
+        readonly StudioProgressBar progress = new StudioProgressBar
         {
             Dock = DockStyle.Fill,
             Maximum = 100
@@ -69,10 +69,10 @@ namespace murumsWiiModStudio
                 Padding = new Padding(18)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 4));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             layout.Controls.Add(StudioChrome.Header(L.T("Updates", "Updates"), L.T("Installiert: ", "Installed: ") + StudioVersion.Current), 0, 0);
             status.Padding = new Padding(0, 12, 0, 4);
@@ -186,7 +186,7 @@ namespace murumsWiiModStudio
         void CheckManually()
         {
             status.Text = L.T("Suche nach Updates…", "Checking for updates…");
-            progress.Style = ProgressBarStyle.Marquee;
+            progress.Indeterminate = true;
             var worker = new BackgroundWorker();
             worker.DoWork += delegate (object sender, DoWorkEventArgs e)
             {
@@ -197,7 +197,7 @@ namespace murumsWiiModStudio
                 worker.Dispose();
                 if (IsDisposed)
                     return;
-                progress.Style = ProgressBarStyle.Blocks;
+                progress.Indeterminate = false;
                 later.Text = L.T("Schließen", "Close");
                 if (e.Error != null)
                 {

@@ -15,8 +15,11 @@ namespace murumsWiiModStudio
         readonly DataGridView grid = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
             AllowUserToDeleteRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false };
         readonly Label location = new Label { Dock = DockStyle.Top, Height = 30, AutoEllipsis = true };
+        readonly TextBox findingDetails = new TextBox { Dock = DockStyle.Bottom, Height = 88, Multiline = true,
+            ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle,
+            AccessibleName = L.T("Ausgewählter Prüfhinweis", "Selected check details") };
         readonly Button check, cancel, start, report;
-        readonly TabControl pages = new TabControl { Dock = DockStyle.Fill };
+        readonly TabControl pages = new DarkTabControl { Dock = DockStyle.Fill };
         List<PackFinding> findings = new List<PackFinding>();
         CancellationTokenSource cancellation;
         bool busy;
@@ -24,15 +27,32 @@ namespace murumsWiiModStudio
             L.T("Pack prüfen • Projektstand sichern • Getrennte RR-Testkopie starten",
                 "Check your pack • Save a snapshot • Launch a separate RR test copy"))
         {
-            Action(L.T("Pack-Ordner öffnen…", "Open pack folder…"), "", Open).Name = "PackSourceAction";
+            var open = Action(L.T("Pack-Ordner öffnen…", "Open pack folder…"), "", Open);
+            open.Name = "PackSourceAction";
+            StudioActions.Icon(open, StudioIcon.Folder);
             check = Action(L.T("Pack prüfen", "Check pack"), "", delegate { Check(); });
             cancel = Action(L.T("Abbrechen", "Cancel"), "", delegate { if (cancellation != null) cancellation.Cancel(); });
             report = Action(L.T("Bericht speichern…", "Save report…"), "", SaveReport);
+            StudioActions.Icon(cancel, StudioIcon.Stop);
+            StudioActions.Icon(report, StudioIcon.Save);
             var checks = Page(L.T("Pack prüfen", "Check pack"), L.T(
-                "Dateien auf lesbare Archive, Texturen und fehlende Verweise prüfen.",
-                "Check archive and texture integrity, and find missing references."), new[] { check, cancel, report });
-            checks.Controls.Add(grid);
-            grid.BringToFront();
+                "Archive, Texturen, Menülayouts und Animationen prüfen. Fehlende gemeinsame Spiel-/RR-Verweise gesondert kontrollieren.",
+                "Check archives, textures, menu layouts and animations. Review missing shared game/RR references separately."), new[] { check, cancel, report });
+            ((Panel)checks.Tag).Controls.Add(grid);
+            ((Panel)checks.Tag).Controls.Add(findingDetails);
+            grid.CurrentCellChanged += delegate {
+                var finding = grid.CurrentRow == null ? null : grid.CurrentRow.DataBoundItem as PackFinding;
+                findingDetails.Text = finding == null ? "" : finding.File + Environment.NewLine + finding.Detail;
+            };
+            grid.CellFormatting += delegate(object sender, DataGridViewCellFormattingEventArgs e) {
+                if (grid.Columns[e.ColumnIndex].Name != "Level") return;
+                switch (Convert.ToString(e.Value)) {
+                    case "Error": e.Value = L.T("Fehler", "Error"); break;
+                    case "Warning": e.Value = L.T("Warnung", "Warning"); break;
+                    case "Info": e.Value = L.T("Hinweis", "Info"); break;
+                    case "Not checked": e.Value = L.T("Nicht geprüft", "Not checked"); break;
+                }
+            };
             var snapshot = Action(L.T("Projektstand sichern…", "Save snapshot…"), "", Snapshot);
             var restore = Action(L.T("Wiederherstellen…", "Restore snapshot…"), "", Restore);
             Page(L.T("Sicherungen", "Snapshots"), L.T(
@@ -41,8 +61,8 @@ namespace murumsWiiModStudio
             var build = Action(L.T("1. Testprofil erstellen…", "1. Build test profile…"), "", TestProfile);
             start = Action(L.T("2. Dolphin starten…", "2. Start Dolphin…"), "", StartTest);
             Page(L.T("Im Spiel testen", "Test in-game"), L.T(
-                "Benötigt: dein RR.json-Preset, deine MKWii-ISO und Dolphin.\nStudio erstellt eine getrennte Pack-Kopie mit eigenem Dolphin-Profil und eigenen Spielständen.\nPrüfe deine Änderungen anschließend sichtbar in einem Offline-Rennen.",
-                "Requires: your RR.json preset, MKWii ISO and Dolphin.\nStudio creates a separate pack copy, Dolphin profile and saves.\nThen inspect your changes in an offline race."), new[] { build, start });
+                "Benötigt: dein RR.json-Preset, deine MKWii-ISO und Dolphin.\nStudio erstellt eine getrennte Pack-Kopie mit eigenem Dolphin-Profil und eigenen Spielständen.\nWähle im Offline-Rennen genau den ersetzten Charakter, seine Variante und das betroffene Fahrzeug.\nNach Änderungen erneut exportieren und ein neues Testprofil erstellen.",
+                "Requires: your RR.json preset, MKWii ISO and Dolphin.\nStudio creates a separate pack copy, Dolphin profile and saves.\nIn an offline race, choose the exact replacement character, variant and affected vehicle.\nAfter edits, export again and create a new test profile."), new[] { build, start });
             Body.Controls.Add(pages);
             Body.Controls.Add(location);
             DarkTheme.StyleTabs(pages);
@@ -57,15 +77,27 @@ namespace murumsWiiModStudio
                     "Open your RR custom pack or an exported pack folder.\nCheck files, save a snapshot or create a separate Dolphin test copy."), false);
             FormClosing += delegate(object s, FormClosingEventArgs e) { if (busy) { if (cancellation != null) cancellation.Cancel(); e.Cancel = true; } };
         }
+        internal PackWorkbenchForm(string exportFolder) : this()
+        {
+            LoadFolder(exportFolder);
+            pages.SelectedIndex = 2;
+        }
         TabPage Page(string title, string help, Button[] buttons)
         {
             var page = new TabPage(title) { Padding = new Padding(8) };
-            var header = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 2 };
+            var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var explanation = new Label { Text = help, AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(3, 8, 3, 8) };
             var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             actions.Controls.AddRange(buttons);
             header.Controls.Add(explanation, 0, 0);
             header.Controls.Add(actions, 0, 1);
+            var result = new Panel { Dock = DockStyle.Fill };
+            header.Controls.Add(result, 0, 2);
+            page.Tag = result;
             page.Controls.Add(header);
             pages.TabPages.Add(page);
             return page;
@@ -88,8 +120,8 @@ namespace murumsWiiModStudio
         {
             if (busy) throw new InvalidOperationException("Wait for the check to finish.");
             if (!Directory.Exists(path)) throw new DirectoryNotFoundException(path);
-            folder = Path.GetFullPath(path); location.Text = folder; preset = null;
-            findings.Clear(); grid.DataSource = null;
+            folder = Path.GetFullPath(path); location.Text = folder; StudioUx.SetHelp(location, folder); preset = null;
+            findings.Clear(); grid.DataSource = null; findingDetails.Clear();
             PackSelection.SourceLoaded(this); UpdateActions();
         }
         async void Check()
@@ -100,7 +132,7 @@ namespace murumsWiiModStudio
             try
             {
                 string source = folder;
-                findings = await Task.Run(() => PackWorkspace.Check(source, cancellation.Token));
+                findings = await ToolStatus.RunAsync(this, () => PackWorkspace.Check(source, cancellation.Token));
                 grid.DataSource = findings;
                 grid.Columns["Level"].HeaderText = L.T("Ergebnis", "Result");
                 grid.Columns["File"].HeaderText = L.T("Datei", "File");
@@ -172,8 +204,11 @@ namespace murumsWiiModStudio
             if (findings.Count == 0) throw new InvalidOperationException(L.T("Zuerst Pack prüfen.", "Check the pack first."));
             using (var picker = new SaveFileDialog { Filter = "Text report|*.txt", FileName = "RR-Pack-Check.txt" })
                 if (picker.ShowDialog(this) == DialogResult.OK)
+                {
                     BackupManager.WriteAllBytesSafely(picker.FileName, System.Text.Encoding.UTF8.GetBytes(
                         String.Join(Environment.NewLine, findings.Select(f => f.Level + " | " + f.File + " | " + f.Detail))));
+                    StudioMessageBox.ShowPath(this, picker.FileName, L.T("Bericht gespeichert.", "Report saved."), L.T("Gespeichert", "Saved"));
+                }
         }
     }
 }

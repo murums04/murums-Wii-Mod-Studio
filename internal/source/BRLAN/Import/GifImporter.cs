@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -19,6 +19,19 @@ namespace murumsWiiModStudio.Brlan
         {
             if (Bitmap != null)
                 Bitmap.Dispose();
+        }
+    }
+
+    internal sealed class GifStagedState
+    {
+        public readonly Dictionary<string, byte[]> Payloads = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        public readonly Dictionary<string, List<string>> NamesByPrefix = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        public GifStagedState Clone()
+        {
+            var copy = new GifStagedState();
+            foreach (var pair in Payloads) copy.Payloads.Add(pair.Key, (byte[])pair.Value.Clone());
+            foreach (var pair in NamesByPrefix) copy.NamesByPrefix.Add(pair.Key, new List<string>(pair.Value));
+            return copy;
         }
     }
 
@@ -90,7 +103,7 @@ namespace murumsWiiModStudio.Brlan
         private CheckBox _updateBrlan;
         private CheckBox _preserveDuration;
         private CheckBox _exportPng;
-        private ProgressBar _progress;
+        private murumsWiiModStudio.StudioProgressBar _progress;
         private Label _status;
         private Button _import;
         private int _gifFrameCount;
@@ -98,6 +111,7 @@ namespace murumsWiiModStudio.Brlan
         private int _gifHeight;
         private int _gifTotalMs;
         private bool _busy;
+        private BrlanInputHistory _inputHistory;
         public GifImportForm(BrlanDocument doc, Action onDocumentChanged) : this(doc, onDocumentChanged, null, null)
         {
         }
@@ -147,6 +161,11 @@ namespace murumsWiiModStudio.Brlan
             DarkTheme.Apply(this);
             TryAutoLoadRelatedBrlyt();
             UpdateWorkflowUi();
+            _inputHistory = new BrlanInputHistory(this, null, delegate { return !_busy; });
+            var root = (TableLayoutPanel)Controls[0];
+            root.RowCount = 6;
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.Controls.Add(_inputHistory.Actions.Panel, 0, 5);
             FormClosing += delegate (object sender, FormClosingEventArgs e)
             {
                 if (_busy)
@@ -163,6 +182,7 @@ namespace murumsWiiModStudio.Brlan
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(16);
             root.ColumnCount = 1;
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             root.RowCount = 5;
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -172,14 +192,15 @@ namespace murumsWiiModStudio.Brlan
             Controls.Add(root);
             Label title = new Label();
             title.AutoSize = true;
-            title.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             title.ForeColor = Color.White;
             title.Text = L.T("GIF automatisch in Wii-TPLs + RLTP umwandeln", "Automatically convert GIF to Wii TPLs + RLTP");
             root.Controls.Add(title, 0, 0);
             Label intro = new Label();
             intro.AutoSize = true;
-            intro.MaximumSize = new Size(950, 0);
-            intro.ForeColor = Color.FromArgb(220, 224, 234);
+            intro.MaximumSize = new Size(880, 0);
+            root.SizeChanged += delegate { intro.MaximumSize = new Size(Math.Max(100, root.ClientSize.Width - root.Padding.Horizontal - 6), 0); };
+            intro.ForeColor = DarkTheme.Muted;
             intro.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
             intro.Margin = new Padding(0, 5, 0, 14);
             intro.Text = L.T("Der Importer extrahiert die GIF-Frames, skaliert sie, erzeugt echte TPL-Dateien und kann die geladene BRLAN automatisch mit RLTP-Keyframes ergänzen.", "The importer extracts GIF frames, resizes them, creates real TPL files and can automatically add RLTP keyframes to the loaded BRLAN.");
@@ -233,7 +254,7 @@ namespace murumsWiiModStudio.Brlan
             AddLabel(form, row, L.T("GIF-Info", "GIF info"));
             _gifInfo = new Label();
             _gifInfo.AutoSize = true;
-            _gifInfo.ForeColor = Color.FromArgb(225, 229, 239);
+            _gifInfo.ForeColor = DarkTheme.Fore;
             _gifInfo.Font = new Font("Segoe UI", 10.25F, FontStyle.Regular);
             _gifInfo.Text = L.T("Noch kein GIF ausgewählt.", "No GIF selected yet.");
             form.SetColumnSpan(_gifInfo, 2);
@@ -274,7 +295,7 @@ namespace murumsWiiModStudio.Brlan
             _bindingInfo = new Label();
             _bindingInfo.AutoSize = true;
             _bindingInfo.MaximumSize = new Size(720, 0);
-            _bindingInfo.ForeColor = Color.FromArgb(190, 198, 216);
+            _bindingInfo.ForeColor = DarkTheme.Muted;
             _bindingInfo.Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
             _bindingInfo.Text = L.T("Tipp: Mit einer BRLYT kann Studio den korrekten Materialnamen und Texture-Slot automatisch bestimmen – praktisch für Title.szs und andere mehrschichtige Layouts.", "Tip: With a BRLYT, Studio can automatically resolve the correct material name and texture slot – useful for Title.szs and other multi-layer layouts.");
             form.SetColumnSpan(_bindingInfo, 2);
@@ -301,7 +322,10 @@ namespace murumsWiiModStudio.Brlan
             sizeRow.Controls.Add(new Label { Text = "×", AutoSize = true, ForeColor = DarkTheme.Fore, Margin = new Padding(6, 7, 6, 0) });
             sizeRow.Controls.Add(_height);
             Button original = NewButton(L.T("Original", "Original"));
-            original.Width = 85;
+            original.Dock = DockStyle.None;
+            original.AutoSize = true;
+            original.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            original.MinimumSize = new Size(85, 0);
             original.Click += delegate
             {
                 if (_gifWidth > 0 && _gifHeight > 0)
@@ -312,6 +336,7 @@ namespace murumsWiiModStudio.Brlan
             };
             sizeRow.Controls.Add(original);
             form.Controls.Add(sizeRow, 1, row++);
+            form.SetColumnSpan(sizeRow, 2);
             AddLabel(form, row, L.T("Skalierung", "Resize mode"));
             _resizeMode = NewCombo(new string[] { L.T("Füllen / Crop (empfohlen)", "Fill / Crop (recommended)"), L.T("Einpassen / transparente Ränder", "Fit / transparent borders"), L.T("Strecken", "Stretch") });
             form.Controls.Add(_resizeMode, 1, row++);
@@ -325,6 +350,7 @@ namespace murumsWiiModStudio.Brlan
             everyRow.Controls.Add(_takeEvery);
             everyRow.Controls.Add(new Label { Text = L.T("Frame übernehmen", "frame"), AutoSize = true, ForeColor = DarkTheme.Fore, Margin = new Padding(6, 7, 0, 0) });
             form.Controls.Add(everyRow, 1, row++);
+            form.SetColumnSpan(everyRow, 2);
             AddLabel(form, row, L.T("Timing", "Timing"));
             _timingMode = NewCombo(new string[] { L.T("Original-GIF-Timing (60 FPS)", "Original GIF timing (60 FPS)"), L.T("Feste Frames pro Bild", "Fixed frames per image") });
             _timingMode.SelectedIndexChanged += delegate
@@ -332,14 +358,14 @@ namespace murumsWiiModStudio.Brlan
                 bool editable = _timingMode.SelectedIndex == 1;
                 _fixedFrames.ReadOnly = !editable;
                 _fixedFrames.BackColor = editable ? DarkTheme.Panel : DarkTheme.Panel3;
-                _fixedFrames.ForeColor = editable ? DarkTheme.Fore : Color.FromArgb(214, 219, 232);
+                _fixedFrames.ForeColor = editable ? DarkTheme.Fore : DarkTheme.Muted;
             };
             form.Controls.Add(_timingMode, 1, row++);
             AddLabel(form, row, L.T("Frames pro Bild", "Frames per image"));
             _fixedFrames = NewNumeric(1, 10000, 6, 90);
             _fixedFrames.ReadOnly = true;
             _fixedFrames.BackColor = DarkTheme.Panel3;
-            _fixedFrames.ForeColor = Color.FromArgb(214, 219, 232);
+            _fixedFrames.ForeColor = DarkTheme.Muted;
             form.Controls.Add(_fixedFrames, 1, row++);
             AddLabel(form, row, L.T("Materialziel", "Material target"));
             _materialTarget = new ComboBox();
@@ -408,36 +434,40 @@ namespace murumsWiiModStudio.Brlan
             previewLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _preview = new murumsWiiModStudio.ZoomPanPictureBox();
             _preview.Dock = DockStyle.Fill;
-            _preview.BackColor = Color.FromArgb(12, 13, 17);
+            _preview.BackColor = DarkTheme.Panel;
             _preview.SizeMode = PictureBoxSizeMode.Zoom;
             previewLayout.Controls.Add(_preview, 0, 0);
             Label previewHint = new Label();
             previewHint.AutoSize = true;
-            previewHint.ForeColor = Color.FromArgb(225, 229, 239);
+            previewHint.ForeColor = DarkTheme.Fore;
             previewHint.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
             previewHint.Padding = new Padding(6, 9, 6, 5);
             previewHint.Text = L.T("Vorschau des ersten GIF-Frames", "Preview of the first GIF frame");
             previewLayout.Controls.Add(previewHint, 0, 1);
             split.Panel2.Controls.Add(previewLayout);
-            _progress = new ProgressBar();
+            _progress = new murumsWiiModStudio.StudioProgressBar();
             _progress.Dock = DockStyle.Fill;
-            _progress.Height = 22;
+            _progress.Height = 4;
             root.Controls.Add(_progress, 0, 3);
             TableLayoutPanel bottom = new TableLayoutPanel();
             bottom.Dock = DockStyle.Fill;
             bottom.BackColor = DarkTheme.Back;
             bottom.Padding = new Padding(0, 6, 0, 0);
             bottom.ColumnCount = 2;
+            bottom.AutoSize = true;
+            bottom.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190F));
             _status = new Label();
             _status.Dock = DockStyle.Fill;
             _status.TextAlign = ContentAlignment.MiddleLeft;
-            _status.ForeColor = Color.FromArgb(232, 235, 244);
+            _status.ForeColor = DarkTheme.Fore;
             _status.Font = new Font("Segoe UI", 10.25F, FontStyle.Regular);
             _status.Text = L.T("Bereit. Wähle zuerst ein GIF.", "Ready. Select a GIF first.");
             bottom.Controls.Add(_status, 0, 0);
             _import = NewButton(L.T("Import starten", "Start import"));
+            _import.Dock = DockStyle.None;
+            _import.Anchor = AnchorStyles.Right;
             _import.Width = 180;
             _import.Height = 36;
             _import.Click += delegate
@@ -594,6 +624,7 @@ namespace murumsWiiModStudio.Brlan
                     ApplySelectedTextureBinding();
                 else
                     _bindingInfo.Text = L.Format("BRLYT geladen: {0} TPL-Dateien, {1} Bindings. Wähle die Basis-TPL, die du animieren willst.", "BRLYT loaded: {0} TPL files, {1} bindings. Select the base TPL you want to animate.", map.Textures.Count, map.Bindings.Count);
+                if (_inputHistory != null) _inputHistory.Reset();
             }
             catch (Exception ex)
             {
@@ -773,6 +804,7 @@ namespace murumsWiiModStudio.Brlan
 
                 _gifInfo.Text = L.Format("{0} × {1} px • {2} Frame(s) • {3:0.00} s", "{0} × {1} px • {2} frame(s) • {3:0.00} s", _gifWidth, _gifHeight, _gifFrameCount, _gifTotalMs / 1000.0);
                 _status.Text = L.T("GIF erkannt. Einstellungen prüfen und Import starten.", "GIF detected. Review settings and start the import.");
+                if (_inputHistory != null) _inputHistory.Reset();
             }
             catch (Exception ex)
             {
@@ -964,7 +996,7 @@ namespace murumsWiiModStudio.Brlan
             _busy = true;
             _import.Enabled = false;
             _progress.Value = 0;
-            _progress.Maximum = Math.Max(1, estimatedFrames);
+            _progress.Maximum = 100;
             _status.Text = L.Format("Import läuft… geschätzte Rohdaten: {0:0.0} MB", "Importing… estimated raw data: {0:0.0} MB", estimatedBytes / 1024.0 / 1024.0);
             BackgroundWorker worker = new BackgroundWorker();
             worker.WorkerReportsProgress = true;
@@ -974,7 +1006,7 @@ namespace murumsWiiModStudio.Brlan
             };
             worker.ProgressChanged += delegate (object sender, ProgressChangedEventArgs e)
             {
-                _progress.Value = Math.Min(_progress.Maximum, Math.Max(_progress.Minimum, e.ProgressPercentage));
+                _progress.Value = Math.Max(0, Math.Min(100, (int)(100.0 * e.ProgressPercentage / Math.Max(1, estimatedFrames))));
             };
             worker.RunWorkerCompleted += delegate (object sender, RunWorkerCompletedEventArgs e)
             {
@@ -990,10 +1022,10 @@ namespace murumsWiiModStudio.Brlan
                 GifImportResult result = (GifImportResult)e.Result;
                 _progress.Value = _progress.Maximum;
                 _status.Text = L.Format("Fertig: {0} TPL-Dateien erzeugt.", "Done: {0} TPL files created.", result.ExportedFrames);
-                if (_onDocumentChanged != null && options.UpdateBrlan)
-                    _onDocumentChanged();
                 if (_onImportCompleted != null)
                     _onImportCompleted(result);
+                if (_onDocumentChanged != null && options.UpdateBrlan)
+                    _onDocumentChanged();
                 string targetLine = options.UpdateBrlan ? "\r\n" + L.T("Materialziel: ", "Material target: ") + options.TargetMaterialName + "\r\n" + L.T("BRLAN-Frames: ", "BRLAN frames: ") + (_doc != null && _doc.Pai != null ? _doc.Pai.Frames.ToString() : "-") : "";
                 string pngLine = options.ExportPng && !String.IsNullOrWhiteSpace(result.PngOutputFolder) ? "\r\n" + L.T("PNG-Frames: ", "PNG frames: ") + result.PngOutputFolder : "";
                 murumsWiiModStudio.StudioMessageBox.Show(this, L.Format("Import abgeschlossen.\r\n\r\nTPL-Dateien: {0}\r\nTPL-Ausgabe: {1}\r\nBRLAN aktualisiert: {2}", "Import complete.\r\n\r\nTPL files: {0}\r\nTPL output: {1}\r\nBRLAN updated: {2}", result.ExportedFrames, result.OutputFolder, options.UpdateBrlan ? L.T("Ja", "Yes") : L.T("Nein", "No")) + pngLine + targetLine, L.T("GIF-Import fertig", "GIF import complete"), MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1003,70 +1035,88 @@ namespace murumsWiiModStudio.Brlan
 
         private GifImportResult ImportGif(GifImportOptions options, BackgroundWorker worker)
         {
-            Directory.CreateDirectory(options.OutputFolder);
-            if (options.ExportPng && !String.IsNullOrWhiteSpace(options.PngOutputFolder))
-            {
-                Directory.CreateDirectory(options.PngOutputFolder);
-                // The PNG folder belongs exclusively to this source GIF. Remove stale
-                // frame exports so a re-export with fewer frames cannot leave old files behind.
-                string[] oldPngFrames = Directory.GetFiles(options.PngOutputFolder, "frame_*.png");
-                int oldIndex;
-                for (oldIndex = 0; oldIndex < oldPngFrames.Length; oldIndex++)
-                {
-                    try
-                    {
-                        File.Delete(oldPngFrames[oldIndex]);
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
-
             List<GifFrameData> frames = LoadSelectedFrames(options.GifPath, options.TakeEvery);
             try
             {
-                GifImportResult result = new GifImportResult();
-                result.OutputFolder = options.OutputFolder;
-                result.Prefix = options.Prefix;
-                result.PngOutputFolder = options.ExportPng ? options.PngOutputFolder : null;
-                float timeline = 0.0f;
-                int i;
-                for (i = 0; i < frames.Count; i++)
+                var result = new GifImportResult
                 {
-                    string name = options.Prefix + "_" + i.ToString("D3", CultureInfo.InvariantCulture) + ".tpl";
-                    string tplPath = Path.Combine(options.OutputFolder, name);
-                    using (Bitmap resized = ResizeFrame(frames[i].Bitmap, options.Width, options.Height, options.ResizeMode))
-                    {
-                        TplEncoder.Save(resized, tplPath, options.Format);
-                        if (options.ExportPng && !String.IsNullOrWhiteSpace(options.PngOutputFolder))
-                            resized.Save(Path.Combine(options.PngOutputFolder, "frame_" + i.ToString("D3", CultureInfo.InvariantCulture) + ".png"), ImageFormat.Png);
-                    }
-
-                    result.TplNames.Add(name);
+                    OutputFolder = options.OutputFolder,
+                    Prefix = options.Prefix,
+                    PngOutputFolder = options.ExportPng ? options.PngOutputFolder : null,
+                    ExportedFrames = frames.Count
+                };
+                float timeline = 0;
+                for (int i = 0; i < frames.Count; i++)
+                {
+                    result.TplNames.Add(options.Prefix + "_" + i.ToString("D3", CultureInfo.InvariantCulture) + ".tpl");
                     result.KeyFrames.Add(timeline);
                     // The final BRLAN texture index is assigned in ApplyToBrlan().
                     // This makes repeat imports idempotent and avoids duplicate-name index drift.
                     result.TextureIndices.Add((ushort)i);
-                    float durationFrames = options.OriginalTiming ? Math.Max(1.0f, frames[i].DurationMs * 60.0f / 1000.0f) : options.FixedFrames;
-                    timeline += durationFrames;
+                    timeline += options.OriginalTiming
+                        ? Math.Max(1.0f, frames[i].DurationMs * 60.0f / 1000.0f) : options.FixedFrames;
+                    if (timeline > 65535.0f)
+                        throw new InvalidDataException(L.T("Die GIF-Animation wäre länger als 65535 BRLAN-Frames. Reduziere Frames oder Timing.", "The GIF animation would exceed 65535 BRLAN frames. Reduce frames or timing."));
+                }
+                result.TotalFrames = (ushort)Math.Max(1, (int)Math.Ceiling(timeline));
+
+                BrlanDocument preparedDocument = null;
+                if (options.UpdateBrlan && _doc != null && _doc.Pai != null)
+                {
+                    preparedDocument = BrlanCodec.Parse(BrlanCodec.Build(_doc));
+                    preparedDocument.SourcePath = _doc.SourcePath;
+                    // Die Daueranpassung braucht dieselben Originalabschnitte wie das geöffnete Dokument.
+                    preparedDocument.Pai.OriginalRaw = _doc.Pai.OriginalRaw;
+                    preparedDocument.Sections.Clear();
+                    preparedDocument.Sections.AddRange(_doc.Sections);
+                    ApplyToBrlan(result, options, preparedDocument);
+                    BrlanCodec.Build(preparedDocument);
+                }
+
+                var output = new List<KeyValuePair<string, byte[]>>();
+                var pngPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < frames.Count; i++)
+                {
+                    using (Bitmap resized = ResizeFrame(frames[i].Bitmap, options.Width, options.Height, options.ResizeMode))
+                    {
+                        output.Add(new KeyValuePair<string, byte[]>(
+                            Path.Combine(options.OutputFolder, result.TplNames[i]), TplEncoder.Encode(resized, options.Format)));
+                        if (options.ExportPng && !String.IsNullOrWhiteSpace(options.PngOutputFolder))
+                        {
+                            string pngPath = Path.GetFullPath(Path.Combine(options.PngOutputFolder,
+                                "frame_" + i.ToString("D3", CultureInfo.InvariantCulture) + ".png"));
+                            using (var stream = new MemoryStream())
+                            {
+                                resized.Save(stream, ImageFormat.Png);
+                                output.Add(new KeyValuePair<string, byte[]>(pngPath, stream.ToArray()));
+                            }
+                            pngPaths.Add(pngPath);
+                        }
+                    }
+                    frames[i].Dispose();
+                    frames[i].Bitmap = null;
                     worker.ReportProgress(i + 1);
                 }
 
-                result.ExportedFrames = frames.Count;
-                if (timeline > 65535.0f)
-                    throw new InvalidDataException(L.T("Die GIF-Animation wäre länger als 65535 BRLAN-Frames. Reduziere Frames oder Timing.", "The GIF animation would exceed 65535 BRLAN frames. Reduce frames or timing."));
-                result.TotalFrames = (ushort)Math.Max(1, (int)Math.Ceiling(timeline));
-                if (options.UpdateBrlan)
-                    ApplyToBrlan(result, options);
-                WriteManifest(result, options.GifPath, options.OutputFolder, options.Prefix, options.Width, options.Height, options.Format, options.OriginalTiming, options.FixedFrames, options.TakeEvery);
+                var obsoletePngs = new List<string>();
+                if (options.ExportPng && !String.IsNullOrWhiteSpace(options.PngOutputFolder)
+                    && Directory.Exists(options.PngOutputFolder))
+                {
+                    // The PNG folder belongs exclusively to this source GIF. Remove stale
+                    // frame exports so a re-export with fewer frames cannot leave old files behind.
+                    foreach (string path in Directory.GetFiles(options.PngOutputFolder, "frame_*.png"))
+                        if (!pngPaths.Contains(Path.GetFullPath(path)))
+                            obsoletePngs.Add(path);
+                }
+                BackupManager.WriteBatch(output, exportCopy: true, deletePaths: obsoletePngs);
+                if (preparedDocument != null)
+                    _doc.Pai = preparedDocument.Pai;
                 return result;
             }
             finally
             {
-                int i;
-                for (i = 0; i < frames.Count; i++)
-                    frames[i].Dispose();
+                foreach (GifFrameData frame in frames)
+                    frame.Dispose();
             }
         }
 
@@ -1155,15 +1205,15 @@ namespace murumsWiiModStudio.Brlan
             return target;
         }
 
-        private void ApplyToBrlan(GifImportResult result, GifImportOptions options)
+        private void ApplyToBrlan(GifImportResult result, GifImportOptions options, BrlanDocument document)
         {
-            if (_doc == null || _doc.Pai == null)
+            if (document == null || document.Pai == null)
                 return;
             // RLTP animation names are material names from the BRLYT, not filenames.
             // MenuSingle's actual background material is P_pict; line0 is only the
             // moving pattern/overlay. Older Studio builds incorrectly wrote RLTP to
             // whichever material animation already existed (usually line0).
-            AnimationModel anim = GetOrCreateMaterialAnimation(options.TargetMaterialName);
+            AnimationModel anim = GetOrCreateMaterialAnimation(document, options.TargetMaterialName);
             TagModel rltp = null;
             int t;
             for (t = 0; t < anim.Tags.Count; t++)
@@ -1203,20 +1253,20 @@ namespace murumsWiiModStudio.Brlan
 
             // Keep a copy of the old table so unrelated RLTP entries can be remapped
             // by filename after the TPL table is rebuilt.
-            List<string> oldTextures = new List<string>(_doc.Pai.Textures);
+            List<string> oldTextures = new List<string>(document.Pai.Textures);
             // Remove the specific broken GIF RLTP left by older Studio builds on a
             // different material (for example line0). Only entries that point
             // exclusively to this generated prefix and use the same texture slot are
             // considered ours, so unrelated RLTP animations are left untouched.
-            RemoveStaleGifRltpEntries(options.Prefix, slot, anim, oldTextures);
+            RemoveStaleGifRltpEntries(document, options.Prefix, slot, anim, oldTextures);
             result.TextureIndices.Clear();
             if (options.ListMode == 1)
             {
                 // Explicit destructive mode: the GIF owns the complete texture filename table.
-                _doc.Pai.Textures.Clear();
+                document.Pai.Textures.Clear();
                 for (t = 0; t < result.TplNames.Count; t++)
                 {
-                    _doc.Pai.Textures.Add(result.TplNames[t]);
+                    document.Pai.Textures.Add(result.TplNames[t]);
                     result.TextureIndices.Add((ushort)t);
                 }
             }
@@ -1226,11 +1276,11 @@ namespace murumsWiiModStudio.Brlan
                 // therefore does not create a second 000..NNN block.
                 for (t = 0; t < result.TplNames.Count; t++)
                 {
-                    int existing = IndexOfTexture(_doc.Pai.Textures, result.TplNames[t]);
+                    int existing = IndexOfTexture(document.Pai.Textures, result.TplNames[t]);
                     if (existing < 0)
                     {
-                        existing = _doc.Pai.Textures.Count;
-                        _doc.Pai.Textures.Add(result.TplNames[t]);
+                        existing = document.Pai.Textures.Count;
+                        document.Pai.Textures.Add(result.TplNames[t]);
                     }
 
                     result.TextureIndices.Add((ushort)existing);
@@ -1241,27 +1291,27 @@ namespace murumsWiiModStudio.Brlan
                 // Recommended/idempotent mode. Remove every old generated frame for this prefix,
                 // including duplicates from older Studio versions, then add one clean sequence.
                 List<string> cleaned = new List<string>();
-                for (t = 0; t < _doc.Pai.Textures.Count; t++)
+                for (t = 0; t < document.Pai.Textures.Count; t++)
                 {
-                    string name = _doc.Pai.Textures[t];
+                    string name = document.Pai.Textures[t];
                     if (!IsGeneratedTextureName(name, options.Prefix))
                         cleaned.Add(name);
                 }
 
-                _doc.Pai.Textures.Clear();
+                document.Pai.Textures.Clear();
                 for (t = 0; t < cleaned.Count; t++)
-                    _doc.Pai.Textures.Add(cleaned[t]);
+                    document.Pai.Textures.Add(cleaned[t]);
                 for (t = 0; t < result.TplNames.Count; t++)
                 {
-                    int index = _doc.Pai.Textures.Count;
-                    _doc.Pai.Textures.Add(result.TplNames[t]);
+                    int index = document.Pai.Textures.Count;
+                    document.Pai.Textures.Add(result.TplNames[t]);
                     result.TextureIndices.Add((ushort)index);
                 }
             }
 
             // Remap every other RLTP entry by filename after the table changed. The selected
             // target entry is rebuilt below, so it does not need remapping.
-            RemapOtherRltpEntries(oldTextures, _doc.Pai.Textures, entry);
+            RemapOtherRltpEntries(document, oldTextures, document.Pai.Textures, entry);
             entry.Index = slot;
             entry.Target = 0; // RLTP target 0 = Image
             entry.KeyType = 1; // frame(float) + TPL index(UInt16) + padding(UInt16)
@@ -1269,8 +1319,8 @@ namespace murumsWiiModStudio.Brlan
             entry.Unknown16 = 0;
             entry.Keys.Clear();
             int targetFrames;
-            if (options.PreserveDuration && _doc.Pai.Frames > 0)
-                targetFrames = Math.Max((int)_doc.Pai.Frames, (int)result.TotalFrames);
+            if (options.PreserveDuration && document.Pai.Frames > 0)
+                targetFrames = Math.Max((int)document.Pai.Frames, (int)result.TotalFrames);
             else
                 targetFrames = Math.Max(1, (int)result.TotalFrames);
             if (options.PreserveDuration && targetFrames > result.TotalFrames)
@@ -1310,11 +1360,11 @@ namespace murumsWiiModStudio.Brlan
             }
 
             // GIF imports are intended to loop. In NW4R pai1 this byte is the loop flag.
-            _doc.Pai.Flags = 1;
-            _doc.Pai.Frames = (ushort)Math.Min(65535, targetFrames);
+            document.Pai.Flags = 1;
+            document.Pai.Frames = (ushort)Math.Min(65535, targetFrames);
         }
 
-        private AnimationModel GetOrCreateMaterialAnimation(string materialName)
+        private AnimationModel GetOrCreateMaterialAnimation(BrlanDocument document, string materialName)
         {
             string wanted = (materialName ?? "").Trim();
             if (wanted.Length == 0)
@@ -1324,9 +1374,9 @@ namespace murumsWiiModStudio.Brlan
             // once as a pane target (TargetKind 0) and once as a material target
             // (TargetKind 1). Prefer an existing material entry and ignore same-name
             // pane entries. If no material entry exists, create one below.
-            for (i = 0; i < _doc.Pai.Animations.Count; i++)
+            for (i = 0; i < document.Pai.Animations.Count; i++)
             {
-                AnimationModel existing = _doc.Pai.Animations[i];
+                AnimationModel existing = document.Pai.Animations[i];
                 if (existing.TargetKind == 1 && String.Equals(existing.Name, wanted, StringComparison.Ordinal))
                     return existing;
             }
@@ -1337,11 +1387,11 @@ namespace murumsWiiModStudio.Brlan
             // that material animation to P_pict. Do the same automatically and drop the
             // old line0-only tags (RLTS), because after the rename they would otherwise be
             // applied to the background material itself.
-            if (String.Equals(wanted, "P_pict", StringComparison.Ordinal) && IsMenuSingleBackgroundBrlan())
+            if (String.Equals(wanted, "P_pict", StringComparison.Ordinal) && IsMenuSingleBackgroundBrlan(document))
             {
-                for (i = 0; i < _doc.Pai.Animations.Count; i++)
+                for (i = 0; i < document.Pai.Animations.Count; i++)
                 {
-                    AnimationModel legacy = _doc.Pai.Animations[i];
+                    AnimationModel legacy = document.Pai.Animations[i];
                     if (legacy.TargetKind == 1 && String.Equals(legacy.Name, "line0", StringComparison.Ordinal))
                     {
                         legacy.Name = "P_pict";
@@ -1355,17 +1405,17 @@ namespace murumsWiiModStudio.Brlan
             anim.Name = wanted;
             anim.TargetKind = 1;
             anim.Unknown16 = 0;
-            _doc.Pai.Animations.Add(anim);
+            document.Pai.Animations.Add(anim);
             return anim;
         }
 
-        private bool IsMenuSingleBackgroundBrlan()
+        private bool IsMenuSingleBackgroundBrlan(BrlanDocument document)
         {
-            if (_doc == null)
+            if (document == null)
                 return false;
             try
             {
-                string fileName = String.IsNullOrWhiteSpace(_doc.SourcePath) ? "" : Path.GetFileName(_doc.SourcePath);
+                string fileName = String.IsNullOrWhiteSpace(document.SourcePath) ? "" : Path.GetFileName(document.SourcePath);
                 return !String.IsNullOrEmpty(fileName) && fileName.IndexOf("bg_loop", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             catch
@@ -1374,14 +1424,14 @@ namespace murumsWiiModStudio.Brlan
             }
         }
 
-        private void RemoveStaleGifRltpEntries(string prefix, byte slot, AnimationModel targetAnimation, List<string> oldTextures)
+        private void RemoveStaleGifRltpEntries(BrlanDocument document, string prefix, byte slot, AnimationModel targetAnimation, List<string> oldTextures)
         {
-            if (_doc == null || _doc.Pai == null || oldTextures == null)
+            if (document == null || document.Pai == null || oldTextures == null)
                 return;
             int a, t, e;
-            for (a = _doc.Pai.Animations.Count - 1; a >= 0; a--)
+            for (a = document.Pai.Animations.Count - 1; a >= 0; a--)
             {
-                AnimationModel anim = _doc.Pai.Animations[a];
+                AnimationModel anim = document.Pai.Animations[a];
                 if (Object.ReferenceEquals(anim, targetAnimation))
                     continue;
                 for (t = anim.Tags.Count - 1; t >= 0; t--)
@@ -1421,9 +1471,9 @@ namespace murumsWiiModStudio.Brlan
             return true;
         }
 
-        private void RemapOtherRltpEntries(List<string> oldTextures, List<string> newTextures, EntryModel skipEntry)
+        private void RemapOtherRltpEntries(BrlanDocument document, List<string> oldTextures, List<string> newTextures, EntryModel skipEntry)
         {
-            if (_doc == null || _doc.Pai == null || oldTextures == null || newTextures == null)
+            if (document == null || document.Pai == null || oldTextures == null || newTextures == null)
                 return;
             Dictionary<string, ushort> newIndices = new Dictionary<string, ushort>(StringComparer.OrdinalIgnoreCase);
             int i, j, k, q;
@@ -1434,9 +1484,9 @@ namespace murumsWiiModStudio.Brlan
                     newIndices[name] = (ushort)i;
             }
 
-            for (i = 0; i < _doc.Pai.Animations.Count; i++)
+            for (i = 0; i < document.Pai.Animations.Count; i++)
             {
-                AnimationModel a = _doc.Pai.Animations[i];
+                AnimationModel a = document.Pai.Animations[i];
                 for (j = 0; j < a.Tags.Count; j++)
                 {
                     TagModel tag = a.Tags[j];
@@ -1537,24 +1587,6 @@ namespace murumsWiiModStudio.Brlan
             return true;
         }
 
-        private static void WriteManifest(GifImportResult result, string gifPath, string outputFolder, string prefix, int width, int height, TplPixelFormat format, bool originalTiming, int fixedFrames, int every)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine("murums Wii Mod Studio – GIF Import Manifest");
-            sb.AppendLine("Source=" + gifPath);
-            sb.AppendLine("Frames=" + result.ExportedFrames.ToString(CultureInfo.InvariantCulture));
-            sb.AppendLine("Size=" + width.ToString() + "x" + height.ToString());
-            sb.AppendLine("TPLFormat=" + format.ToString());
-            sb.AppendLine("TakeEvery=" + every.ToString());
-            sb.AppendLine("Timing=" + (originalTiming ? "GIF" : "Fixed:" + fixedFrames.ToString()));
-            sb.AppendLine("TotalBRLANFrames=" + result.TotalFrames.ToString());
-            sb.AppendLine();
-            int i;
-            for (i = 0; i < result.TplNames.Count; i++)
-                sb.AppendLine(i.ToString("D3") + "  " + result.TplNames[i] + "  frame=" + result.KeyFrames[i].ToString("0.###", CultureInfo.InvariantCulture));
-            File.WriteAllText(Path.Combine(outputFolder, prefix + "_manifest.txt"), sb.ToString(), Encoding.UTF8);
-        }
-
         private static string SanitizePrefix(string input)
         {
             if (input == null)
@@ -1577,7 +1609,7 @@ namespace murumsWiiModStudio.Brlan
             l.Text = text + ":";
             l.Dock = DockStyle.Fill;
             l.TextAlign = ContentAlignment.MiddleLeft;
-            l.ForeColor = Color.FromArgb(245, 247, 252);
+            l.ForeColor = DarkTheme.Fore;
             l.Font = new Font("Segoe UI", 10.25F, FontStyle.Regular);
             l.Margin = new Padding(4, 7, 10, 7);
             table.Controls.Add(l, 0, row);
@@ -1602,7 +1634,7 @@ namespace murumsWiiModStudio.Brlan
             b.Text = text;
             b.Dock = DockStyle.Fill;
             b.FlatStyle = FlatStyle.Flat;
-            b.FlatAppearance.BorderColor = Color.FromArgb(86, 92, 112);
+            b.FlatAppearance.BorderColor = DarkTheme.Border;
             b.FlatAppearance.MouseOverBackColor = DarkTheme.Panel3;
             b.FlatAppearance.MouseDownBackColor = DarkTheme.AccentSoft;
             b.BackColor = DarkTheme.Panel2;
@@ -1634,23 +1666,7 @@ namespace murumsWiiModStudio.Brlan
 
         private static void StyleComboDropDownItems(ComboBox c)
         {
-            if (c == null)
-                return;
-            c.DrawMode = DrawMode.OwnerDrawFixed;
-            c.ItemHeight = 24;
-            c.DrawItem += delegate (object sender, DrawItemEventArgs e)
-            {
-                if (e.Index < 0)
-                    return;
-                bool selected = (e.State & DrawItemState.Selected) != 0;
-                Color bg = selected ? DarkTheme.Accent2 : DarkTheme.Panel;
-                Color fg = DarkTheme.Fore;
-                using (SolidBrush b = new SolidBrush(bg))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-                Rectangle textRect = new Rectangle(e.Bounds.Left + 7, e.Bounds.Top, Math.Max(0, e.Bounds.Width - 10), e.Bounds.Height);
-                TextRenderer.DrawText(e.Graphics, c.Items[e.Index].ToString(), c.Font, textRect, fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
-                e.DrawFocusRectangle();
-            };
+            DarkTheme.StyleComboBox(c);
         }
 
         private static CheckBox NewCheckBox(string text)
@@ -1714,7 +1730,7 @@ namespace murumsWiiModStudio.Brlan
             FlowLayoutPanel f = new FlowLayoutPanel();
             f.Dock = DockStyle.Fill;
             f.FlowDirection = FlowDirection.LeftToRight;
-            f.WrapContents = false;
+            f.WrapContents = true;
             f.AutoSize = true;
             f.BackColor = DarkTheme.Panel2;
             return f;

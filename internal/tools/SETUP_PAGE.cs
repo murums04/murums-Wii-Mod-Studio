@@ -12,7 +12,7 @@ internal sealed class SetupPage : Form
     readonly TextBox path = new TextBox(), log = new TextBox();
     readonly DataGridView tools = new DataGridView();
     readonly Label status = new Label();
-    readonly ProgressBar progress = new ProgressBar();
+    readonly SetupProgressBar progress = new SetupProgressBar();
     readonly Button install = new Button(), launch = new Button(), browse = new Button(), installTools = new Button();
     readonly FlowLayoutPanel toolActions = new FlowLayoutPanel();
     readonly RowStyle toolActionRow = new RowStyle(SizeType.Absolute, 0);
@@ -20,12 +20,12 @@ internal sealed class SetupPage : Form
     Process worker;
     string destination, statusFile, logFile;
     bool extracted, registered;
-    static readonly Color Background = Color.FromArgb(20, 21, 26), PanelColor = Color.FromArgb(29, 30, 37), Purple = Color.FromArgb(139, 92, 246);
+    static readonly Color Background = SetupChrome.Back, PanelColor = SetupChrome.Panel, Purple = SetupChrome.Primary;
     public SetupPage()
     {
         Text = "murums Wii Mod Studio — Setup · v" + FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion;
         ClientSize = new Size(1080, 720);
-        MinimumSize = new Size(1056, 739);
+        MinimumSize = new Size(860, 600);
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Background;
@@ -35,23 +35,22 @@ internal sealed class SetupPage : Form
         var header = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 126,
-            Padding = new Padding(24, 16, 24, 12),
+            Height = 76,
+            Padding = new Padding(20, 10, 20, 10),
             BackColor = PanelColor
         };
         var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        heading.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
+        heading.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        heading.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48));
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, Image = Icon.ToBitmap(), Margin = new Padding(0, 12, 20, 12) };
+        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, Image = Icon.ToBitmap(), Margin = new Padding(0, 4, 12, 4) };
         logo.Disposed += delegate { logo.Image.Dispose(); };
         heading.Controls.Add(logo, 0, 0);
-        var headings = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        headings.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
-        headings.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        var headings = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        headings.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         headings.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        headings.Controls.Add(new Label { Text = "murums Wii Mod Studio", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 0);
-        headings.Controls.Add(new Label { Text = "Install Studio", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 20, FontStyle.Bold) }, 0, 1);
-        headings.Controls.Add(new Label { Text = "Choose a folder • Select optional tools • Start creating", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(190, 196, 210) }, 0, 2);
+        headings.Controls.Add(new Label { Text = SetupChrome.L("Studio installieren", "Install Studio"), Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12, FontStyle.Bold) }, 0, 0);
+        headings.Controls.Add(new Label { Text = SetupChrome.L("Ordner wählen • Optionale Programme auswählen • Installieren", "Choose a folder • Select optional tools • Start creating"), Dock = DockStyle.Fill, ForeColor = SetupChrome.Muted }, 0, 1);
         heading.Controls.Add(headings, 1, 0);
         header.Controls.Add(heading);
         var footer = new TableLayoutPanel
@@ -63,11 +62,11 @@ internal sealed class SetupPage : Form
             RowCount = 3
         };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 310));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 4));
-        status.Text = "Ready to install.";
+        status.Text = SetupChrome.L("Bereit zur Installation.", "Ready to install.");
         status.Dock = DockStyle.Fill;
         status.TextAlign = ContentAlignment.MiddleLeft;
         status.AutoEllipsis = true;
@@ -83,10 +82,10 @@ internal sealed class SetupPage : Form
             WrapContents = false,
             Padding = new Padding(0, 5, 0, 0)
         };
-        var close = Button("Close");
+        var close = Button(SetupChrome.L("Schliessen", "Close"));
         close.Width = 96;
-        install.Text = "Install";
-        launch.Text = "Launch program";
+        install.Text = SetupChrome.L("Installieren", "Install");
+        launch.Text = SetupChrome.L("Studio starten", "Launch program");
         launch.Visible = false;
         Style(install);
         Style(launch);
@@ -94,17 +93,17 @@ internal sealed class SetupPage : Form
         launch.Width = 150;
         install.BackColor = Purple;
         launch.BackColor = Purple;
-        var details = Button("Details");
+        var details = Button(SetupChrome.L("Details", "Details"));
         details.Width = 86;
         details.Height = 26;
         details.Anchor = AnchorStyles.Right;
         details.Margin = Padding.Empty;
         details.FlatAppearance.BorderSize = 0;
-        details.ForeColor = Color.FromArgb(193, 160, 255);
+        details.ForeColor = SetupChrome.Muted;
         footer.Controls.Add(details, 0, 1);
-        actions.Controls.Add(close);
         actions.Controls.Add(install);
         actions.Controls.Add(launch);
+        actions.Controls.Add(close);
         footer.Controls.Add(actions, 1, 1);
         var body = new TableLayoutPanel
         {
@@ -126,24 +125,24 @@ internal sealed class SetupPage : Form
         };
         sidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        sidebar.Controls.Add(new Label { Text = "Included tools", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(193, 160, 255), Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+        sidebar.Controls.Add(new Label { Text = SetupChrome.L("Enthaltene Werkzeuge", "Included tools"), Dock = DockStyle.Fill, ForeColor = SetupChrome.Muted, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
         string[] titles =
         {
-            "MKWii Race & Game HUD",
-            "Archives & textures",
-            "Fonts & messages",
-            "Backgrounds & custom packs",
-            "Audio & models",
-            "Projects & help"
+            SetupChrome.L("Rennanzeigen & Menüs", "Race HUD & menus"),
+            SetupChrome.L("Archive & Texturen", "Archives & textures"),
+            SetupChrome.L("Schriften & Spieltexte", "Fonts & game text"),
+            SetupChrome.L("Hintergründe & Packs", "Backgrounds & packs"),
+            SetupChrome.L("Musik & Charaktere", "Music & characters"),
+            SetupChrome.L("Projekte & Hilfe", "Projects & help")
         };
         string[] descriptions =
         {
-            "Move, resize and recolour",
-            "Edit, replace and export",
-            "Fonts and game text",
-            "Menus, skies and pack creation",
-            "WAV loops and workflows",
-            "Themes, previews and guides"
+            SetupChrome.L("Anordnen und einfärben", "Arrange and recolour"),
+            SetupChrome.L("Bearbeiten und exportieren", "Edit and export"),
+            SetupChrome.L("Lesbarkeit und eigene Texte", "Typography and custom text"),
+            SetupChrome.L("Menüs, Himmel und Pack Maker", "Menus, skies and Pack Maker"),
+            SetupChrome.L("Loops, Modelle und Bewegung", "Loops, models and motion"),
+            SetupChrome.L("Zusammenstellen und nachlesen", "Assemble and learn")
         };
         for (int i = 0; i < titles.Length; i++)
         {
@@ -153,13 +152,13 @@ internal sealed class SetupPage : Form
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0, 3, 0, 3)
             };
-            card.Controls.Add(new Label { Text = descriptions[i], Dock = DockStyle.Fill, ForeColor = Color.FromArgb(177, 179, 194), Font = new Font("Segoe UI", 9), Padding = new Padding(0, 2, 0, 0) });
+            card.Controls.Add(new Label { Text = descriptions[i], Dock = DockStyle.Fill, ForeColor = SetupChrome.Muted, Font = new Font("Segoe UI", 9), Padding = new Padding(0, 2, 0, 0) });
             card.Controls.Add(new Label { Text = titles[i], UseMnemonic = false, Dock = DockStyle.Top, Height = 22, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
             sidebar.Controls.Add(card);
         }
 
         sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        sidebar.Controls.Add(new Label { Text = "Game files are not included.", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(177, 179, 194), TextAlign = ContentAlignment.BottomLeft });
+        sidebar.Controls.Add(new Label { Text = SetupChrome.L("Spieldateien sind nicht enthalten.", "Game files are not included."), Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9), ForeColor = SetupChrome.Muted, TextAlign = ContentAlignment.BottomLeft });
         body.Controls.Add(sidebar, 0, 0);
         var content = new TableLayoutPanel
         {
@@ -181,7 +180,7 @@ internal sealed class SetupPage : Form
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         content.RowStyles.Add(toolActionRow);
-        Add(content, "Installation folder", 28, true);
+        Add(content, SetupChrome.L("1  Installationsordner", "1  Installation folder"), 28, true);
         var folderRow = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -203,7 +202,7 @@ internal sealed class SetupPage : Form
         path.BackColor = PanelColor;
         path.ForeColor = Color.White;
         path.BorderStyle = BorderStyle.FixedSingle;
-        browse.Text = "Browse…";
+        browse.Text = SetupChrome.L("Durchsuchen…", "Browse…");
         Style(browse);
         browse.Dock = DockStyle.Fill;
         browse.Margin = new Padding(0, 3, 0, 3);
@@ -211,8 +210,10 @@ internal sealed class SetupPage : Form
         folderRow.Controls.Add(path, 0, 0);
         folderRow.Controls.Add(browse, 1, 0);
         content.Controls.Add(folderRow);
-        Add(content, "Choose an empty folder.", 28);
-        Add(content, "Optional tools  ·  Download now or add later", 38, true);
+        Add(content, SetupChrome.L("Wähle einen leeren Ordner.", "Choose an empty folder."), 28);
+        Add(content, SetupChrome.L("2  Optionale Programme", "2  Optional tools"), 38, true);
+        tools.AccessibleName = SetupChrome.L("Optionale Programme auswählen", "Select optional tools");
+        path.AccessibleName = SetupChrome.L("Installationsordner", "Installation folder");
         tools.Dock = DockStyle.Fill;
         tools.BackgroundColor = PanelColor;
         tools.BorderStyle = BorderStyle.None;
@@ -233,15 +234,15 @@ internal sealed class SetupPage : Form
         tools.DefaultCellStyle.SelectionBackColor = PanelColor;
         tools.DefaultCellStyle.SelectionForeColor = Color.White;
         tools.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(42, 40, 54);
-        tools.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(199, 185, 235);
+        tools.ColumnHeadersDefaultCellStyle.ForeColor = SetupChrome.Muted;
         tools.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
         tools.RowTemplate.Height = 40;
         tools.GridColor = Color.FromArgb(48, 49, 62);
         tools.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
         tools.Columns.Add(new DataGridViewCheckBoxColumn { Width = 30 });
-        tools.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Tool", Width = 166, ReadOnly = true });
-        tools.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "When to install", Width = 108, ReadOnly = true });
-        tools.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "What it adds", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true });
+        tools.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = SetupChrome.L("Programm", "Tool"), Width = 166, ReadOnly = true });
+        tools.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = SetupChrome.L("Empfehlung", "When to install"), Width = 108, ReadOnly = true });
+        tools.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = SetupChrome.L("Verwendungszweck", "What it adds"), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, ReadOnly = true });
         using (var reader = new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("tools.tsv")))
         {
             string line;
@@ -250,7 +251,7 @@ internal sealed class SetupPage : Form
                 string[] c = line.Split('\t');
                 if (c.Length != 5)
                     throw new InvalidDataException("Invalid tool catalog.");
-                int row = tools.Rows.Add(c[4] == "True", c[1], c[2], c[3]);
+                int row = tools.Rows.Add(c[4] == "True", c[1], SetupChrome.ToolRecommendation(c[0], c[2]), SetupChrome.ToolPurpose(c[0], c[3]));
                 tools.Rows[row].Tag = c[0];
             }
         }
@@ -259,7 +260,7 @@ internal sealed class SetupPage : Form
         {
             if (tools.Rows.Count > 0)
             {
-                int height = Math.Max(32, (tools.ClientSize.Height - tools.ColumnHeadersHeight - 2) / tools.Rows.Count);
+                int height = Math.Max(56, (tools.ClientSize.Height - tools.ColumnHeadersHeight - 2) / tools.Rows.Count);
                 foreach (DataGridViewRow row in tools.Rows)
                     row.Height = height;
             }
@@ -271,17 +272,25 @@ internal sealed class SetupPage : Form
         };
         content.Controls.Add(tools);
         toolActions.Dock = DockStyle.Fill;
+        toolActions.AutoSize = true;
+        toolActions.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         toolActions.FlowDirection = FlowDirection.RightToLeft;
         toolActions.WrapContents = false;
         toolActions.Margin = Padding.Empty;
         toolActions.Visible = false;
-        installTools.Text = "Install selected tools";
+        installTools.Text = SetupChrome.L("Ausgewählte Programme installieren", "Install selected tools");
         Style(installTools);
-        installTools.Width = 184;
+        installTools.AutoSize = true; installTools.MinimumSize = new Size(184, 36);
         installTools.Margin = new Padding(0, 6, 0, 0);
         toolActions.Controls.Add(installTools);
         content.Controls.Add(toolActions);
         body.Controls.Add(content, 1, 0);
+        body.SizeChanged += delegate
+        {
+            bool compact = body.ClientSize.Width < 1040;
+            sidebar.Visible = !compact;
+            body.ColumnStyles[0].Width = compact ? 0 : 254;
+        };
         installTools.Click += delegate
         {
             BeginInstall();
@@ -290,6 +299,9 @@ internal sealed class SetupPage : Form
         Controls.Add(footer);
         Controls.Add(header);
         Controls.Add(new AccentStrip());
+        SetupChrome.Apply(this);
+        CancelButton = close;
+        AcceptButton = install;
         details.Click += delegate
         {
             using (var dialog = CreateDetailsDialog())
@@ -313,7 +325,7 @@ internal sealed class SetupPage : Form
 
                 using (var picker = new murumsWiiModStudio.FolderPickerDialog
                 {
-                    Description = "Choose an empty installation folder",
+                    Description = SetupChrome.L("Leeren Installationsordner wählen", "Choose an empty installation folder"),
                     SelectedPath = initial
                 }
 
@@ -356,7 +368,7 @@ internal sealed class SetupPage : Form
             if (worker != null && !worker.HasExited)
             {
                 e.Cancel = true;
-                MessageBox.Show(this, "Please wait for installation to finish.", "Installation in progress");
+                SetupChrome.ShowMessage(this, "Please wait for installation to finish.", "Installation in progress");
             }
         };
     }
@@ -377,7 +389,7 @@ internal sealed class SetupPage : Form
         var heading = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 70,
+            Height = 56,
             Padding = new Padding(16, 12, 16, 10),
             BackColor = PanelColor
         };
@@ -388,7 +400,7 @@ internal sealed class SetupPage : Form
             Width = 44,
             SizeMode = PictureBoxSizeMode.Zoom
         };
-        heading.Controls.Add(new Label { Text = "Installation details", Dock = DockStyle.Fill, Padding = new Padding(14, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 16, FontStyle.Bold) });
+        heading.Controls.Add(new Label { Text = SetupChrome.L("Installationsdetails", "Installation details"), Dock = DockStyle.Fill, Padding = new Padding(14, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 12, FontStyle.Bold) });
         heading.Controls.Add(logo);
         var text = new TextBox
         {
@@ -399,7 +411,7 @@ internal sealed class SetupPage : Form
             BorderStyle = BorderStyle.None,
             BackColor = Background,
             ForeColor = Color.White,
-            Text = String.IsNullOrEmpty(log.Text) ? "Installation has not started yet." : log.Text
+            Text = String.IsNullOrEmpty(log.Text) ? SetupChrome.L("Die Installation wurde noch nicht gestartet.", "Installation has not started yet.") : log.Text
         };
         var body = new Panel
         {
@@ -410,6 +422,13 @@ internal sealed class SetupPage : Form
         dialog.Controls.Add(body);
         dialog.Controls.Add(heading);
         dialog.Controls.Add(new AccentStrip());
+        var close = Button(SetupChrome.L("Schliessen", "Close"));
+        close.AutoSize = true;
+        close.DialogResult = DialogResult.Cancel;
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 8, 12, 12) };
+        actions.Controls.Add(close); dialog.Controls.Add(actions);
+        dialog.CancelButton = close;
+        SetupChrome.Apply(dialog);
         var refresh = new Timer
         {
             Interval = 300
@@ -442,17 +461,17 @@ internal sealed class SetupPage : Form
         if (registered)
         {
             install.Visible = false;
-            toolActionRow.Height = 46;
+            toolActionRow.SizeType = SizeType.AutoSize;
             toolActions.Visible = true;
-            installTools.Text = code == 0 ? "Install selected tools" : "Retry selected tools";
+            installTools.Text = code == 0 ? SetupChrome.L("Ausgewählte Programme installieren", "Install selected tools") : SetupChrome.L("Erneut versuchen", "Retry selected tools");
             AcceptButton = launch;
         }
         else
         {
-            install.Text = "Retry";
+            install.Text = SetupChrome.L("Erneut versuchen", "Retry");
         }
 
-        status.Text = code == 0 ? "Installed. Ready to launch." : "Installation did not finish. Open Details, then retry.";
+        status.Text = code == 0 ? SetupChrome.L("Installiert. Studio kann gestartet werden.", "Installed. Ready to launch.") : SetupChrome.L("Installation nicht abgeschlossen. Details öffnen und erneut versuchen.", "Installation did not finish. Open Details, then retry.");
         if (code == 0)
             progress.Value = 100;
     }
@@ -472,7 +491,8 @@ internal sealed class SetupPage : Form
         b.Size = new Size(140, 36);
         b.FlatStyle = FlatStyle.Flat;
         b.BackColor = PanelColor;
-        b.ForeColor = Color.White;
+        b.ForeColor = SetupChrome.Fore;
+        SetupChrome.Button(b, false);
     }
 
     static void Add(TableLayoutPanel p, string text, int height, bool bold = false, int size = 10)
@@ -482,7 +502,7 @@ internal sealed class SetupPage : Form
 
     void Error(Exception e)
     {
-        MessageBox.Show(this, e.Message, "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        SetupChrome.ShowMessage(this, e.Message, "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 
     void BeginInstall()
@@ -530,7 +550,7 @@ internal sealed class SetupPage : Form
             tools.Enabled = false;
             launch.Visible = false;
             log.Clear();
-            status.Text = "Installing…";
+            status.Text = SetupChrome.L("Installation läuft…", "Installing…");
             progress.Value = 0;
             timer.Start();
         }

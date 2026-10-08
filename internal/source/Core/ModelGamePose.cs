@@ -15,6 +15,10 @@ namespace murumsWiiModStudio
         public float Scale = 100;
         public float MotionStrength = 100;
         public bool NaturalHuman;
+        public bool UprightDrivingHead;
+        public bool StableMenu = true;
+        public string MenuSourceCode, MenuSourceName;
+        public int MenuSourceSlot;
         public PoseContact[] Contacts;
         public Dictionary<string, List<JointAnimationKey>> Animations;
     }
@@ -24,6 +28,7 @@ namespace murumsWiiModStudio
         internal string Template, Animation, VehicleCode, ModelName;
         RigPoseReference orientationSource;
         float[][] targetWorldOverride;
+        bool[] targetActiveOverride;
         readonly Dictionary<string, RigPoseReference> clipAnchors = new Dictionary<string, RigPoseReference>();
         internal float Frame;
         internal int Frames;
@@ -31,6 +36,7 @@ namespace murumsWiiModStudio
         internal float[][] Matrices, Joints, Binds, Contacts;
         internal string Corrections;
         internal CharacterModelImport Visual;
+        internal VehiclePoseGeometry VehicleGeometry;
 
         internal static RigPoseReference Load(string template, string model, string animation, float frame, bool visual)
         {
@@ -39,9 +45,9 @@ namespace murumsWiiModStudio
             var doc = new XmlDocument { XmlResolver = null }; doc.LoadXml(xml);
             var nodes = doc.DocumentElement.ChildNodes.OfType<XmlElement>().ToArray();
             return new RigPoseReference {
-                Template = template, ModelName = model, Animation = animation, Frame = frame,
+                Template = template, ModelName = model, Animation = doc.DocumentElement.GetAttribute("animation"), Frame = frame,
                 Frames = Int32.Parse(doc.DocumentElement.GetAttribute("frames"), CultureInfo.InvariantCulture),
-                AvailableAnimations = doc.DocumentElement.GetAttribute("available").Split('|'),
+                AvailableAnimations = doc.DocumentElement.GetAttribute("available").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries),
                 Names = nodes.Select(n => n.GetAttribute("name")).ToArray(),
                 Parents = nodes.Select(n => n.GetAttribute("parent")).ToArray(),
                 Binds = nodes.Select(n => Numbers(n.GetAttribute("bind"))).ToArray(),
@@ -66,6 +72,9 @@ namespace murumsWiiModStudio
             int primary = rig.SharedBodyBone(index);
             int exact = Array.IndexOf(Names, rig.Bones[index].Name);
             if (VisibleTransform(exact)) return exact;
+            string name = rig.Bones[index].Name;
+            int companion = Array.IndexOf(Names, name.StartsWith("pcd_", StringComparison.Ordinal) ? name.Substring(4) : "pcd_" + name);
+            if (VisibleTransform(companion)) return companion;
             foreach (int candidate in Enumerable.Range(0, rig.Bones.Length).Where(i => rig.SharedBodyBone(i) == primary))
             {
                 int found = Array.IndexOf(Names, rig.Bones[candidate].Name);
@@ -74,10 +83,72 @@ namespace murumsWiiModStudio
             return exact;
         }
 
+        static int SourceBone(ModelRig rig, string name)
+        {
+            int exact = Array.FindIndex(rig.Bones, bone => bone.Name == name);
+            if (exact >= 0) return exact;
+            string companion = name.StartsWith("pcd_", StringComparison.Ordinal) ? name.Substring(4) : "pcd_" + name;
+            return Array.FindIndex(rig.Bones, bone => bone.Name == companion);
+        }
+
+        static IEnumerable<int> UsedBones(ModelRig rig)
+        {
+            return rig.BoneIndices.SelectMany((indices, vertex) =>
+                indices.Where((bone, index) => rig.BoneWeights[vertex][index] > 0)).Distinct();
+        }
+
+        internal bool CanMap(ModelRig rig)
+        {
+            if (Names.Length == 1) return true;
+            foreach (int source in UsedBones(rig))
+            {
+                int bone = source;
+                while (bone >= 0 && MatchBone(rig, bone) < 0) bone = rig.Bones[bone].Parent;
+                if (bone < 0) return false;
+            }
+            return true;
+        }
+
+        internal string[] ActiveBoneNames(ModelRig rig)
+        {
+            var active = ActiveBones(rig);
+            return Names.Where((name, index) => active[index]).ToArray();
+        }
+
+        internal bool HasCollapsedTransforms(ModelRig rig)
+        {
+            var active = ActiveBones(rig);
+            return Enumerable.Range(0, active.Length).Any(i => active[i] && !VisibleTransform(i));
+        }
+
+        internal void RequireUsableTransforms(ModelRig rig)
+        {
+            if (HasCollapsedTransforms(rig))
+                throw new InvalidDataException(L.T(
+                    "Die gewählte Originalbewegung blendet benötigte Körperteile aus. Im Charakter-Werkzeug unter „Gelenkvorlage“ eine passende menschliche Vorlage wählen und die Haltung erneut prüfen.",
+                    "The selected original movement hides required body parts. In the Character tool, choose a suitable human template under ‘Joint template’ and review the pose again."));
+        }
+
+        internal void RequireUneditedMapping(ModelRig rig, int context)
+        {
+            RequireUsableTransforms(rig);
+            var mapping = BoneMap(rig);
+            bool needsPose = UsedBones(rig).Any(bone => {
+                string source = rig.Bones[bone].Name, target = Names[mapping[bone]];
+                return source != target && (source == "pcd_" + target || target == "pcd_" + source);
+            });
+            if (!needsPose) return;
+            throw new InvalidDataException(context == 1
+                ? L.T("Vor dem Export dieser Vorlage unter „4 · Haltung & Bewegung“ die Menühaltung prüfen und übernehmen.",
+                    "Before exporting this template, review and apply the menu pose under ‘4 · Pose & movement’.")
+                : L.T("Vor dem Export dieser Vorlage unter „4 · Haltung & Bewegung“ die Fahrhaltung prüfen und übernehmen.",
+                    "Before exporting this template, review and apply the driving pose under ‘4 · Pose & movement’."));
+        }
+
         bool[] ActiveBones(ModelRig rig)
         {
             var active = new bool[Names.Length];
-            foreach (int source in rig.BoneIndices.SelectMany(indices => indices).Distinct())
+            foreach (int source in UsedBones(rig))
             {
                 int found = MatchBone(rig, source);
                 for (int ancestor = rig.Bones[source].Parent; found < 0 && ancestor >= 0; ancestor = rig.Bones[ancestor].Parent)
@@ -91,18 +162,22 @@ namespace murumsWiiModStudio
 
         internal RigPoseReference Adjusted(ModelRig rig, int context)
         {
+            RequireUsableTransforms(rig);
             var oldWorld = Matrices.Select((m, i) => RigMatrix.Multiply(m, Binds[i])).ToArray();
             var orientationWorld = orientationSource == null ? oldWorld
                 : orientationSource.Matrices.Select((m, i) => RigMatrix.Multiply(m, orientationSource.Binds[i])).ToArray();
             var targets = rig.GameJoints(context);
-            var active = ActiveBones(rig);
+            var active = targetActiveOverride ?? ActiveBones(rig);
+            // Kohaerente Menueknochen vermeiden instabile Ruecktransformationen gemischter Gewichte.
+            var menuFrames = context == 1 && rig.GameSettings(context).NaturalHuman ? rig.MenuBoneFrames() : null;
             var targetWorld = new float[Names.Length][];
             for (int i = 0; i < Names.Length; i++)
             {
                 if (!active[i]) { targetWorld[i] = oldWorld[i]; continue; }
-                int bone = Array.FindIndex(rig.Bones, b => b.Name == Names[i]);
+                if (targetWorldOverride != null) { targetWorld[i] = (float[])targetWorldOverride[i].Clone(); continue; }
+                int bone = SourceBone(rig, Names[i]);
                 int match = bone < 0 ? 0 : rig.SharedBodyBone(bone);
-                var world = (float[])orientationWorld[i].Clone();
+                var world = (float[])(menuFrames == null ? orientationWorld[i] : menuFrames[match]).Clone();
                 if (rig.GameSettings(context).NaturalHuman)
                 {
                     var x = RigVector.Unit(new[] { world[0], world[4], world[8] });
@@ -111,20 +186,44 @@ namespace murumsWiiModStudio
                     var z = RigVector.Unit(RigVector.Cross(x, y));
                     for (int axis = 0; axis < 3; axis++) { world[axis * 4] = x[axis]; world[axis * 4 + 1] = y[axis]; world[axis * 4 + 2] = z[axis]; }
                 }
-                for (int axis = 0; axis < 3; axis++)
+                for (int axis = 0; menuFrames == null && axis < 3; axis++)
                 {
                     var column = new[] { world[axis], world[axis + 4], world[axis + 8] };
                     var rotated = RigVector.Scale(rig.TransformGamePoint(column, rig.GameSettings(context), true, false), RigVector.Length(column));
                     world[axis] = rotated[0]; world[axis + 4] = rotated[1]; world[axis + 8] = rotated[2];
                 }
                 world[3] = targets[match][0]; world[7] = targets[match][1]; world[11] = targets[match][2];
+                if (context == 2 && rig.GameSettings(context).NaturalHuman)
+                {
+                    string name = Names[i].StartsWith("pcd_", StringComparison.Ordinal) ? Names[i].Substring(4) : Names[i];
+                    string child = name.StartsWith("arm_") || name.StartsWith("leg_")
+                        ? name.EndsWith("1", StringComparison.Ordinal) ? name.Substring(0, name.Length - 1) + "2"
+                            : (name.StartsWith("arm_") ? "wrist_" : "ankle_") + name.Substring(4, 1) + "1" : null;
+                    int childIndex = child == null ? -1 : Array.IndexOf(Names, Names[i].StartsWith("pcd_") ? "pcd_" + child : child);
+                    int targetChild = child == null ? -1 : SourceBone(rig, Names[i].StartsWith("pcd_", StringComparison.Ordinal) ? "pcd_" + child : child);
+                    if (bone >= 0 && childIndex >= 0 && targetChild >= 0)
+                    {
+                        var from = rig.TransformGamePoint(RigVector.Sub(Joints[childIndex], Joints[i]), rig.GameSettings(context), true, false);
+                        var to = RigVector.Sub(targets[targetChild], targets[match]);
+                        var turn = RigVector.RotationQuaternion(from, to);
+                        for (int axis = 0; axis < 3; axis++)
+                        {
+                            var column = RigVector.RotateQuaternion(new[] { world[axis], world[axis + 4], world[axis + 8] }, turn);
+                            world[axis] = column[0]; world[axis + 4] = column[1]; world[axis + 8] = column[2];
+                        }
+                    }
+                }
                 targetWorld[i] = world;
             }
             if (targetWorldOverride != null)
             {
                 for (int i = 0; i < Names.Length; i++)
                 {
-                    if (!active[i]) continue;
+                    if (!active[i])
+                    {
+                        targetWorld[i] = InheritUnchangedWorld(i, active, oldWorld, targetWorld);
+                        continue;
+                    }
                     int parent = Array.IndexOf(Names, Parents[i]);
                     var local = parent < 0 ? targetWorldOverride[i]
                         : RigMatrix.Multiply(RigMatrix.Inverse(targetWorld[parent]), targetWorldOverride[i]);
@@ -137,6 +236,10 @@ namespace murumsWiiModStudio
                 if (!active[i]) targetWorld[i] = InheritUnchangedWorld(i, active, oldWorld, targetWorld);
             var doc = new XmlDocument { XmlResolver = null }; var root = doc.CreateElement("corrections"); doc.AppendChild(root);
             root.SetAttribute("natural", rig.GameSettings(context).NaturalHuman ? "true" : "false");
+            root.SetAttribute("continuous", context == 2 ? "true" : "false");
+            root.SetAttribute("stableMenu", context == 1 && rig.GameSettings(context).StableMenu ? "true" : "false");
+            root.SetAttribute("humanStyle", rig.HumanAnimationStyle ?? "");
+            root.SetAttribute("menu", context == 1 ? "true" : "false");
             root.SetAttribute("animation", Animation);
             root.SetAttribute("frame", Frame.ToString("R", CultureInfo.InvariantCulture));
             root.SetAttribute("strength", (rig.GameSettings(context).MotionStrength / 100).ToString("R", CultureInfo.InvariantCulture));
@@ -147,6 +250,8 @@ namespace murumsWiiModStudio
                 var oldLocal = parent < 0 ? oldWorld[i] : RigMatrix.Multiply(RigMatrix.Inverse(oldWorld[parent]), oldWorld[i]);
                 var newLocal = parent < 0 ? targetWorld[i] : RigMatrix.Multiply(RigMatrix.Inverse(targetWorld[parent]), targetWorld[i]);
                 var node = doc.CreateElement("bone"); root.AppendChild(node); node.SetAttribute("name", Names[i]);
+                node.SetAttribute("parent", Parents[i]);
+                node.SetAttribute("rootMotion", parent < 0 || Names[i] == "skl_root" || Names[i] == "pcd_skl_root" ? "true" : "false");
                 node.SetAttribute("anchor", String.Join(" ", oldLocal.Select(v => v.ToString("R", CultureInfo.InvariantCulture))));
                 node.SetAttribute("matrix", String.Join(" ", RigMatrix.Multiply(newLocal, RigMatrix.Inverse(oldLocal)).Select(v => v.ToString("R", CultureInfo.InvariantCulture))));
             }
@@ -156,25 +261,32 @@ namespace murumsWiiModStudio
         }
         internal RigPoseReference FromStandingPose(ModelRig rig, RigPoseReference standing)
         {
+            if (!Names.SequenceEqual(standing.Names) || !Parents.SequenceEqual(standing.Parents))
+                throw new InvalidDataException("Menu vehicle skeleton does not match its standing model.");
             var from = rig.GameBoneTransforms(1);
             var to = rig.GameBoneTransforms(2);
             var standingWorld = standing.Matrices.Select((m, i) => RigMatrix.Multiply(m, standing.Binds[i])).ToArray();
             var copy = (RigPoseReference)MemberwiseClone();
-            var active = ActiveBones(rig);
+            var active = standing.ActiveBones(rig);
+            var sources = Enumerable.Range(0, Names.Length).Select(index => {
+                var matches = Enumerable.Range(0, rig.Bones.Length).Where(bone => standing.MatchBone(rig, bone) == index).ToArray();
+                int exact = matches.Where(bone => rig.Bones[bone].Name == Names[index]).DefaultIfEmpty(-1).First();
+                return exact >= 0 ? rig.SharedBodyBone(exact) : matches.Length == 0 ? -1 : rig.SharedBodyBone(matches[0]);
+            }).ToArray();
+            // Zusaetzliche Donor-Ahnen behalten ihre lokale Hierarchie statt einer erfundenen Root-Zuordnung.
+            for (int index = 0; index < active.Length; index++) active[index] &= sources[index] >= 0;
+            copy.targetActiveOverride = active;
             copy.targetWorldOverride = Names.Select((name, index) => {
                 if (!active[index]) return RigMatrix.Multiply(Matrices[index], Binds[index]);
-                int bone = Array.FindIndex(rig.Bones, b => b.Name == name);
-                int original = bone < 0 ? -1 : standing.MatchBone(rig, bone);
-                if (bone >= 0) bone = rig.SharedBodyBone(bone);
-                if (bone < 0 || original < 0) throw new InvalidDataException("Menu vehicle skeleton differs from the selected character.");
-                return RigMatrix.Multiply(RigMatrix.Multiply(to[bone], RigMatrix.Inverse(from[bone])), standingWorld[original]);
+                int bone = sources[index];
+                return RigMatrix.Multiply(RigMatrix.Multiply(to[bone], RigMatrix.Inverse(from[bone])), standingWorld[index]);
             }).ToArray();
             return copy.Adjusted(rig, 2);
         }
 
         internal RigPoseReference MotionAnchor(ModelRig rig, int context, string animation)
         {
-            if (!rig.GameSettings(context).NaturalHuman || animation == Animation) return this;
+            if (context == 2 || rig.HumanAnimationStyle != null || !rig.GameSettings(context).NaturalHuman || animation == Animation) return this;
             RigPoseReference result;
             if (!clipAnchors.TryGetValue(animation, out result))
             {
@@ -205,7 +317,8 @@ namespace murumsWiiModStudio
                 if (!changedNames.Contains(Names[i])) { local[i] = Binds[i]; continue; }
                 local[i] = parent < 0 ? originalWorld[i] : RigMatrix.Multiply(RigMatrix.Inverse(originalWorld[parent]), originalWorld[i]);
             }
-            var corrected = (float[][])StudioModelLibrary.Call("CorrectAnimationPose", anchor.Corrections, Names, local, Animation, Frame - 1);
+            changes.DocumentElement.SetAttribute("frames", Frames.ToString(CultureInfo.InvariantCulture));
+            var corrected = (float[][])StudioModelLibrary.Call("CorrectAnimationPose", changes.OuterXml, Names, local, Animation, Frame - 1);
             var changed = Names.Select(changedNames.Contains).ToArray();
             for (int i = 0; i < Names.Length; i++)
             {
@@ -217,17 +330,24 @@ namespace murumsWiiModStudio
                 Joints = world.Select(m => new[] { m[3], m[7], m[11] }).ToArray(),
                 Matrices = world.Select((m, i) => RigMatrix.Multiply(m, RigMatrix.Inverse(Binds[i]))).ToArray() };
         }
-        internal float[][] ForRig(ModelRig rig)
+        internal int[] BoneMap(ModelRig rig)
         {
+            var used = new HashSet<int>(UsedBones(rig));
             return Enumerable.Range(0, rig.Bones.Length).Select(i => {
                 int found = -1;
                 for (int bone = i; bone >= 0 && found < 0; bone = rig.Bones[bone].Parent) found = MatchBone(rig, bone);
                 if (found < 0 && Names.Length == 1) found = 0;
-                if (found < 0 && !rig.BoneIndices.Any(indices => indices.Contains(i)))
-                    return new[] { 1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f };
-                if (found < 0) throw new InvalidDataException("The reference skeleton does not match the selected RR character.");
-                return Matrices[found];
+                if (found < 0 && used.Contains(i))
+                    throw new InvalidDataException("The reference skeleton does not match the selected RR character.");
+                return found;
             }).ToArray();
+        }
+
+        internal float[][] ForRig(ModelRig rig)
+        {
+            return BoneMap(rig).Select(found => found < 0
+                ? new[] { 1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f }
+                : Matrices[found]).ToArray();
         }
     }
 
@@ -235,7 +355,7 @@ namespace murumsWiiModStudio
     {
         public GamePoseSettings MenuPose, RacePose;
         public Dictionary<string, GamePoseSettings> VehiclePoses = new Dictionary<string, GamePoseSettings>();
-        internal string ActiveVehicle;
+        public string ActiveVehicle;
         internal GamePoseSettings GameSettings(int context)
         {
             GamePoseSettings vehicle;
@@ -253,16 +373,16 @@ namespace murumsWiiModStudio
             else if (context == 2) RacePose = settings;
             else throw new ArgumentOutOfRangeException("context");
         }
-        internal void InitializeGamePose(int context, RigPoseReference reference)
+        internal void InitializeGamePose(int context, RigPoseReference reference, bool force = false)
         {
-            if (GameSettings(context) != null) return;
+            if (!force && GameSettings(context) != null) return;
             if (JointGuides == null) throw new InvalidOperationException("Assign source joints first.");
-            if (reference != null)
+            if (reference != null && HasHumanJoints)
             {
                 ApplyReferenceGamePose(context, reference);
                 return;
             }
-            var settings = new GamePoseSettings { MotionStrength = context == 1 ? 25 : 100, Joints = JointGuides.Select(p => (float[])p.Clone()).ToArray() };
+            var settings = new GamePoseSettings { MotionStrength = context == 1 && HumanAnimationStyle == null ? 25 : 100, Joints = JointGuides.Select(p => (float[])p.Clone()).ToArray() };
             SetGameSettings(context, settings);
             if (context == 1)
             {
@@ -303,16 +423,22 @@ namespace murumsWiiModStudio
         }
         internal void ValidateGamePoses()
         {
+            if (ActiveVehicle != null && !ValidVehicleKey(ActiveVehicle)) throw new InvalidDataException("Invalid active vehicle.");
+            if (!AnimationStyles.Contains(HumanAnimationStyle)) throw new InvalidDataException("Unknown animation style.");
             if (VehiclePoses != null && (VehiclePoses.Count > 36 || VehiclePoses.Any(p => !ValidVehicleKey(p.Key) || p.Value == null)))
                 throw new InvalidDataException("Invalid vehicle poses.");
             foreach (var settings in new[] { MenuPose, RacePose }.Concat(VehiclePoses == null ? Enumerable.Empty<GamePoseSettings>() : VehiclePoses.Values).Where(p => p != null))
             {
                 ValidateAnimationEdits(settings);
+                if (!String.IsNullOrEmpty(settings.MenuSourceCode) && (settings != MenuPose
+                    || !CharacterDefinition.All.Any(c => c.Code == settings.MenuSourceCode)
+                    || settings.MenuSourceSlot < 1 || settings.MenuSourceSlot > 50))
+                    throw new InvalidDataException("Invalid menu template.");
                 if (JointGuides == null || settings.Position != null && settings.Position.Any(v => Math.Abs(v) > 1000) || settings.Rotation != null && settings.Rotation.Any(v => Math.Abs(v) > 180) || settings.Joints == null || settings.Joints.Length != Bones.Length || settings.Joints.Any(p => !ValidGameVector(p))
                     || !ValidGameVector(settings.Position) || !ValidGameVector(settings.Rotation) || Single.IsNaN(settings.Scale) || Single.IsInfinity(settings.Scale) || settings.Scale < 1 || settings.Scale > 500
                     || Single.IsNaN(settings.MotionStrength) || Single.IsInfinity(settings.MotionStrength) || settings.MotionStrength < 0 || settings.MotionStrength > 100)
                     throw new InvalidDataException("Invalid game pose settings.");
-                if (settings.Contacts != null && (settings.Contacts.Length > 4 || settings.Contacts.Any(c => c == null || !ValidGameVector(c.Target) || c.SourcePoint != null && !ValidGameVector(c.SourcePoint) || c.Direction != null && (!ValidGameVector(c.Direction) || Math.Abs(RigVector.Length(c.Direction) - 1) > .001 || c.SourcePoint == null) || !Bones.Any(b => b.Name == c.Joint))))
+                if (settings.Contacts != null && (settings.Contacts.Length > 4 || settings.Contacts.Any(c => c == null || !ValidGameVector(c.Target) || c.SourcePoint != null && !ValidGameVector(c.SourcePoint) || c.Direction != null && (!ValidGameVector(c.Direction) || Math.Abs(RigVector.Length(c.Direction) - 1) > .001 || c.SourcePoint == null) || (c.SourceAxis != null || c.TargetAxis != null) && (!ValidGameVector(c.SourceAxis) || !ValidGameVector(c.TargetAxis) || c.SourcePoint == null || Math.Abs(RigVector.Length(c.SourceAxis) - 1) > .001 || Math.Abs(RigVector.Length(c.TargetAxis) - 1) > .001) || !Bones.Any(b => b.Name == c.Joint))))
                     throw new InvalidDataException("Invalid vehicle contacts.");
             }
         }
@@ -349,7 +475,7 @@ namespace murumsWiiModStudio
         {
             var settings = GameSettings(context);
             if (settings == null) return AlignedGeometry(normals);
-            var mapped = MapGeometry(normals, settings.Joints, context == 2 && settings.NaturalHuman, settings);
+            var mapped = MapGeometry(normals, settings.Joints, settings.NaturalHuman, settings);
             return mapped.Select(p => TransformGamePoint(p, settings, normals, false)).ToArray();
         }
         internal float[][] GameExportGeometry(int context, bool normals, RigPoseReference reference)

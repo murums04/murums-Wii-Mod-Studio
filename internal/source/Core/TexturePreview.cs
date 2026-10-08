@@ -198,8 +198,10 @@ namespace murumsWiiModStudio
                         for (x = 0; x < 8; x += 2)
                         {
                             byte b = ReadByte(data, p++);
-                            SetGray(bmp, bx + x, by + y, Expand4((b >> 4) & 0xF), 255);
-                            SetGray(bmp, bx + x + 1, by + y, Expand4(b & 0xF), 255);
+                            byte first = Expand4((b >> 4) & 0xF);
+                            byte second = Expand4(b & 0xF);
+                            SetGray(bmp, bx + x, by + y, first, first);
+                            SetGray(bmp, bx + x + 1, by + y, second, second);
                         }
         }
 
@@ -211,7 +213,10 @@ namespace murumsWiiModStudio
                 for (bx = 0; bx < bmp.Width; bx += 8)
                     for (y = 0; y < 4; y++)
                         for (x = 0; x < 8; x++)
-                            SetGray(bmp, bx + x, by + y, ReadByte(data, p++), 255);
+                        {
+                            byte intensity = ReadByte(data, p++);
+                            SetGray(bmp, bx + x, by + y, intensity, intensity);
+                        }
         }
 
         private static void DecodeIA4(byte[] data, int start, PixelSurface bmp)
@@ -384,13 +389,13 @@ namespace murumsWiiModStudio
             p[1] = b;
             if (c0 > c1)
             {
-                p[2] = Color.FromArgb(255, (2 * a.R + b.R) / 3, (2 * a.G + b.G) / 3, (2 * a.B + b.B) / 3);
-                p[3] = Color.FromArgb(255, (a.R + 2 * b.R) / 3, (a.G + 2 * b.G) / 3, (a.B + 2 * b.B) / 3);
+                p[2] = Color.FromArgb(255, (5 * a.R + 3 * b.R) >> 3, (5 * a.G + 3 * b.G) >> 3, (5 * a.B + 3 * b.B) >> 3);
+                p[3] = Color.FromArgb(255, (3 * a.R + 5 * b.R) >> 3, (3 * a.G + 5 * b.G) >> 3, (3 * a.B + 5 * b.B) >> 3);
             }
             else
             {
                 p[2] = Color.FromArgb(255, (a.R + b.R) / 2, (a.G + b.G) / 2, (a.B + b.B) / 2);
-                p[3] = Color.FromArgb(0, 0, 0, 0);
+                p[3] = Color.FromArgb(0, (a.R + b.R) / 2, (a.G + b.G) / 2, (a.B + b.B) / 2);
             }
 
             return p;

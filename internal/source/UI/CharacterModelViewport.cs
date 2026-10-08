@@ -14,13 +14,38 @@ namespace murumsWiiModStudio
         RigRasterizer rasterizer;
         internal int SelectedBone = -1;
         internal float PoseDegrees;
-        internal int GameContext;
+        int gameContext;
+        float[] frameMin, frameMax;
+        internal int GameContext {
+            get { return gameContext; }
+            set { if (gameContext == value) return; gameContext = value; frameMin = frameMax = null; Invalidate(); }
+        }
         internal bool EditGameJoints;
+        internal bool ShowDimensions = true;
+        internal bool SceneGuides, ShowFloorGrid = true, ShowAxes = true;
+        internal int CameraView { get; private set; }
+        internal event EventHandler ViewChanged;
         internal CharacterModelImport ReferenceModel;
+        CharacterModelImport vehicleModel;
+        RigRasterizer vehicleRasterizer;
+        internal CharacterModelImport VehicleModel
+        {
+            get { return vehicleModel; }
+            set
+            {
+                if (vehicleModel == value) return;
+                vehicleModel = value;
+                vehicleRasterizer = value == null || value.Rig == null ? null : new RigRasterizer(value.Rig);
+                frameMin = frameMax = null;
+                Invalidate();
+            }
+        }
         internal float[][] AnimationPoints;
         internal float[][] AnimationJoints;
         internal bool ShowWeights, Marking, ShowBones, EditJoints, BrushSelection, ReferencePose;
         internal bool ThroughSelection;
+        internal bool SelectionWholeFaces;
+        internal int[] SurfaceOverlay;
         internal int BrushRadius = 20;
         internal event EventHandler JointMoveStarted, JointMoved, BoneSelected;
         internal PointF[] ProjectedJoints { get; private set; }
@@ -45,13 +70,16 @@ namespace murumsWiiModStudio
         MouseButtons drag;
         readonly ToolTip tip = new ToolTip();
         [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
-        internal CharacterModelImport Model { get { return model; } set { model = value; rasterizer = value != null && value.Rig != null ? new RigRasterizer(value.Rig) : null; SelectedVertices.Clear(); ResetView(); } }
+        internal CharacterModelImport Model { get { return model; } set { model = value; rasterizer = value != null && value.Rig != null ? new RigRasterizer(value.Rig) : null; SelectedVertices.Clear(); ProjectedJoints = null; ResetView(); } }
         internal float ModelScale { get { return modelScale; } set { modelScale = value; Invalidate(); } }
         internal float Zoom { get { return zoom; } }
         internal PointF Pan { get { return pan; } }
 
-        public CharacterModelViewport()
+        public CharacterModelViewport() : this(true) { }
+
+        internal CharacterModelViewport(bool expandable)
         {
+            if (expandable) StudioPreview.AddExpandButton(this);
             Dock = DockStyle.Fill;
             BackColor = DarkTheme.Panel2;
             DoubleBuffered = true;
@@ -63,9 +91,26 @@ namespace murumsWiiModStudio
 
         internal bool Wireframe { get; set; }
         internal bool SolidSurface { get; set; }
+        private void NotifyViewChanged()
+        {
+            if (ViewChanged != null) ViewChanged(this, EventArgs.Empty);
+        }
+
+        internal void FitView()
+        {
+            frameMin = frameMax = null;
+            zoom = 1;
+            pan = PointF.Empty;
+            Invalidate();
+            NotifyViewChanged();
+        }
+
         internal void ResetView()
         {
+            frameMin = frameMax = null;
             yaw = -.55f; pitch = .3f; zoom = 1; pan = PointF.Empty;
+            CameraView = 0;
+            NotifyViewChanged();
             drag = MouseButtons.None; draggedJoint = -1; brushDrag = markingDrag = false; Capture = false; Cursor = Cursors.Default; Invalidate();
         }
         internal void SetView(int view)
@@ -75,6 +120,8 @@ namespace murumsWiiModStudio
             else if (view == 2) { yaw = (float)Math.PI / 2; pitch = 0; }
             else if (view == 3) { yaw = 0; pitch = (float)Math.PI / 2; }
             else if (view == 4) { yaw = (float)Math.PI; pitch = 0; }
+            CameraView = view;
+            NotifyViewChanged();
             Invalidate();
         }
         internal void ZoomAt(Point point, int delta)
@@ -85,6 +132,7 @@ namespace murumsWiiModStudio
             float x = point.X - Width / 2f, y = point.Y - Height / 2f;
             pan = new PointF(x - (x - pan.X) * ratio, y - (y - pan.Y) * ratio);
             zoom = next; Invalidate();
+            NotifyViewChanged();
         }
         public bool PreFilterMessage(ref Message message)
         {
@@ -172,12 +220,13 @@ namespace murumsWiiModStudio
             }
             if (drag == MouseButtons.Left || drag == MouseButtons.Right)
             {
+                CameraView = 0;
                 yaw = (yaw + (e.X - last.X) * .012f) % ((float)Math.PI * 2);
                 pitch = Math.Max(-1.56f, Math.Min(1.56f, pitch + (e.Y - last.Y) * .012f));
             }
             else if (drag == MouseButtons.Middle)
                 pan = new PointF(pan.X + e.X - last.X, pan.Y + e.Y - last.Y);
-            if (drag != MouseButtons.None) { last = e.Location; Invalidate(); }
+            if (drag != MouseButtons.None) { last = e.Location; Invalidate(); NotifyViewChanged(); }
             else if (EditJoints || EditGameJoints) Cursor = HitJoint(e.Location) >= 0 ? Cursors.SizeAll : Cursors.Default;
             else if (Marking && BrushSelection) Invalidate();
             base.OnMouseMove(e);
@@ -197,7 +246,8 @@ namespace murumsWiiModStudio
             {
                 markingDrag = false; Capture = false;
                 if (!addSelection && !subtractSelection) SelectedVertices.Clear();
-                SelectRegion(mark, false, Point.Empty);
+                if (mark.Width < 4 && mark.Height < 4) { int face = HitSurface(e.Location); if (face >= 0) { if (subtractSelection) SelectedVertices.ExceptWith(model.Faces[face]); else SelectedVertices.UnionWith(model.Faces[face]); } }
+                else SelectRegion(mark, false, Point.Empty);
                 mark = Rectangle.Empty; if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty); Invalidate();
             }
             if (e.Button == drag) { drag = MouseButtons.None; Capture = false; Cursor = Cursors.Default; }
@@ -225,22 +275,30 @@ namespace murumsWiiModStudio
             base.OnPaint(e);
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            if (model == null)
+            if (model == null || model.Points.Count == 0)
             {
                 TextRenderer.DrawText(g, L.T("3D-Modell importieren, um es anzusehen.", "Import a 3D model to preview it."), Font, ClientRectangle, DarkTheme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }
-            float[] min = { model.Points.Min(p => p[0]), model.Points.Min(p => p[1]), model.Points.Min(p => p[2]) };
-            float[] max = { model.Points.Max(p => p[0]), model.Points.Max(p => p[1]), model.Points.Max(p => p[2]) };
+            var display = AnimationPoints ?? (model.Rig == null ? model.Points.ToArray() : GameContext > 0 ? model.Rig.GameGeometry(GameContext, false) : model.Rig.Pose(SelectedBone, PoseDegrees, ReferencePose));
+            if (frameMin == null)
+            {
+                // Die aktuelle Haltung einpassen; beim Ziehen und Abspielen bleibt die Kamera stabil.
+                var framing = model.Rig != null && GameContext > 0
+                    ? (AnimationPoints == null ? display : model.Rig.GameGeometry(GameContext, false)) : model.Points.ToArray();
+                if (vehicleModel != null) framing = framing.Concat(vehicleModel.Points).ToArray();
+                frameMin = Enumerable.Range(0, 3).Select(axis => framing.Min(p => p[axis])).ToArray();
+                frameMax = Enumerable.Range(0, 3).Select(axis => framing.Max(p => p[axis])).ToArray();
+            }
+            float[] min = frameMin, max = frameMax;
             double cy = Math.Cos(yaw), sy = Math.Sin(yaw), cp = Math.Cos(pitch), sp = Math.Sin(pitch);
             double projectedWidth = Math.Abs(cy) * (max[0] - min[0]) + Math.Abs(sy) * (max[2] - min[2]);
             double projectedHeight = Math.Abs(cp) * (max[1] - min[1])
                 + Math.Abs(sp) * (Math.Abs(sy) * (max[0] - min[0]) + Math.Abs(cy) * (max[2] - min[2]));
             double fit = .92 * Math.Min(Math.Max(1, Width - 32) / Math.Max(projectedWidth * model.FitScale, .0001),
-                Math.Max(1, Height - 72) / Math.Max(projectedHeight * model.FitScale, .0001));
+                Math.Max(1, Height - (ShowDimensions ? 48 : 16) - (ReferenceModel == null ? 0 : 24)) / Math.Max(projectedHeight * model.FitScale, .0001));
             projectionScale = fit * zoom * modelScale;
             projectionYaw = yaw; projectionPitch = pitch;
-            var display = AnimationPoints ?? (model.Rig == null ? model.Points.ToArray() : GameContext > 0 ? model.Rig.GameGeometry(GameContext, false) : model.Rig.Pose(SelectedBone, PoseDegrees, ReferencePose));
             var points = new PointF[model.Points.Count];
             var depths = new double[points.Length];
             for (int i = 0; i < points.Length; i++)
@@ -254,14 +312,46 @@ namespace murumsWiiModStudio
                 depths[i] = (y * sp + rz * cp) * fit * zoom;
                 points[i] = new PointF((float)(Width / 2.0 + pan.X + rx * fit * zoom), (float)(Height / 2.0 + pan.Y - ry * fit * zoom));
             }
-            using (var grid = new Pen(Color.FromArgb(55, 57, 67)))
+            if (SceneGuides)
+                DrawSceneGuides(g);
+            else
+                using (var grid = new Pen(Color.FromArgb(55, 57, 67)))
+                {
+                    g.DrawLine(grid, 0, Height / 2f + pan.Y, Width, Height / 2f + pan.Y);
+                    g.DrawLine(grid, Width / 2f + pan.X, 0, Width / 2f + pan.X, Height);
+                }
+            PointF[] vehiclePoints = null;
+            double[] vehicleDepths = null;
+            if (vehicleModel != null)
             {
-                g.DrawLine(grid, 0, Height / 2f + pan.Y, Width, Height / 2f + pan.Y);
-                g.DrawLine(grid, Width / 2f + pan.X, 0, Width / 2f + pan.X, Height);
+                vehiclePoints = new PointF[vehicleModel.Points.Count];
+                vehicleDepths = new double[vehiclePoints.Length];
+                for (int i = 0; i < vehiclePoints.Length; i++)
+                {
+                    var p = vehicleModel.Points[i];
+                    double x = (p[0] - ((double)min[0] + max[0]) / 2) * modelScale;
+                    double y = (p[1] - ((double)min[1] + max[1]) / 2) * modelScale;
+                    double z = (p[2] - ((double)min[2] + max[2]) / 2) * modelScale;
+                    double rx = x * cy + z * sy, rz = -x * sy + z * cy;
+                    vehicleDepths[i] = (y * sp + rz * cp) * fit * zoom;
+                    vehiclePoints[i] = new PointF((float)(Width / 2.0 + pan.X + rx * fit * zoom),
+                        (float)(Height / 2.0 + pan.Y - (y * cp - rz * sp) * fit * zoom));
+                }
             }
+            if (Wireframe && vehiclePoints != null)
+                using (var edge = new Pen(DarkTheme.Muted))
+                    foreach (var face in vehicleModel.Faces)
+                        g.DrawPolygon(edge, face.Select(i => vehiclePoints[i]).ToArray());
             projected = points;
+            if (rasterizer != null)
+            {
+                rasterizer.Overlay = SurfaceOverlay;
+                rasterizer.Selection = SelectedVertices;
+                rasterizer.SelectionWholeFaces = SelectionWholeFaces;
+                rasterizer.TransparentBackground = SceneGuides;
+            }
             if (rasterizer != null && !Wireframe)
-                using (var bitmap = rasterizer.Draw(ClientSize, points, depths, SelectedBone, ShowWeights, SolidSurface)) g.DrawImage(bitmap, ClientRectangle, 0, 0, bitmap.Width, bitmap.Height, GraphicsUnit.Pixel);
+                using (var bitmap = rasterizer.Draw(ClientSize, points, depths, SelectedBone, ShowWeights, SolidSurface, vehicleRasterizer, vehiclePoints, vehicleDepths)) g.DrawImage(bitmap, ClientRectangle, 0, 0, bitmap.Width, bitmap.Height, GraphicsUnit.Pixel);
             var faceColors = rasterizer == null || Wireframe
                 ? model.Faces.Select((face, index) => new { face, index }).ToDictionary(p => p.face, p => p.index) : null;
             using (var edge = new Pen(Color.FromArgb(145, 119, 210)))
@@ -275,7 +365,7 @@ namespace murumsWiiModStudio
                         double area = Math.Abs((b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X));
                         int shade = 70 + (int)Math.Min(85, Math.Sqrt(area) * .4);
                         int faceIndex = faceColors[face];
-                        Color surface = faceIndex < model.FaceColors.Count ? model.FaceColors[faceIndex] : Color.FromArgb(shade, shade, Math.Min(255, shade + 45));
+                        Color surface = !SolidSurface && faceIndex < model.FaceColors.Count ? model.FaceColors[faceIndex] : Color.FromArgb(shade, shade, Math.Min(255, shade + (SolidSurface ? 8 : 45)));
                         using (var brush = new SolidBrush(surface))
                             g.FillPolygon(brush, polygon);
                     }
@@ -307,6 +397,7 @@ namespace murumsWiiModStudio
                 };
                 var positions = (AnimationJoints ?? (GameContext > 0 ? model.Rig.GameJoints(GameContext) : model.Rig.BonePositions(SelectedBone, PoseDegrees, ReferencePose))).Select(projectBone).ToArray();
                 ProjectedJoints = positions;
+                var uncertain = GameContext == 0 ? model.Rig.JointIssues() : new Dictionary<int, string>();
                 using (var bonePen = new Pen(Color.FromArgb(230, 185, 80), 2))
                 using (var boneBrush = new SolidBrush(Color.White))
                     for (int i = 0; i < positions.Length; i++)
@@ -315,7 +406,7 @@ namespace murumsWiiModStudio
                         if (model.Rig.Bones[i].Parent >= 0 && model.Rig.GuideBone(model.Rig.Bones[i].Parent)) g.DrawLine(bonePen, positions[i], positions[model.Rig.Bones[i].Parent]);
                         var point = positions[i];
                         float radiusPoint = EditJoints || EditGameJoints ? 6 : 3;
-                        g.FillEllipse(i == SelectedBone ? Brushes.Cyan : boneBrush, point.X - radiusPoint, point.Y - radiusPoint, radiusPoint * 2, radiusPoint * 2);
+                        g.FillEllipse(i == SelectedBone ? Brushes.Cyan : uncertain.ContainsKey(i) ? Brushes.Orange : boneBrush, point.X - radiusPoint, point.Y - radiusPoint, radiusPoint * 2, radiusPoint * 2);
                         if (i == SelectedBone)
                             TextRenderer.DrawText(g, ModelRigForm.BoneLabel(model.Rig.Bones[i].Name), Font, new Point((int)point.X + 10, (int)point.Y + 8), Color.Cyan, Color.FromArgb(35, 36, 44));
                     }
@@ -332,15 +423,83 @@ namespace murumsWiiModStudio
                         }
             }
             using (var highlight = new SolidBrush(Color.Yellow))
-                foreach (int vertex in SelectedVertices) if (vertex < points.Length) g.FillRectangle(highlight, points[vertex].X - 1, points[vertex].Y - 1, 3, 3);
+                foreach (int vertex in (rasterizer == null || Wireframe ? SelectedVertices : new HashSet<int>())) if (vertex < points.Length) g.FillRectangle(highlight, points[vertex].X - 1, points[vertex].Y - 1, 3, 3);
             if (!mark.IsEmpty) using (var pen = new Pen(Color.Yellow)) g.DrawRectangle(pen, mark);
             if (Marking && BrushSelection && ClientRectangle.Contains(brushPoint))
                 using (var pen = new Pen(Color.Cyan, 2)) g.DrawEllipse(pen, brushPoint.X - BrushRadius, brushPoint.Y - BrushRadius, BrushRadius * 2, BrushRadius * 2);
             string label = "Geometry • " + (modelScale * 100).ToString("0.##") + "% • X " + ((max[0] - min[0]) * modelScale).ToString("0.###") +
                 "  Y " + ((max[1] - min[1]) * modelScale).ToString("0.###") + "  Z " + ((max[2] - min[2]) * modelScale).ToString("0.###") + " (source units)";
             if (model.ReferenceHeight > 0) label += " • RR: " + (100 * modelScale / model.FitScale).ToString("0.#") + "%";
-            TextRenderer.DrawText(g, label, Font, new Point(8, 8), DarkTheme.Fore);
+            if (ShowDimensions) TextRenderer.DrawText(g, label, Font, new Point(8, 8), DarkTheme.Fore);
         }
+        private PointF ProjectScenePoint(double x, double y, double z)
+        {
+            x -= ((double)frameMin[0] + frameMax[0]) / 2;
+            y -= ((double)frameMin[1] + frameMax[1]) / 2;
+            z -= ((double)frameMin[2] + frameMax[2]) / 2;
+            double rx = x * Math.Cos(projectionYaw) + z * Math.Sin(projectionYaw);
+            double rz = -x * Math.Sin(projectionYaw) + z * Math.Cos(projectionYaw);
+            double ry = y * Math.Cos(projectionPitch) - rz * Math.Sin(projectionPitch);
+            return new PointF((float)(Width / 2.0 + pan.X + rx * projectionScale),
+                (float)(Height / 2.0 + pan.Y - ry * projectionScale));
+        }
+
+        private void DrawSceneGuides(Graphics graphics)
+        {
+            double span = Math.Max(.001, Enumerable.Range(0, 3).Max(i => frameMax[i] - frameMin[i]));
+            double x = ((double)frameMin[0] + frameMax[0]) / 2;
+            double z = ((double)frameMin[2] + frameMax[2]) / 2;
+            double floor = frameMin[1];
+            if (ShowFloorGrid)
+                using (var pen = new Pen(DarkTheme.Border))
+                    for (int line = -10; line <= 10; line++)
+                    {
+                        double offset = span * line / 10;
+                        graphics.DrawLine(pen, ProjectScenePoint(x + offset, floor, z - span), ProjectScenePoint(x + offset, floor, z + span));
+                        graphics.DrawLine(pen, ProjectScenePoint(x - span, floor, z + offset), ProjectScenePoint(x + span, floor, z + offset));
+                    }
+            if (ShowAxes)
+            {
+                PointF origin = ProjectScenePoint(x, floor, z);
+                var ends = new[] { ProjectScenePoint(x + span * .6, floor, z),
+                    ProjectScenePoint(x, floor + span * .6, z), ProjectScenePoint(x, floor, z + span * .6) };
+                var colors = new[] { DarkTheme.Error, DarkTheme.Success, Color.CornflowerBlue };
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    using (var pen = new Pen(colors[axis], 1.5f)) graphics.DrawLine(pen, origin, ends[axis]);
+                    TextRenderer.DrawText(graphics, new[] { "X", "Y", "Z" }[axis], Font,
+                        Point.Round(ends[axis]), colors[axis], TextFormatFlags.NoPadding);
+                }
+            }
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (SceneGuides && e.KeyCode == Keys.F && e.Modifiers == Keys.None)
+            {
+                FitView();
+                e.Handled = e.SuppressKeyPress = true;
+            }
+            base.OnKeyDown(e);
+        }
+
+        internal int HitSurface(Point point)
+        {
+            if (rasterizer == null || rasterizer.SurfaceFaces == null || !ClientRectangle.Contains(point)) return -1;
+            int pixel = point.Y * rasterizer.SurfaceWidth + point.X;
+            return pixel >= 0 && pixel < rasterizer.SurfaceFaces.Length ? rasterizer.SurfaceFaces[pixel] : -1;
+        }
+
+        internal void FocusSurface()
+        {
+            if (projected == null || SelectedVertices.Count == 0) return;
+            var area = SelectedVertices.Select(v => projected[v]).ToArray();
+            float x = (area.Min(p => p.X) + area.Max(p => p.X)) / 2;
+            float y = (area.Min(p => p.Y) + area.Max(p => p.Y)) / 2;
+            pan = new PointF(pan.X + Width / 2f - x, pan.Y + Height / 2f - y);
+            Invalidate();
+        }
+
         internal int HitJoint(Point point)
         {
             if (ProjectedJoints == null) return -1;

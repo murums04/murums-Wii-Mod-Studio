@@ -23,7 +23,11 @@ namespace murumsWiiModStudio
                     codec = Assembly.LoadFrom(Path.Combine(ModelRuntime.Root, "StudioModelCodec.dll")).GetType("StudioModelCodec", true);
                 }
                 try { return codec.GetMethod(method).Invoke(null, arguments); }
-                catch (TargetInvocationException error) { throw error.InnerException ?? error; }
+                catch (TargetInvocationException error)
+                {
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error.InnerException ?? error).Throw();
+                    throw;
+                }
             }
         }
         internal static CharacterModelImport Reference(string source, string destination)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -29,7 +29,7 @@ namespace murumsWiiModStudio
         };
         public HoverHintWindow()
         {
-            TopMost = true;
+            Font = new Font("Segoe UI", 9.5F);
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
@@ -67,7 +67,8 @@ namespace murumsWiiModStudio
             get
             {
                 var p = base.CreateParams;
-                p.ExStyle |= 0x80000 | 0x20 | 0x08000000 | 0x80;
+                // TopMost als nativer Stil: Form.TopMost erzwingt beim Anzeigen den Fokus.
+                p.ExStyle |= 0x80000 | 0x20 | 0x08000000 | 0x80 | 0x8;
                 return p;
             }
         }

@@ -12,7 +12,7 @@ namespace murumsWiiModStudio
             Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(0, 0, 0, 8)
+            Padding = new Padding(0, 0, 0, 4)
         };
         protected readonly FlowLayoutPanel Footer = new FlowLayoutPanel
         {
@@ -24,23 +24,24 @@ namespace murumsWiiModStudio
             Padding = new Padding(8, 4, 8, 4)
         };
         Button primary;
+        TableLayoutPanel workspaceLayout;
         protected readonly Panel Body = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(8)
+            Padding = new Padding(4)
         };
         protected readonly Label Status = new Label
         {
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
-            Padding = new Padding(8)
+            Padding = new Padding(4)
         };
         protected StudioToolForm(string title, string subtitle, string fileExamples = null, bool recommendDisc = false)
         {
             Text = title + " — murums Wii Mod Studio";
             Size = new Size(1120, 800);
             MinimumSize = new Size(950, 680);
-            Font = new Font("Segoe UI", 10); AutoScaleMode = AutoScaleMode.Font;
+            Font = StudioTypography.Body; AutoScaleMode = AutoScaleMode.Font;
             StartPosition = FormStartPosition.CenterParent;
             try
             {
@@ -57,12 +58,13 @@ namespace murumsWiiModStudio
                 RowCount = 5,
                 Padding = new Padding(12)
             };
+            workspaceLayout = root;
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, fileExamples == null ? 118 : 152));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight + (fileExamples == null ? 0 : 26)));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
             Control header = StudioChrome.Header(title, subtitle);
             root.Controls.Add(fileExamples == null ? header : ToolFileHint.Wrap(header, fileExamples, recommendDisc), 0, 0);
             root.Controls.Add(Actions, 0, 1);
@@ -70,6 +72,14 @@ namespace murumsWiiModStudio
             root.Controls.Add(ToolStatus.Wrap(this, Status), 0, 4);
             root.Controls.Add(Footer, 0, 3);
             Controls.Add(root);
+        }
+
+        internal void PrepareWorkspace()
+        {
+            Control header = workspaceLayout.GetControlFromPosition(0, 0);
+            header.Visible = false;
+            workspaceLayout.RowStyles[0].Height = 0;
+            workspaceLayout.Padding = new Padding(8, 6, 8, 4);
         }
 
         protected void CompactWorkspace(int contentHeight)
@@ -116,21 +126,13 @@ namespace murumsWiiModStudio
             ToolStatus.Watch(this);
             if (primary != null)
             {
-                primary.BackColor = DarkTheme.Accent;
-                primary.ForeColor = Color.White;
+                DarkTheme.StylePrimary(primary);
             }
         }
 
         protected Button Action(string caption, string help, Action action)
         {
-            var b = new Button
-            {
-                Text = caption,
-                AutoSize = true,
-                Height = 34,
-                Padding = new Padding(8, 3, 8, 3),
-                Margin = new Padding(3, 8, 3, 3)
-            };
+            var b = StudioChrome.ActionButton(caption);
             b.Click += delegate
             {
                 Guard(action);

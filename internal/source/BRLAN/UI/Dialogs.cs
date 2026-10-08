@@ -1,9 +1,125 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio.Brlan
 {
+    internal static class BrlanEditSnapshots
+    {
+        internal static bool Equal(object a, object b)
+        {
+            if (Object.ReferenceEquals(a, b)) return true;
+            if (a == null || b == null || a.GetType() != b.GetType()) return false;
+            Type type = a.GetType();
+            if (type.IsValueType || a is string) return a.Equals(b);
+            var dictionary = a as System.Collections.IDictionary;
+            if (dictionary != null)
+            {
+                var other = (System.Collections.IDictionary)b;
+                if (dictionary.Count != other.Count) return false;
+                foreach (object key in dictionary.Keys) if (!other.Contains(key) || !Equal(dictionary[key], other[key])) return false;
+                return true;
+            }
+            var list = a as System.Collections.IList;
+            if (list != null)
+            {
+                var other = (System.Collections.IList)b;
+                if (list.Count != other.Count) return false;
+                for (int i = 0; i < list.Count; i++) if (!Equal(list[i], other[i])) return false;
+                return true;
+            }
+            foreach (var field in type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                if (!Equal(field.GetValue(a), field.GetValue(b))) return false;
+            return true;
+        }
+    }
+
+    internal sealed class BrlanInputHistory
+    {
+        readonly Form form;
+        readonly System.Collections.Generic.List<Control> inputs = new System.Collections.Generic.List<Control>();
+        readonly EditHistory<System.Collections.Generic.Dictionary<Control, object>> history = new EditHistory<System.Collections.Generic.Dictionary<Control, object>>(BrlanEditSnapshots.Equal);
+        bool applying, pending;
+        string group;
+        internal readonly StudioUndoRedo Actions;
+        internal BrlanInputHistory(Form owner, Control host, Func<bool> enabled)
+        {
+            form = owner;
+            Gather(owner);
+            history.Reset(Capture());
+            Actions = new StudioUndoRedo(owner, host, delegate { Flush(); return enabled() && history.CanUndo; }, delegate { Flush(); return enabled() && history.CanRedo; }, delegate { Apply(false); }, delegate { Apply(true); });
+        }
+        void Gather(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                var text = control as TextBoxBase;
+                var numeric = control as NumericUpDown;
+                var combo = control as ComboBox;
+                var check = control as CheckBox;
+                if (numeric != null) { inputs.Add(control); numeric.ValueChanged += Changed; }
+                else if (text != null && !text.ReadOnly) { inputs.Add(control); text.TextChanged += Changed; }
+                else if (combo != null) { inputs.Add(control); combo.SelectedIndexChanged += Changed; if (combo.DropDownStyle != ComboBoxStyle.DropDownList) combo.TextChanged += Changed; }
+                else if (check != null) { inputs.Add(control); check.CheckedChanged += Changed; }
+                else Gather(control);
+            }
+        }
+        System.Collections.Generic.Dictionary<Control, object> Capture()
+        {
+            var state = new System.Collections.Generic.Dictionary<Control, object>();
+            foreach (Control input in inputs)
+            {
+                if (input is NumericUpDown) state[input] = ((NumericUpDown)input).Value;
+                else if (input is CheckBox) state[input] = ((CheckBox)input).Checked;
+                else if (input is ComboBox) state[input] = new object[] { ((ComboBox)input).SelectedIndex, input.Text };
+                else state[input] = input.Text;
+            }
+            return state;
+        }
+        void Changed(object sender, EventArgs e)
+        {
+            if (applying) return;
+            pending = true;
+            group = "input:" + ((Control)sender).GetHashCode().ToString();
+        }
+        void Flush()
+        {
+            if (!pending || applying || form.IsDisposed) return;
+            pending = false;
+            history.Record(Capture(), group);
+        }
+        internal void Reset()
+        {
+            pending = false;
+            history.Reset(Capture());
+            if (Actions != null) Actions.Refresh();
+        }
+        void Apply(bool redo)
+        {
+            Flush();
+            if (redo ? !history.CanRedo : !history.CanUndo) return;
+            var state = redo ? history.Redo() : history.Undo();
+            applying = true;
+            try
+            {
+                foreach (var pair in state)
+                {
+                    if (pair.Key is NumericUpDown) ((NumericUpDown)pair.Key).Value = (decimal)pair.Value;
+                    else if (pair.Key is CheckBox) ((CheckBox)pair.Key).Checked = (bool)pair.Value;
+                    else if (pair.Key is ComboBox)
+                    {
+                        var value = (object[])pair.Value; var combo = (ComboBox)pair.Key;
+                        int index = (int)value[0];
+                        if (index < combo.Items.Count) combo.SelectedIndex = index;
+                        if (combo.DropDownStyle != ComboBoxStyle.DropDownList) combo.Text = (string)value[1];
+                    }
+                    else pair.Key.Text = (string)pair.Value;
+                }
+            }
+            finally { applying = false; pending = false; }
+        }
+    }
+
     internal static class SimpleDialogs
     {
         public static string Prompt(IWin32Window owner, string title, string label, string initial)
@@ -54,6 +170,10 @@ namespace murumsWiiModStudio.Brlan
             f.Controls.Add(cancel);
             f.AcceptButton = ok;
             f.CancelButton = cancel;
+            ArrangeActions(f, ok, cancel);
+            new BrlanInputHistory(f, ok.Parent, delegate { return true; });
+            DarkTheme.Apply(f);
+            murumsWiiModStudio.DarkTheme.StylePrimary(ok);
             DialogResult result = f.ShowDialog(owner);
             string value = result == DialogResult.OK ? box.Text : null;
             f.Dispose();
@@ -130,6 +250,10 @@ namespace murumsWiiModStudio.Brlan
             f.Controls.Add(cancel);
             f.AcceptButton = ok;
             f.CancelButton = cancel;
+            ArrangeActions(f, ok, cancel);
+            new BrlanInputHistory(f, ok.Parent, delegate { return true; });
+            DarkTheme.Apply(f);
+            murumsWiiModStudio.DarkTheme.StylePrimary(ok);
             DialogResult result = f.ShowDialog(owner);
             string value = result == DialogResult.OK ? box.Text : null;
             f.Dispose();
@@ -193,10 +317,22 @@ namespace murumsWiiModStudio.Brlan
             f.Controls.Add(cancel);
             f.AcceptButton = ok;
             f.CancelButton = cancel;
+            ArrangeActions(f, ok, cancel);
+            DarkTheme.Apply(f);
+            murumsWiiModStudio.DarkTheme.StylePrimary(ok);
             DialogResult result = f.ShowDialog(owner);
             string value = result == DialogResult.OK ? combo.SelectedItem.ToString() : null;
             f.Dispose();
             return value;
+        }
+
+        internal static void ArrangeActions(Form form, Button primary, Button cancel)
+        {
+            var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 8, 12, 12) };
+            primary.AutoSize = cancel.AutoSize = true;
+            primary.MinimumSize = cancel.MinimumSize = new Size(100, 34);
+            primary.Margin = cancel.Margin = new Padding(4, 0, 0, 0);
+            actions.Controls.Add(primary); actions.Controls.Add(cancel); form.Controls.Add(actions);
         }
 
         private static Button MakeButton(string text, int x, int y, int width)
@@ -333,6 +469,11 @@ namespace murumsWiiModStudio.Brlan
             Controls.Add(cancel);
             AcceptButton = ok;
             CancelButton = cancel;
+            ClientSize = new Size(ClientSize.Width, Math.Max(360, ClientSize.Height));
+            SimpleDialogs.ArrangeActions(this, ok, cancel);
+            new BrlanInputHistory(this, ok.Parent, delegate { return true; });
+            DarkTheme.Apply(this);
+            murumsWiiModStudio.DarkTheme.StylePrimary(ok);
         }
 
         private void AddLabel(string text, int x, int y)

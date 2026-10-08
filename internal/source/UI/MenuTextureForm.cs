@@ -9,49 +9,68 @@ namespace murumsWiiModStudio
 {
     internal sealed class MenuTextureForm : StudioToolForm
     {
+        SpecialEditorHistory editHistory;
         readonly RaceHudSession session = new RaceHudSession();
         readonly ComboBox area = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
         readonly ListBox textures = new ListBox { Dock = DockStyle.Fill, HorizontalScrollbar = true };
         readonly PictureBox preview = new murumsWiiModStudio.ZoomPanPictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
         readonly TextBox output = new TextBox { Width = 430 };
-        readonly Button replace, colours, save;
+        readonly Button replace, colours, save, batch;
+        readonly Label textureCaption = new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(4, 0, 4, 8) };
 
         public MenuTextureForm() : base("MKWii Menu Textures Tool",
-            "License settings • Top / bottom bars • Shared menu textures",
+            L.T("Lizenz-Einstellungen • Menüleisten • Gemeinsame Menütexturen", "License settings • Menu bars • Shared menu textures"),
             "Title_E.szs / Title_U.szs / Title_J.szs · Title.szs / MenuSingle.szs · PNG / JPG")
         {
-            Action("Add archive…", "Add multiple menu archives without discarding current edits.", Open).Name = "PackSourceAction";
-            Action("Clear selection", "Clear loaded archives.", delegate {
-                if (session.SelectedCount > 0 && StudioMessageBox.Show(this, "Discard pending changes?", Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            var addArchive = Action(L.T("Archiv hinzufügen…", "Add archive…"), L.T("Weitere Menüarchive hinzufügen; aktuelle Änderungen bleiben erhalten.", "Add multiple menu archives without discarding current edits."), Open);
+            addArchive.Name = "PackSourceAction";
+            StudioActions.Icon(addArchive, StudioIcon.Add);
+            var clearSelection = Action(L.T("Auswahl leeren", "Clear selection"), L.T("Geladene Archive entfernen.", "Clear loaded archives."), delegate {
+                if (session.SelectedCount > 0 && StudioMessageBox.Show(this, L.T("Vorgemerkte Änderungen verwerfen?", "Discard pending changes?"), Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
                 session.Archives.Clear(); RefreshTextures(); PackSelection.SourceCleared(this);
             });
-            area.Items.AddRange(new object[] { "Top bar", "Bottom bar", "Menu background", "All textures" });
+            StudioActions.Icon(clearSelection, StudioIcon.Remove);
+            area.Items.AddRange(new object[] { L.T("Obere Leiste", "Top bar"), L.T("Untere Leiste", "Bottom bar"), L.T("Menühintergrund", "Menu background"), L.T("Alle Texturen", "All textures") });
             area.SelectedIndex = 0;
             area.SelectedIndexChanged += delegate { RefreshTextures(); };
-            Actions.Controls.Add(new Label { Text = L.T("Kategorie", "Category"), AutoSize = true, Margin = new Padding(3, 8, 4, 0) });
-            Actions.Controls.Add(area);
-            replace = Action("Replace picture...", "Replace this texture; all layouts using it are affected.", Replace);
-            colours = Action("Colours...", "Recolour the selected texture.", Recolour);
-            var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 360, Width = 950 };
-            split.SizeChanged += delegate
-            {
-                if (split.ClientSize.Width > 250)
-                    split.SplitterDistance = (split.ClientSize.Width - split.SplitterWidth) * 2 / 5;
-            };
-            split.Panel1.Controls.Add(textures);
-            split.Panel2.Controls.Add(preview);
+            replace = Action(L.T("Bild ersetzen…", "Replace picture…"), L.T("Textur ersetzen; betrifft alle Layouts, die sie verwenden.", "Replace this texture; all layouts using it are affected."), Replace);
+            StudioActions.Icon(replace, StudioIcon.Import);
+            colours = Action(L.T("Farben…", "Colours…"), L.T("Ausgewählte Textur umfärben.", "Recolour the selected texture."), Recolour);
+            batch = Action(L.T("Texturen gesammelt…", "Batch textures…"), L.T("Alle TPL-Bilder der geladenen Archive als PNGs exportieren und nach Ergebnisvorschau gemeinsam importieren.", "Export all TPL images in loaded archives as PNGs and import them together after reviewing encoded results."), Batch);
+            var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 278, Width = 950, Panel1MinSize = 180, Panel2MinSize = 280 };
+            var browser = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+            browser.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            browser.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            browser.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            browser.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            browser.Controls.Add(new Label { Text = L.T("Kategorie", "Category"), AutoSize = true }, 0, 0);
+            area.Dock = DockStyle.Fill;
+            browser.Controls.Add(area, 0, 1);
+            browser.Controls.Add(textures, 0, 2);
+            split.Panel1.Controls.Add(browser);
+            var imageWorkspace = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+            imageWorkspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            imageWorkspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            imageWorkspace.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            imageWorkspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            imageWorkspace.Controls.Add(textureCaption, 0, 0);
+            imageWorkspace.Controls.Add(preview, 0, 1);
+            var textureActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+            textureActions.Controls.Add(replace); textureActions.Controls.Add(colours);
+            imageWorkspace.Controls.Add(textureActions, 0, 2);
+            split.Panel2.Controls.Add(imageWorkspace);
             Body.Controls.Add(split);
             textures.SelectedIndexChanged += delegate { ShowTexture(); };
             Footer.Controls.Add(new Label { Text = "Output location", AutoSize = true });
             Footer.Controls.Add(output);
-            var browse = ExportAction("Browse...", "Choose the output folder.", delegate
+            var browse = ExportAction(L.T("Ausgabeordner wählen…", "Choose output folder…"), L.T("Ausgabeordner wählen.", "Choose the output folder."), delegate
             {
                 using (var picker = new FolderPickerDialog { SelectedPath = output.Text })
                     if (picker.ShowDialog(this) == DialogResult.OK)
                         output.Text = picker.SelectedPath;
             }, false);
-            browse.MinimumSize = new Size(100, 36);
-            save = ExportAction("Save edited archive", "Save a copy; the opened source stays unchanged.", delegate
+            StudioActions.Icon(browse, StudioIcon.Folder);
+            save = ExportAction(L.T("Archivkopien speichern", "Save archive copies"), L.T("Separate Kopien speichern; geöffnete Quellen bleiben unverändert.", "Save separate copies; opened sources stay unchanged."), delegate
             {
                 session.Save(output.Text, false);
                 ExportHelp.Show(this, output.Text);
@@ -64,7 +83,7 @@ namespace murumsWiiModStudio
             exportRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             exportRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             exportRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            exportRow.Controls.Add(new Label { Text = "Output location", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+            exportRow.Controls.Add(new Label { Text = L.T("Ausgabeordner", "Output folder"), AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
             output.Dock = DockStyle.Fill;
             output.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             exportRow.Controls.Add(output, 1, 0);
@@ -77,7 +96,16 @@ namespace murumsWiiModStudio
             FormClosed += delegate { if (preview.Image != null) preview.Image.Dispose(); };
             Finish();
             RefreshTextures();
+            InitializeHistory();
         }
+
+        void InitializeHistory()
+        {
+            editHistory = new SpecialEditorHistory(this, Actions, session.CaptureEdits,
+                delegate(object[] state) { session.RestoreEdits(state); RefreshTextures(); },
+                delegate { return session.SourceIdentity; });
+        }
+
 
         protected override void OnPackSelected(CustomPack pack)
         {
@@ -154,6 +182,9 @@ namespace murumsWiiModStudio
             preview.Image = null;
             var texture = textures.SelectedItem as HudTexture;
             replace.Enabled = colours.Enabled = texture != null;
+            batch.Enabled = session.Archives.Count > 0;
+            textureCaption.Text = texture == null ? L.T("Wähle links eine Textur.", "Choose a texture on the left.") : Path.GetFileName(texture.Key);
+            if (texture != null) StudioUx.SetHelp(textureCaption, Path.GetFileName(texture.Archive.Source) + "\n" + texture.Key);
             save.Enabled = session.SelectedCount > 0;
             if (texture == null) return;
             TexturePreviewResult decoded;
@@ -178,10 +209,30 @@ namespace murumsWiiModStudio
         {
             var texture = textures.SelectedItem as HudTexture;
             if (texture == null) return;
-            using (var editor = new HudTextureColorForm(texture.Key, SelectedData(texture)))
-                if (editor.ShowDialog(this) == DialogResult.OK && editor.Result != null)
+            var editor = new HudTextureColorForm(texture.Key, SelectedData(texture));
+            StudioEditor.Open(this, editor, delegate(DialogResult result) {
+                if (result == DialogResult.OK && editor.Result != null)
                     texture.Archive.Generated[texture.Key] = editor.Result;
-            ShowTexture();
+                ShowTexture();
+                if (result == DialogResult.OK && editHistory != null) { editHistory.Observe(); editHistory.Binding.Refresh(); }
+            });
+        }
+
+        void Batch()
+        {
+            var editor = new TextureBatchForm(TextureBatch.Capture(session));
+            StudioEditor.Open(this, editor, delegate(DialogResult result)
+            {
+                if (result != DialogResult.OK || editor.Result == null) return;
+                Guard(delegate
+                {
+                    TextureBatch.Apply(session, editor.Result);
+                    if (editHistory != null) { editHistory.Observe(); editHistory.Binding.Refresh(); }
+                    RefreshTextures();
+                    Status.Text = L.T("Textur-Sammelimport übernommen. Rückgängig stellt den gesamten vorherigen Arbeitsstand wieder her.",
+                        "Batch texture import applied. Undo restores the entire previous edit state.");
+                });
+            });
         }
     }
 }

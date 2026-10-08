@@ -29,6 +29,10 @@ namespace murumsWiiModStudio
         string rememberedFolder;
         string rrFolder;
         string[] rrFiles = new string[0];
+        SpecialEditorHistory editHistory;
+        TabControl workflowSteps;
+        Button nextStep, previousStep;
+        readonly Label contentState = new Label { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(6) };
         readonly TextBox rrPath = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
         readonly PackSelectionStrip sourceBar = new PackSelectionStrip { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(4), ColumnCount = 6 };
         readonly Label sourceHint = new Label
@@ -42,34 +46,38 @@ namespace murumsWiiModStudio
         internal CustomPackMakerForm() : base("RR-MKWii Custom Pack Maker Tool",
             L.T("RR-Ordner wählen • Fehlende Dateien ergänzen • Pack erstellen", "Choose RR folder • Add missing files • Create pack"))
         {
-            chooseRr = Action(L.T("1. RR-Ordner wählen…", "1. Choose RR folder…"), "Select your installed Retro Rewind version as the pack base.", ChooseRrFolder);
-            addIso = Action(L.T("2. ISO ergänzen…", "2. Add missing from ISO…"), "Only files absent from RR are offered. RR menu backgrounds are never replaced.", delegate
+            chooseRr = Action(L.T("RR-Ordner wählen…", "Choose RR folder…"), L.T("Installierten Retro-Rewind-Ordner als Grundlage des Packs wählen.", "Select your installed Retro Rewind version as the pack base."), ChooseRrFolder);
+            addIso = Action(L.T("ISO ergänzen…", "Add missing from ISO…"), L.T("Nur in RR fehlende Dateien ergänzen. RR-Menühintergründe bleiben erhalten.", "Only files absent from RR are offered. RR menu backgrounds are never replaced."), delegate
             {
                 RequireRrFolder();
                 using (var picker = new OpenFileDialog { Filter = "ISO / WBFS|*.iso;*.wbfs;*.wia;*.ciso;*.wdf" })
                     if (picker.ShowDialog(this) == DialogResult.OK)
-                        using (var dialog = new PackArchivePicker(picker.FileName, rrFiles.Select(Path.GetFileName).ToArray()))
-                            if (dialog.ShowDialog(this) == DialogResult.OK)
-                                AddFiles(dialog.ImportedPaths);
+                    {
+                        var dialog = new PackArchivePicker(picker.FileName, rrFiles.Select(Path.GetFileName).ToArray());
+                        StudioEditor.Open(this, dialog, delegate(DialogResult result) { if (result == DialogResult.OK) AddFiles(dialog.ImportedPaths); });
+                    }
             });
-            addModels = Action(L.T("Modelldateien hinzufügen…", "Add model files…"), "Add missing Earth.szs, BackModel.szs or globe.arc. RR files take priority.", delegate
+            addModels = Action(L.T("Modelldateien…", "Model files…"), L.T("Fehlende Earth.szs, BackModel.szs oder globe.arc ergänzen. RR-Dateien haben Vorrang.", "Add missing Earth.szs, BackModel.szs or globe.arc. RR files take priority."), delegate
             {
                 RequireRrFolder();
                 using (var picker = new OpenFileDialog { Filter = "Tool model sources|Earth.szs;BackModel.szs;globe.arc", Multiselect = true })
                     if (picker.ShowDialog(this) == DialogResult.OK)
                         AddFiles(picker.FileNames);
             });
-            Action(L.T("Pack hinzufügen…", "Add existing pack…"), "Add an existing pack to your saved packs.", RememberPack);
-            var removeFiles = Action(L.T("Auswahl entfernen", "Remove selected"), "Remove files from this list only.", delegate
+            Action(L.T("Pack hinzufügen…", "Add existing pack…"), L.T("Vorhandenen Pack-Ordner zur Pack-Liste hinzufügen.", "Add an existing pack to your saved packs."), RememberPack);
+            var removeFiles = Action(L.T("Auswahl entfernen", "Remove selected"), L.T("Dateien nur aus dieser Liste entfernen.", "Remove files from this list only."), delegate
             {
                 foreach (object file in files.SelectedItems.Cast<object>().ToArray()) files.Items.Remove(file);
                 UpdateSourceHint();
+                if (editHistory != null) editHistory.Observe();
             });
             removeFiles.Enabled = false;
             files.SelectedIndexChanged += delegate { removeFiles.Enabled = files.SelectedItems.Count > 0; };
             var actionLayout = (TableLayoutPanel)Actions.Parent;
             int actionRow = actionLayout.GetRow(Actions);
-            int column = 0;
+            sourceBar.ColumnCount = 1;
+            sourceBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            var sourceActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Margin = Padding.Empty };
             foreach (Button button in Actions.Controls.OfType<Button>().ToArray())
             {
                 button.Padding = new Padding(4, 0, 4, 0);
@@ -79,13 +87,12 @@ namespace murumsWiiModStudio
                 button.Height = 30;
                 button.Anchor = AnchorStyles.Left;
                 button.BackColor = DarkTheme.Panel2;
-                sourceBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                sourceBar.Controls.Add(button, column++, 0);
+                sourceActions.Controls.Add(button);
             }
-            sourceBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            sourceBar.Controls.Add(sourceActions, 0, 0);
             actionLayout.Controls.Remove(Actions);
             actionLayout.Controls.Add(sourceBar, 0, actionRow);
-            sourceHint.Font = new Font(Font.FontFamily, 16, FontStyle.Bold);
+            sourceHint.Font = new Font(Font.FontFamily, 11, FontStyle.Bold);
             sourceHint.Disposed += delegate { sourceHint.Font.Dispose(); };
             sourceHint.Paint += delegate(object sender, PaintEventArgs e)
             {
@@ -108,11 +115,12 @@ namespace murumsWiiModStudio
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             AddRow(grid, 0, L.T("Pack-Name", "Pack name"), packName);
-            AddRow(grid, 1, L.T("Pack-Beschreibung", "Pack description"), description);
+            AddRow(grid, 1, L.T("Beschreibung", "Description"), description);
             AddRow(grid, 2, L.T("Pfadvorlage", "Path preset"), template);
             template.Items.AddRange(new object[] { "WheelWizard — Custom Packs", "Dolphin — Riivolution", L.T("Dolphin — Dokumente (älter)", "Dolphin — Documents (legacy)") });
-            AddRow(grid, 3, L.T("Pack-Speicherort", "Pack location"), destination);
-            var browse = new Button { Text = "Browse...", AutoSize = true };
+            AddRow(grid, 3, L.T("Speicherort", "Location"), destination);
+            var browse = new Button { Text = L.T("Speicherort wählen…", "Choose location…"), AutoSize = true };
+            StudioActions.Icon(browse, StudioIcon.Folder);
             browse.Click += delegate
             {
                 using (var picker = new FolderPickerDialog { SelectedPath = destination.Text })
@@ -173,7 +181,7 @@ namespace murumsWiiModStudio
             foreach (Control control in grid.Controls.Cast<Control>().OrderByDescending(c => grid.GetRow(c)).ToArray())
                 if (grid.GetRow(control) >= 3) grid.SetRow(control, grid.GetRow(control) + 1);
             grid.RowStyles.Insert(3, new RowStyle(SizeType.AutoSize));
-            AddRow(grid, 3, L.T("INI-Einstellungen", "INI settings"), metadata);
+            AddRow(grid, 3, L.T("Pack-INI", "Pack INI"), metadata);
             grid.SetColumnSpan(metadata, 2);
             StudioUx.SetHelp(modId, L.T("-1 für ein eigenes lokales Pack beibehalten, sofern keine ModID vorliegt.", "Keep -1 for a local custom pack unless you have a ModID."));
             StudioUx.SetHelp(priority, L.T("Prioritätswert in der Pack-INI. Standard: 0.", "Priority value written to the pack INI. Default: 0."));
@@ -213,8 +221,8 @@ namespace murumsWiiModStudio
             StudioUx.DisableHover(packName);
             StudioUx.DisableHover(description);
             StudioUx.DisableHover(destination);
-            MinimumSize = new Size(950, 870);
-            Size = new Size(1140, 900);
+            MinimumSize = new Size(950, 680);
+            Size = new Size(1140, 850);
             files.FormattingEnabled = true;
             files.Format += delegate(object sender, ListControlConvertEventArgs e)
             {
@@ -227,11 +235,123 @@ namespace murumsWiiModStudio
                 }
             };
             RefreshPacks();
-            CompactWorkspace(760);
+            Body.Controls.Remove(grid);
+            var sourcePages = new DarkTabControl { Dock = DockStyle.Fill };
+            workflowSteps = sourcePages;
+            var sourcePage = new TabPage(L.T("1  RR-Quelle", "1  RR source")) { Padding = new Padding(16) };
+            var selectionPage = new TabPage(L.T("2  Pack-Inhalt", "2  Pack content")) { Padding = new Padding(6) };
+            var finishPage = new TabPage(L.T("3  Pack erstellen", "3  Create pack")) { Padding = new Padding(6) };
+            var savedPage = new TabPage(L.T("Pack-Liste verwalten", "Manage pack list")) { Padding = new Padding(6) };
+            var sourceFields = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(12), MaximumSize = new Size(720, 0) };
+            sourceFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            sourceFields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var sourceTitle = new Label { Text = L.T("Wähle deine Retro-Rewind-Installation und die Spielregion.", "Choose your Retro Rewind installation and game region."), Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 0, 0, 16) };
+            sourceFields.Controls.Add(sourceTitle, 0, 0); sourceFields.SetColumnSpan(sourceTitle, 2);
+            foreach (Control label in grid.Controls.Cast<Control>().Where(c => grid.GetRow(c) < 2 && c is Label).ToArray()) label.Dispose();
+            sourceFields.Controls.Add(rrPath, 0, 1);
+            sourceFields.Controls.Add(chooseRr, 1, 1);
+            sourceFields.Controls.Add(new Label { Text = L.T("Region deiner Spielkopie", "Your game copy's region"), AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(3, 14, 3, 3) }, 0, 2);
+            sourceFields.SetColumnSpan(sourceFields.GetControlFromPosition(0, 2), 2);
+            sourceFields.Controls.Add(region, 0, 3); sourceFields.SetColumnSpan(region, 2);
+            sourceHint.AutoSize = true;
+            sourceHint.Dock = DockStyle.Fill;
+            sourceFields.Controls.Add(sourceHint, 0, 4); sourceFields.SetColumnSpan(sourceHint, 2);
+            sourcePage.Controls.Add(sourceFields);
+            var selection = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+            selection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            selection.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            selection.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            selection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            selection.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            selection.Controls.Add(fileHeading, 0, 0);
+            var fileActions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+            fileActions.Controls.AddRange(new Control[] { addIso, addModels, removeFiles });
+            selection.Controls.Add(fileActions, 0, 1);
+            selection.Controls.Add(fileArea, 0, 2);
+            selection.Controls.Add(contentState, 0, 3);
+            selectionPage.Controls.Add(selection);
+            var saved = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            saved.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            saved.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            saved.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            packActions.WrapContents = true;
+            saved.Controls.Add(packActions, 0, 0);
+            saved.Controls.Add(packs, 0, 1);
+            savedPage.Controls.Add(saved);
+            sourcePages.TabPages.AddRange(new[] { sourcePage, selectionPage, finishPage, savedPage });
+            DarkTheme.StyleTabs(sourcePages);
+            var settings = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(12), BackColor = DarkTheme.Panel };
+            grid.Controls.Remove(note);
+            grid.RowCount = 9;
+            while (grid.RowStyles.Count > 9) grid.RowStyles.RemoveAt(grid.RowStyles.Count - 1);
+            grid.ColumnStyles[0].Width = 104;
+            grid.Dock = DockStyle.Top;
+            grid.AutoSize = true;
+            grid.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            grid.RowStyles[4].SizeType = SizeType.Absolute;
+            grid.RowStyles[4].Height = 72;
+            grid.RowStyles[6].SizeType = SizeType.AutoSize;
+            grid.RowCount = 10;
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            note.MaximumSize = new Size(306, 0);
+            note.Text = L.T("Eigene Pfade über das Ordner-Symbol wählen. Kopiert ausgewählte .szs und globe.arc. IsEnabled bleibt ohne Haken deaktiviert.",
+                "Use the folder icon for custom paths. Copies selected .szs files and globe.arc. IsEnabled stays off unless checked.");
+            grid.Controls.Add(note, 0, 9);
+            grid.SetColumnSpan(note, 3);
+            settings.Controls.Add(grid);
+            finishPage.Controls.Add(settings);
+            Body.Controls.Add(sourcePages);
+            foreach (Control remaining in sourceActions.Controls.Cast<Control>().ToArray()) remaining.Parent = packActions;
+            sourceActions.Controls.Clear();
+            previousStep = new Button { Text = L.T("Zurück", "Back"), AutoSize = true };
+            nextStep = new Button { Text = L.T("Weiter", "Next"), AutoSize = true };
+            DarkTheme.StylePrimary(nextStep);
+            previousStep.Click += delegate { if (sourcePages.SelectedIndex > 0) sourcePages.SelectedIndex--; };
+            nextStep.Click += delegate { if (sourcePages.SelectedIndex < 2) sourcePages.SelectedIndex++; };
+            sourceActions.Controls.Add(previousStep); sourceActions.Controls.Add(nextStep);
+            sourcePages.Selecting += delegate(object sender, TabControlCancelEventArgs e)
+            {
+                if (e.TabPageIndex == 1 && (RrProblem() != null || region.SelectedIndex <= 0)) { e.Cancel = true; Status.Text = L.T("Zuerst RR-Ordner und Spielregion wählen.", "Choose the RR folder and game region first."); }
+                if (e.TabPageIndex == 2 && SourceProblem() != null) { e.Cancel = true; Status.Text = SourceProblem(); }
+            };
+            sourcePages.SelectedIndexChanged += delegate { UpdateWorkflowActions(); };
+            removeFiles.MaximumSize = Size.Empty;
+            StudioActions.Icon(removeFiles, StudioIcon.Remove);
             Finish();
-            Controls.Add(sourceHint);
-            Layout += delegate { if (!sourceHint.IsDisposed) PositionSourceHint(); };
+            sourceFields.SizeChanged += delegate { if (!sourceHint.IsDisposed) PositionSourceHint(); };
             UpdateSourceHint();
+            editHistory = new SpecialEditorHistory(this, null, CaptureSettings, RestoreSettings);
+            sourceBar.RowCount = 2;
+            sourceBar.Controls.Add(editHistory.Binding.Panel, 0, 1);
+            sourceBar.SetColumnSpan(editHistory.Binding.Panel, sourceBar.ColumnCount);
+            UpdateWorkflowActions();
+        }
+
+        void UpdateWorkflowActions()
+        {
+            if (workflowSteps == null || nextStep == null) return;
+            int step = workflowSteps.SelectedIndex;
+            previousStep.Visible = step > 0 && step < 3;
+            nextStep.Visible = step < 2;
+            nextStep.Enabled = step == 0 ? RrProblem() == null && region.SelectedIndex > 0 : SourceProblem() == null;
+            create.Visible = step == 2;
+            Footer.Visible = step == 2;
+            contentState.Text = SourceProblem() ?? L.T("Alle benötigten Quellen sind vorhanden. Weiter zu Name und Speicherort.", "All required sources are available. Continue to name and location.");
+        }
+
+        object[] CaptureSettings()
+        {
+            return new object[] { packName.Text, author.Text, description.Text, template.SelectedIndex, destination.Text,
+                modId.Value, priority.Value, enabled.Checked, region.SelectedIndex, files.Items.Cast<object>().ToArray() };
+        }
+
+        void RestoreSettings(object[] state)
+        {
+            packName.Text = (string)state[0]; author.Text = (string)state[1]; description.Text = (string)state[2];
+            template.SelectedIndex = (int)state[3]; destination.Text = (string)state[4];
+            modId.Value = (decimal)state[5]; priority.Value = (decimal)state[6]; enabled.Checked = (bool)state[7];
+            region.SelectedIndex = (int)state[8]; files.Items.Clear(); files.Items.AddRange((object[])state[9]);
+            files.Refresh(); UpdateSourceHint();
         }
 
         void RequireRrFolder()
@@ -246,13 +366,13 @@ namespace murumsWiiModStudio
             string wheelWizard = Path.Combine(Path.GetDirectoryName(dolphin), "WheelWizard", "RetroRewind6");
             string[] detected = RetroRewindSource.Discover();
             string[] found = new[] { wheelWizard, dolphin }.Concat(detected).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            using (var dialog = new Form { Text = L.T("Retro-Rewind-Quelle", "Retro Rewind source"), Font = new Font("Segoe UI", 9), Icon = Icon, AutoScaleMode = AutoScaleMode.Font, ClientSize = new Size(900, 380),
-                MinimumSize = new Size(800, 390), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false })
+            var dialog = new Form { Text = L.T("Retro-Rewind-Quelle", "Retro Rewind source"), Font = new Font("Segoe UI", 9), Icon = Icon, AutoScaleMode = AutoScaleMode.Font, ClientSize = new Size(900, 380),
+                MinimumSize = new Size(800, 390), StartPosition = FormStartPosition.CenterParent, ShowInTaskbar = false };
             {
                 var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 2, RowCount = 4 };
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
                 layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -289,11 +409,11 @@ namespace murumsWiiModStudio
                 var use = new Button { Text = L.T("RR-Dateien übernehmen", "Use RR files"), AutoSize = true, Height = 34, Anchor = AnchorStyles.Right, Enabled = paths.SelectedIndex >= 0 };
                 paths.SelectedIndexChanged += delegate { use.Enabled = paths.SelectedIndex >= 0; };
                 use.Click += delegate {
-                    try { LoadRrFolder((string)paths.SelectedItem); dialog.DialogResult = DialogResult.OK; }
+                    try { LoadRrFolder((string)paths.SelectedItem); dialog.DialogResult = DialogResult.OK; dialog.Close(); }
                     catch (Exception error) { StudioMessageBox.Show(dialog, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
                 };
                 layout.Controls.Add(use, 0, 3); layout.SetColumnSpan(use, 2);
-                dialog.Controls.Add(layout); DarkTheme.Apply(dialog); dialog.ShowDialog(this);
+                dialog.Controls.Add(layout); DarkTheme.Apply(dialog); StudioEditor.Open(this, dialog, delegate { });
             }
         }
 
@@ -308,6 +428,7 @@ namespace murumsWiiModStudio
             files.Items.AddRange(staged);
             Status.Text = staged.Length + L.T(" RR-Dateien bereit. ISO ergänzt nur fehlende Dateien.", " RR files ready. ISO adds missing files only.");
             UpdateSourceHint();
+            if (editHistory != null) { editHistory.Reset(); editHistory.Binding.Refresh(); }
         }
 
         void AddFiles(string[] paths)
@@ -325,6 +446,7 @@ namespace murumsWiiModStudio
             }
             Status.Text = files.Items.Count + L.T(" Dateien ausgewählt.", " files selected.");
             UpdateSourceHint();
+            if (editHistory != null) editHistory.Observe();
         }
 
         void UpdateSourceHint()
@@ -333,15 +455,12 @@ namespace murumsWiiModStudio
             string[] missing = RequiredModels.Where(name => !files.Items.Cast<string>()
                 .Any(path => File.Exists(path) && Path.GetFileName(path).Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
             bool ready = rrReady && missing.Length == 0;
-            Body.Enabled = ready;
+            Body.Enabled = true;
             Footer.Enabled = ready;
-            sourceHint.Visible = !ready;
+            sourceHint.Visible = !rrReady || region.SelectedIndex <= 0;
             sourceHint.Text = rrReady
-                ? L.T("Schritt 2: Fehlende Dateien aus deiner ISO/WBFS ergänzen.",
-                    "Step 2: Add missing files from your ISO/WBFS.") + Environment.NewLine
-                    + L.T("Benötigt: ", "Required: ") + String.Join(", ", missing) + "." + Environment.NewLine
-                    + L.T("Danach werden die Pack-Einstellungen freigeschaltet.",
-                        "Pack settings unlock when these files are ready.")
+                ? L.T("Wähle PAL, USA oder Japan passend zu deiner Spielkopie. Danach prüfst du den Pack-Inhalt.",
+                    "Choose PAL, USA or Japan to match your game copy. Then review the pack content.")
                 : L.T("Wähle zuerst deinen Retro-Rewind-Ordner.", "Select your Retro Rewind folder first.")
                     + Environment.NewLine + L.T("RR-Dateien bilden die Grundlage deines Packs.", "RR files form the base of your pack.")
                     + Environment.NewLine + L.T("Ergänze danach nur fehlende Dateien aus deiner ISO/WBFS.",
@@ -349,10 +468,13 @@ namespace murumsWiiModStudio
             addIso.Enabled = addModels.Enabled = rrReady;
             chooseRr.Name = rrReady ? "" : "PackSourceAction";
             addIso.Name = rrReady && !ready ? "PackSourceAction" : "";
-            chooseRr.BackColor = addIso.BackColor = DarkTheme.Panel2;
-            sourceBar.Required = !ready;
-            sourceBar.SourceRequired = !ready;
+            if (rrReady) DarkTheme.StyleNeutral(chooseRr);
+            else DarkTheme.StylePrimary(chooseRr);
+            if (rrReady && !ready) { DarkTheme.StylePrimary(addIso); DarkTheme.StylePrimary(addModels); }
+            else { DarkTheme.StyleNeutral(addIso); DarkTheme.StyleNeutral(addModels); }
+            sourceBar.Required = sourceBar.SourceRequired = false;
             UpdatePreview();
+            UpdateWorkflowActions();
             PositionSourceHint();
             if (sourceHint.Visible) sourceHint.BringToFront();
         }
@@ -360,12 +482,7 @@ namespace murumsWiiModStudio
         void PositionSourceHint()
         {
             if (sourceHint.Parent == null) return;
-            float scale = Font.Size / 9f;
-            int top = PointToClient(sourceBar.PointToScreen(new Point(0, sourceBar.Height))).Y;
-            int width = Math.Max(1, Math.Min((int)(720 * scale), ClientSize.Width - (int)(48 * scale)));
-            int height = Math.Min((int)(132 * scale), Math.Max(1, ClientSize.Height - top - (int)(50 * scale)));
-            sourceHint.Bounds = new Rectangle((ClientSize.Width - width) / 2,
-                top + Math.Max(12, (ClientSize.Height - top - height) / 2), width, height);
+            sourceHint.MaximumSize = new Size(Math.Max(200, sourceHint.Parent.ClientSize.Width - 12), 0);
             sourceHint.BringToFront();
         }
 

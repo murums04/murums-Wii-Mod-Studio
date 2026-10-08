@@ -7,6 +7,7 @@ namespace murumsWiiModStudio
 {
     internal sealed class HudTextureColorForm : StudioToolForm
     {
+        SpecialEditorHistory editHistory;
         readonly byte[] source;
         readonly string key;
         Color dark = Color.Black, light = Color.White;
@@ -18,11 +19,11 @@ namespace murumsWiiModStudio
         };
         readonly Button apply, darkButton, lightButton;
         public byte[] Result;
-        public HudTextureColorForm(string name, byte[] bytes) : base("HUD Texture Colours", "Choose base and outline colours • Apply directly or preview first")
+        public HudTextureColorForm(string name, byte[] bytes) : base(L.T("HUD-Textur färben", "HUD texture colours"), L.T("Grund- und Konturfarbe wählen • Vorschau prüfen • Übernehmen", "Choose base and outline colours • Preview • Apply"))
         {
             source = bytes;
             key = name;
-            darkButton = Action("Base colour…", "Replace dark pixels. Transparent areas stay transparent.", delegate
+            darkButton = Action(L.T("Grundfarbe…", "Base colour…"), L.T("Dunkle Pixel ersetzen. Transparente Bereiche bleiben transparent.", "Replace dark pixels. Transparent areas stay transparent."), delegate
             {
                 using (var d = new ColorDialog
                 {
@@ -38,7 +39,7 @@ namespace murumsWiiModStudio
                         Preview();
                     }
             });
-            lightButton = Action("Outline colour…", "Replace light pixels. Intermediate shades blend between both colours; this does not create a new outline.", delegate
+            lightButton = Action(L.T("Konturfarbe…", "Outline colour…"), L.T("Helle Pixel ersetzen. Zwischenwerte mischen beide Farben; es entsteht keine zusätzliche Kontur.", "Replace light pixels. Intermediate shades blend between both colours; this does not create a new outline."), delegate
             {
                 using (var d = new ColorDialog
                 {
@@ -54,8 +55,8 @@ namespace murumsWiiModStudio
                         Preview();
                     }
             });
-            Action("Preview colours", "Preview the encoded texture in its original format before applying.", Preview);
-            apply = ExportAction("Apply colours", "Queue this texture in Race HUD. Save edited archives there to write the copy.", delegate
+            Action(L.T("Farben prüfen", "Preview colours"), L.T("Die umgewandelte Textur vor dem Übernehmen im Originalformat prüfen.", "Preview the encoded texture in its original format before applying."), Preview).Name = "HudColourPreview";
+            apply = ExportAction(L.T("Farben übernehmen", "Apply colours"), L.T("Diese Textur in Rennanzeigen übernehmen. Dort die bearbeiteten Archive als Kopie speichern.", "Queue this texture in Race HUD. Save edited archives there to write the copy."), delegate
             {
                 ApplyColours();
 
@@ -64,6 +65,12 @@ namespace murumsWiiModStudio
             Finish();
             InvalidatePreview();
             ShowTexture(source);
+            editHistory = new SpecialEditorHistory(this, Actions,
+                delegate { return new object[] { dark, light, Result }; },
+                delegate(object[] state) {
+                    dark = (Color)state[0]; light = (Color)state[1]; InvalidatePreview();
+                    Result = (byte[])state[2]; ShowTexture(Result ?? source);
+                });
         }
 
         void InvalidatePreview()
@@ -71,11 +78,11 @@ namespace murumsWiiModStudio
             Result = null;
             if (apply != null)
                 apply.Enabled = true;
-            darkButton.Text = "Base: #" + (dark.ToArgb() & 0xffffff).ToString("X6");
-            lightButton.Text = "Outline: #" + (light.ToArgb() & 0xffffff).ToString("X6");
+            darkButton.Text = L.T("Grundfarbe: #", "Base: #") + (dark.ToArgb() & 0xffffff).ToString("X6");
+            lightButton.Text = L.T("Kontur: #", "Outline: #") + (light.ToArgb() & 0xffffff).ToString("X6");
             ColourButton.SetColor(darkButton, dark);
             ColourButton.SetColor(lightButton, light);
-            Status.Text = "Dark pixels = base; light pixels = outline. Transparency is preserved.\nSelect pressed/released textures separately. Grayscale formats and game tinting can limit colours.";
+            Status.Text = L.T("Dunkle Pixel = Grundfarbe; helle Pixel = Kontur. Transparenz bleibt erhalten.\nTexturen für gedrückte und losgelassene Tasten separat wählen. Graustufenformate und Einfärbung im Spiel können Farben begrenzen.", "Dark pixels = base; light pixels = outline. Transparency is preserved.\nSelect pressed/released textures separately. Grayscale formats and game tinting can limit colours.");
         }
 
         void ApplyColours()

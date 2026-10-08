@@ -27,7 +27,7 @@ namespace murumsWiiModStudio
             archive = new StudioArchiveCopy(source);
             Controls.Add(viewport); Controls.Add(information); Controls.Add(choices);
             var header = StudioChrome.Header(L.T("Menümodelle", "Menu models"), L.T("Originalgeometrie und Texturen • Ziehen zum Drehen • Mausrad zum Zoomen", "Original geometry and textures • Drag to orbit • Wheel to zoom"));
-            header.Dock = DockStyle.Top; header.Height = 115; Controls.Add(header);
+            header.Dock = DockStyle.Top; header.Height = StudioChrome.HeaderHeight; Controls.Add(header);
             foreach (var entry in visibility.Keys) choices.Items.Add(entry);
             choices.SelectedIndexChanged += delegate { if (ready) LoadModel(); };
             Shown += delegate { ready = true; if (choices.SelectedIndex < 0 && choices.Items.Count > 0) choices.SelectedIndex = 0; };

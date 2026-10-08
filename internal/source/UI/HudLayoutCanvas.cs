@@ -37,6 +37,7 @@ namespace murumsWiiModStudio
         HudResizeGesture resize;
         public HudLayoutCanvas()
         {
+            StudioPreview.AddExpandButton(this);
             DoubleBuffered = true;
             BackColor = Color.FromArgb(37, 38, 46);
             Dock = DockStyle.Fill;

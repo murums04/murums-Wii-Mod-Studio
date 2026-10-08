@@ -1,4 +1,6 @@
-﻿param([string]$OutputPath)
+param([string]$OutputPath)
+. (Join-Path $PSScriptRoot 'build-guard.ps1')
+Invoke-StudioBuild {
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 if(-not $OutputPath){$OutputPath=Join-Path (Split-Path -Parent $root) '81_murums_Wii_Studio/murums Wii Mod Studio.exe'}
@@ -21,7 +23,7 @@ $chrome=Join-Path $PSScriptRoot 'build/SETUP_CHROME.dll'
 & $csc /nologo /target:library /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/out:$chrome" (Join-Path $PSScriptRoot 'tools/SETUP_CHROME.cs')
 if($LASTEXITCODE -ne 0){throw 'Setup UI compilation failed'}
 $uninstaller=Join-Path $PSScriptRoot 'build/Uninstall.exe'
-& $csc /nologo /target:winexe /define:STUDIO_UNINSTALLER /codepage:65001 /r:System.Windows.Forms.dll "/out:$uninstaller" "/win32icon:$PSScriptRoot/source/App/murums.ico" "/win32manifest:$PSScriptRoot/source/App/app.manifest" (Join-Path $PSScriptRoot 'tools/UNINSTALL_LAUNCHER.cs') (Join-Path $PSScriptRoot 'source/App/AssemblyInfo.cs')
+& $csc /nologo /target:winexe /define:STUDIO_UNINSTALLER /codepage:65001 /r:System.Drawing.dll /r:System.Windows.Forms.dll "/out:$uninstaller" "/win32icon:$PSScriptRoot/source/App/murums.ico" "/win32manifest:$PSScriptRoot/source/App/app.manifest" (Join-Path $PSScriptRoot 'tools/UNINSTALL_LAUNCHER.cs') (Join-Path $PSScriptRoot 'source/App/AssemblyInfo.cs') (Join-Path $PSScriptRoot 'tools/SETUP_CHROME.cs')
 if($LASTEXITCODE -ne 0){throw 'Uninstaller compilation failed'}
 $files['Uninstall.exe']=$uninstaller
 $files['internal/tools/SETUP_CHROME.dll']=$chrome
@@ -50,5 +52,9 @@ try {
         throw ('Installer package and update allowlist differ: ' + (($difference | ForEach-Object InputObject) -join ', '))
     }
 } finally { $embeddedZip.Dispose(); $embeddedStream.Dispose() }
-Get-FileHash -LiteralPath $OutputPath -Algorithm SHA256 | Format-List
+$hash = [Security.Cryptography.SHA256]::Create()
+$hashStream = [IO.File]::OpenRead($OutputPath)
+try { Write-Output ('SHA256: ' + [BitConverter]::ToString($hash.ComputeHash($hashStream)).Replace('-','').ToLowerInvariant()) }
+finally { $hashStream.Dispose(); $hash.Dispose() }
 Get-Item -LiteralPath $OutputPath | Select-Object FullName,Length
+}

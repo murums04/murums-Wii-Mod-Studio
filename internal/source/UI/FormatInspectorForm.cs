@@ -10,8 +10,8 @@ namespace murumsWiiModStudio
     {
         private readonly string _path;
         private readonly ResourceInfo _info;
-        private TextBox _infoBox;
-        private TextBox _hexBox;
+        private StudioReadOnlyText _infoBox;
+        private StudioReadOnlyText _hexBox;
         private TextBox _editBox;
         private Button _external;
         private Button _saveEdit;
@@ -53,38 +53,40 @@ namespace murumsWiiModStudio
             root.Dock = DockStyle.Fill;
             root.RowCount = 3;
             root.ColumnCount = 1;
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
             Controls.Add(root);
             Panel header = murumsWiiModStudio.StudioChrome.Header(_info.DisplayName, Path.GetFileName(_path));
             root.Controls.Add(header, 0, 0);
-            _tabs = new TabControl();
+            _tabs = new DarkTabControl();
             _tabs.Dock = DockStyle.Fill;
             DarkTheme.StyleTabs(_tabs);
             TabPage infoTab = new TabPage(L.T("Übersicht", "Overview"));
-            _infoBox = MakeBox(false, true);
+            _infoBox = new StudioReadOnlyText();
             _infoBox.Dock = DockStyle.Fill;
-            infoTab.Controls.Add(_infoBox);
+            infoTab.Padding = new Padding(0, 8, 0, 0);
+            infoTab.Controls.Add(StudioReadOnlyText.Surface(_infoBox));
             _tabs.TabPages.Add(infoTab);
             if (_info.Kind == ResourceKind.Bmg)
                 _tabs.TabPages.Add(BuildBmgEditTab());
-            var previewTab = new TabPage("Preview");
+            var previewTab = new TabPage(L.T("Vorschau", "Preview")) { Padding = new Padding(0, 8, 0, 0) };
             var resourcePreview = new ResourcePreviewPanel();
             previewTab.Controls.Add(resourcePreview);
             resourcePreview.ShowResource(Path.GetFileName(_path), File.ReadAllBytes(_path));
             _tabs.TabPages.Add(previewTab);
             TabPage hexTab = new TabPage("Raw / Hex");
-            _hexBox = MakeBox(true, true);
+            _hexBox = new StudioReadOnlyText { WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both };
             _hexBox.Dock = DockStyle.Fill;
             _hexBox.Font = new Font("Consolas", 9.5F);
-            hexTab.Controls.Add(_hexBox);
+            hexTab.Padding = new Padding(0, 8, 0, 0);
+            hexTab.Controls.Add(StudioReadOnlyText.Surface(_hexBox));
             _tabs.TabPages.Add(hexTab);
             root.Controls.Add(_tabs, 0, 1);
             Panel bottom = new Panel();
             bottom.Dock = DockStyle.Fill;
             bottom.BackColor = DarkTheme.Panel;
-            _external = new Button();
+            _external = StudioChrome.ActionButton(String.Empty);
             _external.AutoSize = true;
             _external.Height = 32;
             _external.Left = 12;
@@ -388,7 +390,7 @@ namespace murumsWiiModStudio
                 Enabled = false;
                 _status.Text = L.T("Im Zusatzeditor speichern und ihn schließen, um Änderungen zu übernehmen.", "Save in the external editor and close it to apply changes.");
                 string editorPath = staged;
-                string launchError = await System.Threading.Tasks.Task.Run(delegate
+                string launchError = await ToolStatus.RunAsync(this, delegate
                 {
                     string message;
                     return ToolchainManager.Launch(tool, editorPath, true, out message) ? null : message;

@@ -57,7 +57,7 @@ namespace murumsWiiModStudio
             string full = Path.GetFullPath(destination);
             byte[] data = PrepareCopy(source, original, edited, full);
             Directory.CreateDirectory(Path.GetDirectoryName(full));
-            BackupManager.WriteAllBytesSafely(full, data);
+            BackupManager.WriteBatch(new[] { new KeyValuePair<string, byte[]>(full, data) }, exportCopy: true);
         }
 
         internal static void Save(IEnumerable<StudioArchiveCopy> archives, string folder)
@@ -87,7 +87,7 @@ namespace murumsWiiModStudio
                 }
             }
             Directory.CreateDirectory(folder);
-            BackupManager.WriteBatch(writes);
+            BackupManager.WriteBatch(writes, exportCopy: true);
         }
     }
 }

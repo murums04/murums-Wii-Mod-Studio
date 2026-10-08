@@ -8,6 +8,14 @@ namespace murumsWiiModStudio
     {
         ThemeProject project;
         bool dirty;
+        readonly EditHistory<string> history = new EditHistory<string>();
+        bool restoringHistory;
+        string savedState;
+        sealed class ThemeState
+        {
+            public string PackFolder, OutputFolder, Notes;
+            public ThemeProject.Asset[] Assets;
+        }
         readonly ListBox assets = new ListBox
         {
             Dock = DockStyle.Fill,
@@ -21,6 +29,8 @@ namespace murumsWiiModStudio
             ScrollBars = ScrollBars.Vertical
         };
         readonly Button add, manual, remove, build, save;
+        readonly Panel emptySelection = new Panel { Dock = DockStyle.Fill };
+        readonly Label workflowHint = new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(6) };
         public ThemeProjectForm() : base("RR-MKWii Theme Project Tool", L.T("Deine Studio-Änderungen als ein gemeinsames Theme zusammenstellen", "Combine your Studio edits into one theme folder"), L.T("Bearbeitete Dateien: *.szs / *.brfnt / *.brstm · .mtheme = gespeichertes Studio-Projekt", "Edited files: *.szs / *.brfnt / *.brstm · .mtheme = saved Studio project"))
         {
             var newAction = Action(L.T("Neues Projekt…", "New project…"), L.T("Deinen Pack-Ordner als Basis für Dateinamen und Zielpfade wählen.", "Choose your custom pack as the reference for destination filenames and folders."), delegate
@@ -37,6 +47,7 @@ namespace murumsWiiModStudio
                         OutputFolder = ThemeProject.SuggestedOutput(folder)
                     };
                     dirty = true;
+                    savedState = null; history.Reset(CaptureTheme());
                     RefreshProject();
                 }
             });
@@ -50,6 +61,7 @@ namespace murumsWiiModStudio
                     var next = ThemeProject.Load(p);
                     project = next;
                     dirty = false;
+                    savedState = CaptureTheme(); history.Reset(savedState);
                     RefreshProject();
                 }
             });
@@ -61,6 +73,7 @@ namespace murumsWiiModStudio
                 {
                     project.Save(p);
                     dirty = false;
+                    savedState = CaptureTheme();
                     Status.Text = L.T("Projekt gespeichert: ", "Saved project: ") + p; ToolStatus.Set(this, true);
                 }
             }, false);
@@ -97,6 +110,8 @@ namespace murumsWiiModStudio
                     RefreshProject();
                 }
             });
+            StudioActions.Icon(add, StudioIcon.Add);
+            StudioActions.Icon(remove, StudioIcon.Remove);
             build = ExportAction(L.T("Theme-Ordner erstellen…", "Build theme folder…"), L.T("Geprüfte Ersatzdateien unter den Originalnamen in einen separaten Ordner kopieren.", "Copy reviewed replacements under their original names. Your pack is never overwritten by this command."), delegate
             {
                 string current = project.OutputFolder;
@@ -108,12 +123,13 @@ namespace murumsWiiModStudio
                     project.Notes = notes.Text;
                     dirty = true;
                     project.Build();
+                    RecordTheme();
                     Status.Text = L.T("Erstellt: ", "Built ") + project.Assets.Count + L.T(" Dateien in ", " files in ") + folder + L.T(". Projekt speichern, um den Ausgabeort zu behalten.", ". Save the project to retain this output location.");
                     if (project.Assets.Count > 0)
                         ExportHelp.Show(this, folder);
                 }
             });
-            Action(L.T("Dateivorschau…", "Preview selected file…"), L.T("Ausgewählte Ersatzdatei vor dem Export prüfen. Archive zeigen ihren Inhalt.", "Inspect the selected replacement before building. Archives show their resources."), delegate
+            var filePreview = Action(L.T("Dateivorschau…", "Preview selected file…"), L.T("Ausgewählte Ersatzdatei vor dem Export prüfen. Archive zeigen ihren Inhalt.", "Inspect the selected replacement before building. Archives show their resources."), delegate
             {
                 var a = assets.SelectedItem as ThemeProject.Asset;
                 if (a == null)
@@ -122,8 +138,7 @@ namespace murumsWiiModStudio
                     return;
                 }
 
-                using (var f = new FilePreviewForm(a.Replacement))
-                    f.ShowDialog(this);
+                StudioEditor.Open(this, new FilePreviewForm(a.Replacement), delegate { });
             });
             notes.TextChanged += delegate
             {
@@ -131,30 +146,55 @@ namespace murumsWiiModStudio
                 {
                     project.Notes = notes.Text;
                     dirty = true;
+                    RecordTheme("notes");
                 }
             };
             var notesGroup = new GroupBox
             {
                 Text = L.T("Projektnotizen", "Project notes"),
-                Dock = DockStyle.Bottom,
-                Height = 78,
+                Dock = DockStyle.Fill,
                 Padding = new Padding(8)
             };
             notes.Dock = DockStyle.Fill;
             notesGroup.Controls.Add(notes);
-            Body.Controls.Add(assets);
-            Body.Controls.Add(notesGroup);
-            var guide = new Label
-            {
-                Dock = DockStyle.Top,
-                AutoSize = false,
-                Height = 65,
-                Padding = new Padding(6),
-                Text = L.T(
-                    "Sammelt fertige Änderungen aus MUR_EDITED. Die Liste zeigt, wohin jede Datei gehört.\nTheme-Ordner erstellen kopiert diese Auswahl zusammen. Projekt speichern (.mtheme) ist optional zum Weiterarbeiten.",
-                    "Collects finished edits from MUR_EDITED. The list shows where each file belongs.\nBuild theme folder copies this selection together. Save project (.mtheme) is optional to continue later.")
+            var workspace = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
+            workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
+            workspace.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            workspace.Controls.Add(workflowHint, 0, 0);
+            workspace.SetColumnSpan(workflowHint, 2);
+            var selection = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            selection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            selection.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            selection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var assetTools = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+            assetTools.Controls.AddRange(new Control[] { add, manual, remove, filePreview });
+            selection.Controls.Add(assetTools, 0, 0);
+            var assetArea = new Panel { Dock = DockStyle.Fill };
+            assetArea.Controls.Add(assets); assetArea.Controls.Add(emptySelection);
+            var emptyContent = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, Padding = new Padding(24) };
+            emptyContent.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            emptyContent.Controls.Add(new Label { Text = L.T("Welche Änderungen gehören in dein Theme?", "Which edits belong in your theme?"), AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 16) }, 0, 0);
+            var firstFiles = new Button { Text = L.T("Bearbeitete Dateien wählen…", "Choose edited files…"), AutoSize = true, Margin = new Padding(3, 3, 3, 12) };
+            firstFiles.Click += delegate { add.PerformClick(); };
+            DarkTheme.StylePrimary(firstFiles);
+            emptyContent.Controls.Add(firstFiles, 0, 1);
+            emptyContent.Controls.Add(new Label { Text = L.T("Dateien aus MUR_EDITED hinzufügen. Studio ordnet passende Dateinamen automatisch zu; andere Namen kannst du oben zuordnen.", "Add files from MUR_EDITED. Studio maps matching filenames automatically; use the mapping action above for other names."), AutoSize = true, Dock = DockStyle.Fill }, 0, 2);
+            emptySelection.Controls.Add(emptyContent);
+            selection.Controls.Add(assetArea, 0, 1);
+            workspace.Controls.Add(selection, 0, 1);
+            workspace.Controls.Add(notesGroup, 1, 1);
+            notesGroup.Visible = false;
+            save.Dock = DockStyle.Bottom;
+            notesGroup.Controls.Add(save);
+            var projectDetails = new CheckBox { Text = L.T("Notizen && Projekt", "Notes && project"), AutoSize = true };
+            projectDetails.CheckedChanged += delegate {
+                notesGroup.Visible = projectDetails.Checked;
+                workspace.ColumnStyles[1].Width = projectDetails.Checked ? 284 : 0;
             };
-            Body.Controls.Add(guide);
+            Actions.Controls.Add(projectDetails);
+            Body.Controls.Add(workspace);
 
             StudioUx.SetHelp(notes, L.T("Projektnotizen: Farben, Quellbilder, Schriftoptionen und Ingame-Prüfungen notieren. Editor-Einstellungen werden nicht automatisch gespeichert.", "Project notes: record colour choices, source pictures, font settings and in-game checks. Editor controls are not automatically captured."));
             StudioUx.SetHelp(assets, L.T("Jede Zeile ordnet eine bearbeitete Datei ihrem Zielpfad im Pack zu.", "Each row maps one edited file to its destination relative to your custom pack."));
@@ -162,6 +202,8 @@ namespace murumsWiiModStudio
             Size = new System.Drawing.Size(1120, 850);
 
             newAction.Name = openAction.Name = "PackSourceAction";
+            new StudioUndoRedo(this, Actions, () => project != null && history.CanUndo, () => project != null && history.CanRedo,
+                () => RestoreTheme(history.Undo()), () => RestoreTheme(history.Redo()));
             Finish();
             RefreshProject();
             FormClosing += delegate (object s, FormClosingEventArgs e)
@@ -177,6 +219,7 @@ namespace murumsWiiModStudio
 
         void RefreshProject()
         {
+            RecordTheme();
             if (project != null) PackSelection.SourceLoaded(this);
             assets.Items.Clear();
             if (project != null)
@@ -189,7 +232,37 @@ namespace murumsWiiModStudio
             add.Enabled = manual.Enabled = save.Enabled = project != null;
             build.Enabled = remove.Enabled = project != null && project.Assets.Count > 0;
             notes.Enabled = project != null;
+            emptySelection.Visible = project != null && project.Assets.Count == 0;
+            assets.Visible = !emptySelection.Visible;
+            build.Visible = project != null && project.Assets.Count > 0;
+            workflowHint.Text = project != null && project.Assets.Count > 0
+                ? L.T("Zuordnungen prüfen → Theme-Ordner erstellen", "Review destinations → Build theme folder")
+                : L.T("Pack-Basis gewählt → Bearbeitete Dateien auswählen", "Pack base selected → Choose edited files");
             Status.Text = project == null ? L.T("Neues Projekt übernimmt das gewählte Pack. Danach bearbeitete Dateien aus MUR_EDITED hinzufügen.", "New project uses the selected pack. Then add edited files from MUR_EDITED.") : "Pack: " + project.PackFolder + "\nOutput: " + project.OutputFolder;
+        }
+
+        string CaptureTheme()
+        {
+            return project == null ? null : ModelRig.Serializer().Serialize(new ThemeState {
+                PackFolder = project.PackFolder, OutputFolder = project.OutputFolder, Notes = project.Notes, Assets = project.Assets.ToArray() });
+        }
+
+        void RecordTheme(string group = null)
+        {
+            if (!restoringHistory && project != null) history.Record(CaptureTheme(), group);
+        }
+
+        void RestoreTheme(string data)
+        {
+            if (data == null) return;
+            var state = ModelRig.Serializer().Deserialize<ThemeState>(data);
+            restoringHistory = true;
+            try {
+                project = new ThemeProject { PackFolder = state.PackFolder, OutputFolder = state.OutputFolder, Notes = state.Notes };
+                project.Assets.AddRange(state.Assets);
+                RefreshProject(); dirty = data != savedState;
+            }
+            finally { restoringHistory = false; }
         }
     }
 }

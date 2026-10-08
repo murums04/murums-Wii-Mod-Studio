@@ -114,12 +114,12 @@ namespace murumsWiiModStudio
             };
             grid.Controls.Add(browse, 1, 6);
             status.Margin = new Padding(0, 14, 0, 12);
-            AddWide(grid, status, 7);
+            AddWide(grid, ToolStatus.Wrap(this, status), 7);
             var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
             var cancel = new Button { Text = L.T("Abbrechen", "Cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
             import.Text = L.T("Importieren und öffnen", "Import and open");
-            buttons.Controls.Add(cancel);
             buttons.Controls.Add(import);
+            buttons.Controls.Add(cancel);
             AddWide(grid, buttons, 8);
             Controls.Add(grid);
             CancelButton = cancel;
@@ -153,7 +153,7 @@ namespace murumsWiiModStudio
             status.Text = L.T("Dateiliste wird gelesen…", "Reading archive list…");
             try
             {
-                available = await Task.Run(() => GameArchiveImport.List(imagePath));
+                available = await ToolStatus.RunAsync(this, () => GameArchiveImport.List(imagePath));
                 if (preferredName == "Earth.szs")
                     available = available.Where(path => Path.GetFileName(path) == "Earth.szs" || Path.GetFileName(path) == "globe.arc").ToArray();
                 else if (preferredName == "BackModel.szs" || preferredName == "Font.szs" || preferredName == "MenuOther.szs")
@@ -216,15 +216,14 @@ namespace murumsWiiModStudio
             status.Text = L.T("Dateien werden importiert…", "Importing files…");
             try
             {
-                ImportedPath = await Task.Run(() => GameArchiveImport.Extract(imagePath, files, folder));
+                ImportedPath = await ToolStatus.RunAsync(this, () => GameArchiveImport.Extract(imagePath, files, folder));
                 lastDestination = folder;
-                StudioMessageBox.Show(this,
-                    L.T("Originaldateien gespeichert in:\n", "Original files saved to:\n") + folder + "\n\n"
-                    + String.Join(", ", files.Select(Path.GetFileName)) + "\n\n"
-                    + L.T("Die ausgewählte Datei kann jetzt bearbeitet werden.", "The selected file is now ready to edit."),
-                    Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                StudioMessageBox.ShowPath(this, folder,
+                    String.Join(", ", files.Select(Path.GetFileName)) + "\n\n"
+                    + L.T("Die ausgewählte Datei kann jetzt bearbeitet werden.", "The selected file is now ready to edit."), Text);
                 busy = false;
                 DialogResult = DialogResult.OK;
+                Close();
             }
             catch (Exception error)
             {
@@ -233,7 +232,7 @@ namespace murumsWiiModStudio
             finally
             {
                 busy = false;
-                Enabled = true;
+                if (!IsDisposed) Enabled = true;
             }
         }
     }

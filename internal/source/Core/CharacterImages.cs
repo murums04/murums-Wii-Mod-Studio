@@ -45,11 +45,24 @@ namespace murumsWiiModStudio
 
         internal static List<VehicleTexture> Textures(CharacterAsset asset)
         {
-            var archive = new StudioArchiveCopy(asset.Source, asset.Data);
+            return Textures(asset, "kart_model.brres");
+        }
+
+        internal static Dictionary<string, byte[]> Members(CharacterAsset asset)
+        {
+            if (asset.Target.EndsWith(".brres", StringComparison.OrdinalIgnoreCase))
+                return new Dictionary<string, byte[]> { { "", asset.Data } };
+            return new StudioArchiveCopy(asset.Source, asset.Data).Files
+                .ToDictionary(p => p.Key, p => p.Value.Data, StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal static List<VehicleTexture> Textures(CharacterAsset asset, string memberName)
+        {
+            var members = Members(asset);
             var result = new List<VehicleTexture>();
-            foreach (var member in archive.Files.Where(f => Path.GetFileName(f.Key).Equals("kart_model.brres", StringComparison.OrdinalIgnoreCase)))
+            foreach (var member in members.Where(f => f.Key == "" || Path.GetFileName(f.Key).Equals(memberName, StringComparison.OrdinalIgnoreCase)))
             {
-                var data = member.Value.Data;
+                var data = member.Value;
                 if (data.Length < 16 || Encoding.ASCII.GetString(data, 0, 4) != "bres") throw new InvalidDataException("Invalid vehicle BRRES.");
                 int root = (data[12] << 8) | data[13];
                 foreach (var group in BrresModelVisibility.Dictionary(data, root + 8).Where(g => g.Name == "Textures(NW4R)"))
@@ -88,44 +101,73 @@ namespace murumsWiiModStudio
 
         internal static CharacterAsset ReplaceEmblem(CharacterAsset source, VehicleTexture target, Rectangle region, Bitmap image)
         {
-            var current = Textures(source).SingleOrDefault(t => t.Member == target.Member && t.Name == target.Name);
-            if (current == null) throw new InvalidDataException("Vehicle texture is no longer present.");
-            var info = TplTextureEditor.GetImageInfo(current.Tpl, 0);
-            if (region.Width < 2 || region.Height < 2 || !new Rectangle(0, 0, info.Width, info.Height).Contains(region)) throw new InvalidDataException(L.T("Zuerst das vorhandene Emblem im Texturbild markieren.", "Mark the existing emblem in the texture first."));
-            var archive = new StudioArchiveCopy(source.Source, source.Data);
-            using (var original = Decode(current.Tpl))
+            using (var original = Decode(target.Tpl))
             using (var fitted = Fit(image, region.Width, region.Height))
             {
+                if (region.Width < 2 || region.Height < 2 || !new Rectangle(Point.Empty, original.Size).Contains(region))
+                    throw new InvalidDataException(L.T("Das vorhandene Logo im Texturbild markieren.", "Mark the existing logo in the texture."));
                 using (var graphics = Graphics.FromImage(original))
                 {
+                    var border = new List<Color>();
+                    for (int x = region.Left; x < region.Right; x++) { border.Add(original.GetPixel(x, region.Top)); border.Add(original.GetPixel(x, region.Bottom - 1)); }
+                    for (int y = region.Top; y < region.Bottom; y++) { border.Add(original.GetPixel(region.Left, y)); border.Add(original.GetPixel(region.Right - 1, y)); }
+                    var background = border.GroupBy(c => (c.R / 32 << 8) | (c.G / 32 << 4) | c.B / 32).OrderByDescending(g => g.Count()).First();
+                    var color = Color.FromArgb(background.Max(c => c.A), (int)background.Average(c => c.R), (int)background.Average(c => c.G), (int)background.Average(c => c.B));
                     graphics.CompositingMode = CompositingMode.SourceCopy;
+                    using (var brush = new SolidBrush(color)) graphics.FillRectangle(brush, region);
+                    graphics.CompositingMode = CompositingMode.SourceOver;
                     graphics.DrawImageUnscaled(fitted, region.Location);
                 }
-                byte[] replaced = TplTextureEditor.ReplaceFirstImage(current.Tpl, original, false);
-                // Nur die ausgewählte Textur ersetzen; Modelle und andere Ressourcen bleiben bytegleich.
-                int blockWidth = info.Format == 0 || info.Format == 1 || info.Format == 2 || info.Format == 14 ? 8 : 4;
-                int blockHeight = info.Format == 0 || info.Format == 14 ? 8 : 4;
-                int blockBytes = info.Format == 6 ? 64 : 32;
-                int sourceOffset = 64, targetOffset = current.Offset;
-                for (int level = 0; level <= info.MaxLod; level++)
-                {
-                    int width = Math.Max(1, info.Width >> level), height = Math.Max(1, info.Height >> level);
-                    int blocks = (width + blockWidth - 1) / blockWidth;
-                    int divisor = 1 << level;
-                    int left = region.Left / divisor / blockWidth, top = region.Top / divisor / blockHeight;
-                    int right = ((region.Right + divisor - 1) / divisor + blockWidth - 1) / blockWidth;
-                    int bottom = ((region.Bottom + divisor - 1) / divisor + blockHeight - 1) / blockHeight;
-                    for (int y = top; y < bottom; y++)
-                        for (int x = left; x < right; x++)
-                        {
-                            int offset = (y * blocks + x) * blockBytes;
-                            Buffer.BlockCopy(replaced, sourceOffset + offset, archive.Files[current.Member].Data, targetOffset + offset, blockBytes);
-                        }
-                    int bytes = TplTextureEditor.GetBaseLevelPayloadLength(width, height, info.Format);
-                    sourceOffset += bytes; targetOffset += bytes;
-                }
+                return ReplaceTexture(source, target, original, region);
             }
-            return new CharacterAsset { Source = source.Source, Target = source.Target, Role = source.Role, Data = archive.Build() };
+        }
+
+        internal static CharacterAsset ReplaceTexture(CharacterAsset source, VehicleTexture target, Bitmap image, Rectangle region, Rectangle[] protectedRegions = null)
+        {
+            var current = Textures(source, Path.GetFileName(target.Member)).SingleOrDefault(t => t.Member == target.Member && t.Name == target.Name);
+            if (current == null) throw new InvalidDataException("Texture is no longer present.");
+            var info = TplTextureEditor.GetImageInfo(current.Tpl, 0);
+            if (image.Width != info.Width || image.Height != info.Height || region.Width < 1 || region.Height < 1
+                || !new Rectangle(0, 0, info.Width, info.Height).Contains(region)) throw new InvalidDataException("Invalid texture region.");
+            byte[] replaced = TplTextureEditor.ReplaceFirstImage(current.Tpl, image, false);
+            var members = Members(source);
+            byte[] data = (byte[])members[current.Member].Clone();
+            int blockWidth = info.Format == 0 || info.Format == 1 || info.Format == 2 || info.Format == 14 ? 8 : 4;
+            int blockHeight = info.Format == 0 || info.Format == 14 ? 8 : 4;
+            int blockBytes = info.Format == 6 ? 64 : 32;
+            int sourceOffset = 64, targetOffset = current.Offset;
+            for (int level = 0; level <= info.MaxLod; level++)
+            {
+                int width = Math.Max(1, info.Width >> level), height = Math.Max(1, info.Height >> level);
+                int blocks = (width + blockWidth - 1) / blockWidth;
+                int divisor = 1 << level;
+                int left = region.Left / divisor / blockWidth, top = region.Top / divisor / blockHeight;
+                int right = ((region.Right + divisor - 1) / divisor + blockWidth - 1) / blockWidth;
+                int bottom = ((region.Bottom + divisor - 1) / divisor + blockHeight - 1) / blockHeight;
+                for (int y = top; y < bottom; y++)
+                    for (int x = left; x < right; x++)
+                    {
+                        var block = new Rectangle(x * blockWidth * divisor, y * blockHeight * divisor, blockWidth * divisor, blockHeight * divisor);
+                        if (protectedRegions != null && protectedRegions.Any(r => r.IntersectsWith(block))) continue;
+                        int offset = (y * blocks + x) * blockBytes;
+                        Buffer.BlockCopy(replaced, sourceOffset + offset, data, targetOffset + offset, blockBytes);
+                    }
+                int bytes = TplTextureEditor.GetBaseLevelPayloadLength(width, height, info.Format);
+                sourceOffset += bytes; targetOffset += bytes;
+            }
+            return ReplaceMember(source, current.Member, data);
+        }
+
+        internal static CharacterAsset ReplaceMember(CharacterAsset source, string member, byte[] data)
+        {
+            byte[] changed = data;
+            if (member.Length > 0)
+            {
+                var archive = new StudioArchiveCopy(source.Source, source.Data);
+                archive.Files[member].Data = data;
+                changed = archive.Build();
+            }
+            return new CharacterAsset { Source = source.Source, Target = source.Target, Role = source.Role, Data = changed, LogoRegions = source.LogoRegions, PaintBase = source.PaintBase };
         }
     }
 }

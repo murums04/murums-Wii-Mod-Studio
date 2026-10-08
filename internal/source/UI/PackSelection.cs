@@ -64,26 +64,29 @@ namespace murumsWiiModStudio
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            strip.Controls.Add(new Label { Text = "Custom pack", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+            strip.Controls.Add(new Label { Text = "PACK", AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = DarkTheme.Muted,
+                Font = new Font(form.Font.FontFamily, 8, FontStyle.Bold), Margin = new Padding(4, 0, 8, 0) }, 0, 0);
             var choice = new ComboBox { Name = "CustomPackSelector", Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList, DropDownWidth = 760 };
             strip.Controls.Add(choice, 1, 0);
             var refresh = new Button { Text = L.T("Aktualisieren", "Refresh"), AutoSize = true };
+            StudioActions.Icon(refresh, StudioIcon.Refresh);
             strip.Controls.Add(refresh, 2, 0);
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             var create = new Button {
                 Name = "CreateCustomPack",
-                Text = L.T("Custom Pack erstellen…", "Create custom pack…"),
+                Text = L.T("Neues Pack…", "New pack…"),
                 AutoSize = true,
-                MinimumSize = new Size(170, 30)
+                MinimumSize = new Size(100, 30)
             };
+            StudioUx.SetHelp(create, L.T("Ein neues Custom Pack erstellen oder einen vorhandenen Pack-Ordner registrieren.", "Create a new custom pack or register an existing pack folder."));
             strip.Controls.Add(create, 3, 0);
-            foreach (Button source in Descendants(form).OfType<Button>().Where(b => b.FindForm() == form && (IsSourceButton(b) || b.Name == "PackClearAction")).ToArray())
+            foreach (Button source in Descendants(form).OfType<Button>().Where(b => b.FindForm() == form && (IsSourceButton(b) || b.Name == "PackClearAction" || b.Name == "PackEditAction")).ToArray())
             {
                 source.Parent.Controls.Remove(source);
-                if (source.Name != "PackClearAction") source.Name = "PackSourceAction";
+                if (source.Name != "PackClearAction" && source.Name != "PackEditAction") source.Name = "PackSourceAction";
                 source.Dock = DockStyle.None;
-                source.AutoSize = true;
-                source.MinimumSize = new Size(130, 30);
+                source.AutoSize = !StudioActions.IsIcon(source);
+                source.MinimumSize = new Size(StudioActions.IsIcon(source) ? 34 : 110, 30);
                 source.Margin = new Padding(3);
                 int column = strip.ColumnCount++;
                 strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -91,7 +94,13 @@ namespace murumsWiiModStudio
             }
             foreach (Button button in strip.Controls.OfType<Button>())
             {
-                button.Padding = new Padding(4, 0, 4, 0);
+                if (StudioActions.IsIcon(button))
+                {
+                    int column = strip.GetColumn(button);
+                    strip.ColumnStyles[column].SizeType = SizeType.Absolute;
+                    strip.ColumnStyles[column].Width = 42;
+                }
+                button.Padding = StudioActions.IsIcon(button) ? Padding.Empty : new Padding(4, 0, 4, 0);
                 button.Margin = new Padding(3);
                 button.MinimumSize = new Size(button.MinimumSize.Width, 30);
                 button.MaximumSize = new Size(0, 30);
@@ -102,40 +111,9 @@ namespace murumsWiiModStudio
             form.VisibleChanged += delegate { strip.UpdateAnimation(); };
             choice.DropDown += delegate { strip.Paused = true; };
             choice.DropDownClosed += delegate { strip.Paused = false; };
-            var hint = new Label
-            {
-                Name = "CustomFilesHint",
-                Text = EntryHint(form),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = DarkTheme.AccentSoft,
-                ForeColor = DarkTheme.Fore,
-                Font = new Font(form.Font.FontFamily, 16, FontStyle.Bold),
-                Padding = new Padding(18),
-                BorderStyle = BorderStyle.None,
-                Visible = false
-            };
-            hint.Paint += delegate(object sender, PaintEventArgs e)
-            {
-                using (var pen = new Pen(Color.FromArgb(92, 94, 104), 2))
-                    e.Graphics.DrawRectangle(pen, 1, 1, Math.Max(0, hint.Width - 3), Math.Max(0, hint.Height - 3));
-            };
-            Action positionHint = delegate
-            {
-                if (hint.Parent == null || strip.Parent == null) return;
-                float scale = form.Font.Size / 9f;
-                int top = form.PointToClient(strip.PointToScreen(new Point(0, strip.Height))).Y;
-                int width = Math.Max(1, Math.Min((int)(720 * scale), form.ClientSize.Width - (int)(48 * scale)));
-                int textHeight = TextRenderer.MeasureText(hint.Text, hint.Font,
-                    new Size(Math.Max(1, width - hint.Padding.Horizontal - 12), Int32.MaxValue),
-                    TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height;
-                int height = Math.Min(Math.Max((int)(132 * scale), textHeight + hint.Padding.Vertical + 16),
-                    Math.Max(1, form.ClientSize.Height - top - (int)(50 * scale)));
-                hint.Bounds = new Rectangle((form.ClientSize.Width - width) / 2,
-                    top + Math.Max(12, (form.ClientSize.Height - top - height) / 2), width, height);
-                hint.BringToFront();
-            };
-            hint.Disposed += delegate { hint.Font.Dispose(); };
-            form.Layout += delegate { if (!hint.IsDisposed) positionHint(); };
+            var sources = strip.Controls.OfType<Button>().Where(b => b.Name == "PackSourceAction").ToArray();
+            var hint = new StudioSourceStart(form, choice, create, sources);
+            Control editor = null;
             var gates = new System.Collections.Generic.List<Control>();
             Action updateGate = delegate
             {
@@ -149,12 +127,11 @@ namespace murumsWiiModStudio
                 strip.Required = !available && !hasPack;
                 strip.HighlightedSource = state.NextSource;
                 strip.SourceRequired = hasPack && !available;
-                hint.Text = hasPack
-                    ? L.T("2. Dateien öffnen\n", "2. Open your files\n") + (state.SourceHint ?? EntryHint(form))
-                    : L.T("1. Wähle dein Custom Pack aus der Liste oben.\nNoch kein Pack? Erstelle eines über Create custom pack.\nDanach wählst du die Dateien für dieses Tool.",
-                        "1. Choose your Custom Pack from the list above.\nNo pack yet? Use Create custom pack to set one up.\nThen choose the files you want to edit in this tool.");
+                hint.ShowStep(hasPack, state.SourceHint ?? EntryHint(form));
                 hint.Visible = !available;
-                positionHint();
+                if (editor != null) editor.Visible = available;
+                if (!available) hint.BringToFront();
+                foreach (Button source in sources) source.Enabled = hasPack || available;
                 choice.AccessibleDescription = strip.SourceRequired
                     ? L.T("Pack ausgewählt. Öffne jetzt eine Datei über die hervorgehobenen Buttons.", "Pack selected. Open a file using the highlighted buttons.")
                     : available
@@ -162,6 +139,8 @@ namespace murumsWiiModStudio
                     : L.T("Wähle ein Custom Pack aus der Liste oder erstelle eines.",
                         "Select a Custom Pack from the list or create one.");
                 foreach (Control gate in gates) gate.Enabled = available;
+                foreach (Control action in strip.Controls)
+                    if (action.Name == "PackEditAction") action.Enabled = available;
                 foreach (Form child in Descendants(form).OfType<Form>())
                 {
                     State nested;
@@ -180,7 +159,7 @@ namespace murumsWiiModStudio
                 {
                     var packs = CustomPacks.Load();
                     choice.Items.Clear();
-                    choice.Items.Add(L.T("Custom Pack auswählen oder erstellen", "Select or create a Custom Pack"));
+                    choice.Items.Add(L.T("Pack auswählen …", "Select a pack …"));
                     foreach (var pack in packs) choice.Items.Add(pack);
                     choice.SelectedIndex = Math.Max(0, packs.FindIndex(p => p.FilesFolder == previous) + 1);
                     state.Pack = choice.SelectedItem as CustomPack;
@@ -194,8 +173,9 @@ namespace murumsWiiModStudio
                 {
                     state.Pack = null;
                     choice.Items.Clear();
-                    choice.Items.Add(L.T("Custom Pack auswählen oder erstellen", "Select or create a Custom Pack"));
+                    choice.Items.Add(L.T("Pack auswählen …", "Select a pack …"));
                     choice.SelectedIndex = 0;
+                    if (StudioStartup.IsPreparing) throw;
                     StudioMessageBox.Show(form, error.Message, "Custom packs", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 finally { loading = false; updateGate(); }
@@ -220,14 +200,18 @@ namespace murumsWiiModStudio
             {
                 try
                 {
-                    using (var maker = new CustomPackMakerForm())
-                        maker.ShowDialog(form.TopLevelControl as Form ?? form);
+                    var existing = choice.Items.OfType<CustomPack>().Select(p => p.FilesFolder).ToArray();
+                    StudioEditor.Open(form, new CustomPackMakerForm(), delegate
+                    {
+                        reload();
+                        var created = choice.Items.OfType<CustomPack>().FirstOrDefault(p => !existing.Contains(p.FilesFolder, StringComparer.OrdinalIgnoreCase));
+                        if (created != null) choice.SelectedItem = created;
+                    });
                 }
                 catch (Exception error)
                 {
                     StudioMessageBox.Show(form, error.Message, "Custom packs", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
-                finally { reload(); }
             };
             reload();
             Control content = form.Controls.Cast<Control>().FirstOrDefault(c => c.Dock == DockStyle.Fill);
@@ -248,8 +232,24 @@ namespace murumsWiiModStudio
                 StudioUx.DisableHover(choice);
                 foreach (Control child in layout.Controls.Cast<Control>().ToArray())
                     if (layout.GetRow(child) >= 2) AddGate(child, gates);
-                updateGate();
-                form.Controls.Add(hint);
+                var editing = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, Margin = Padding.Empty, RowCount = layout.RowCount - 2 };
+                editing.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                for (int row = 2; row < layout.RowStyles.Count; row++)
+                    editing.RowStyles.Add(new RowStyle(layout.RowStyles[row].SizeType, layout.RowStyles[row].Height));
+                foreach (Control child in layout.Controls.Cast<Control>().Where(c => layout.GetRow(c) >= 2).ToArray())
+                {
+                    int row = layout.GetRow(child);
+                    layout.Controls.Remove(child);
+                    editing.Controls.Add(child, 0, row - 2);
+                }
+                while (layout.RowStyles.Count > 2) layout.RowStyles.RemoveAt(layout.RowStyles.Count - 1);
+                layout.RowCount = 3;
+                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                var stage = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+                editor = editing;
+                stage.Controls.Add(editing);
+                stage.Controls.Add(hint);
+                layout.Controls.Add(stage, 0, 2);
                 updateGate();
                 DarkTheme.Apply(strip);
                 return;
@@ -260,7 +260,11 @@ namespace murumsWiiModStudio
             wrapper.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             wrapper.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             wrapper.Controls.Add(strip, 0, 0);
-            wrapper.Controls.Add(content, 0, 1);
+            var fallbackStage = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+            editor = content;
+            fallbackStage.Controls.Add(content);
+            fallbackStage.Controls.Add(hint);
+            wrapper.Controls.Add(fallbackStage, 0, 1);
             form.Controls.Add(wrapper);
             StudioUx.DisableHover(choice);
             StudioUx.SetHelp(refresh, L.T("Pack-Liste neu laden. Die Auswahl setzt den Startordner für Dateien und MUR_EDITED-Ausgaben.",
@@ -269,7 +273,6 @@ namespace murumsWiiModStudio
             foreach (Control extra in form.Controls.Cast<Control>().Where(c => c != wrapper && !(c is AccentStrip)).ToArray())
                 AddGate(extra, gates);
             updateGate();
-            form.Controls.Add(hint);
             updateGate();
             DarkTheme.Apply(wrapper);
         }
@@ -296,7 +299,7 @@ namespace murumsWiiModStudio
                     return L.T("Öffne Original und Kopie derselben Datei: Race.szs oder Race_E.szs.\nOpen base archive: Original. Open edited archive: bearbeitete Kopie.\nBeide müssen dieselbe Sprachvariante verwenden (E, U oder J).\nVergleiche die Einträge und speichere die ausgewählten Änderungen.",
                         "Open original and edited copies of the same file: Race.szs or Race_E.szs.\nOpen base archive: original. Open edited archive: edited copy.\nBoth must use the same language variant (E, U or J).\nCompare entries and save the selected changes.");
                 case "MusicLoopForm":
-                    return L.T("Open file: .wav mit PCM-Audio.\nConvert other audio: .mp3, .flac oder .ogg über FFmpeg.\nLoop-Start/-Ende setzen, Übergang anhören und .wav speichern.\nFür das Spiel anschließend mit BRSTM converter in .brstm umwandeln.",
+                    return L.T("Datei öffnen: .wav mit PCM-Audio.\nAudio umwandeln: .mp3, .flac oder .ogg über FFmpeg.\nLoop-Anfang/-Ende setzen, Übergang anhören und .wav speichern.\nFür das Spiel anschließend mit dem BRSTM-Konverter in .brstm umwandeln.",
                         "Open file: a PCM .wav audio file.\nConvert other audio: .mp3, .flac or .ogg via FFmpeg.\nSet loop start/end, preview the seam and save a .wav.\nThen use BRSTM converter to create the game's .brstm file.");
                 case "ThemeProjectForm":
                     return L.T("1. Neues Projekt für das gewählte Pack starten.\n2. Bearbeitete Dateien aus MUR_EDITED auswählen.\n3. Als gemeinsamen Theme-Ordner exportieren.\n.mtheme speichert optional deine Zusammenstellung zum Weiterarbeiten.",

@@ -16,7 +16,9 @@ foreach($relative in [IO.File]::ReadAllLines($manifest)){
  $targets+=$target
 }
 if($VerifyOnly){Write-Output ('Validated '+$targets.Count+' removal paths. No changes made.');exit 0}
-if([Windows.Forms.MessageBox]::Show('Remove murums Wii Mod Studio? Only packaged program files will be removed. Your projects, exported archives and separately downloaded tools will be kept. Close the editor first.','Uninstall murums Wii Mod Studio','YesNo','Question') -ne 'Yes'){exit 0}
+$chromePath=Join-Path $PSScriptRoot 'SETUP_CHROME.dll'
+[void][Reflection.Assembly]::Load([IO.File]::ReadAllBytes($chromePath))
+if([murumsWiiModStudio.Setup.SetupChrome]::ShowMessage('Remove murums Wii Mod Studio? Only packaged program files will be removed. Your projects, exported archives and separately downloaded tools will be kept. Close the editor first.','Uninstall murums Wii Mod Studio','YesNo','Question') -ne 'Yes'){exit 0}
 try {
  $exe=Join-Path $rootPath 'murums Wii Mod Studio.exe'
  if(Test-Path -LiteralPath $exe){$lock=[IO.File]::Open($exe,'Open','ReadWrite','None');$lock.Dispose()}
@@ -51,5 +53,5 @@ try {
  $directories=@($targets | ForEach-Object { $p=[IO.Path]::GetDirectoryName($_);while($p.Length -gt $rootPath.Length){$p;$p=[IO.Path]::GetDirectoryName($p)} } | Sort-Object -Unique | Sort-Object Length -Descending)
  foreach($dir in $directories){if((Test-Path -LiteralPath $dir) -and [IO.Directory]::GetFileSystemEntries($dir).Length -eq 0){[IO.Directory]::Delete($dir)}}
  if([IO.Directory]::GetFileSystemEntries($rootPath).Length -eq 0){[IO.Directory]::Delete($rootPath)}
- [void][Windows.Forms.MessageBox]::Show('Program removed. Any remaining files are your data or separately installed tools.','Uninstall complete')
-} catch {[void][Windows.Forms.MessageBox]::Show(('Uninstall could not finish: '+$_.Exception.Message+' Close the editor and retry.'),'Uninstall','OK','Error');exit 1}
+ [void][murumsWiiModStudio.Setup.SetupChrome]::ShowMessage('Program removed. Any remaining files are your data or separately installed tools.','Uninstall complete')
+} catch {[void][murumsWiiModStudio.Setup.SetupChrome]::ShowMessage(('Uninstall could not finish: '+$_.Exception.Message+' Close the editor and retry.'),'Uninstall','OK','Error');exit 1}

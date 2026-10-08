@@ -42,7 +42,7 @@ namespace murumsWiiModStudio
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Insert(0, new RowStyle(SizeType.Absolute, 112));
+            layout.RowStyles.Insert(0, new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
             layout.Controls.Add(StudioChrome.Header(Text, L.T("Schrift auswählen • Öffnen oder doppelklicken", "Select a font • Open or double-click")), 0, 0);
             layout.Controls.Add(new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 0, 0, 12), Text = L.T(
                 "RR-Schriften: UI/Font.szs enthält die Spielschriften. Wähle bei Bedarf deine Sprachvariante.\nWiiStuffs/homeBtn betrifft nur das HOME-Menü. Bildschrift und Rundenzahlen: Race HUD / Menu Textures.\nÜber Browse kannst du auch die Font.szs aus deinem Custom Pack öffnen.",
@@ -63,26 +63,29 @@ namespace murumsWiiModStudio
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
             var cancel = new Button { Text = L.T("Abbrechen", "Cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
             var open = new Button { Text = L.T("Auswahl öffnen", "Open selected"), AutoSize = true, MinimumSize = new Size(130, 32), Enabled = false };
-            var browse = new Button { Text = "Browse", AutoSize = true };
+            var browse = new Button { Text = L.T("Datei wählen…", "Choose file…"), AutoSize = true };
             list.SelectedIndexChanged += delegate { open.Enabled = list.SelectedIndex >= 0; };
             open.Click += delegate
             {
                 if (list.SelectedItem == null) return;
                 SelectedPath = (string)list.SelectedItem;
                 DialogResult = DialogResult.OK;
+                Close();
             };
             list.DoubleClick += delegate { if (list.SelectedIndex >= 0) open.PerformClick(); };
             if (list.Items.Count > 0) list.SelectedIndex = 0;
             AcceptButton = open;
             browse.Click += delegate {
                 using (var picker = new OpenFileDialog { Filter = ToolArchiveFilters.Fonts, InitialDirectory = packFolder ?? "" })
-                    if (picker.ShowDialog(this) == DialogResult.OK) { SelectedPath = picker.FileName; DialogResult = DialogResult.OK; }
+                    if (picker.ShowDialog(this) == DialogResult.OK) { SelectedPath = picker.FileName; DialogResult = DialogResult.OK; Close(); }
             };
             var recover = new Button { Text = L.T("Fehlende RR-Schrift ergänzen…", "Add missing RR font…"), AutoSize = true, Enabled = Directory.Exists(packFolder) };
             recover.Click += delegate {
-                using (var dialog = new RrMissingFilesForm(packFolder, "Font.szs", roots.Length == 1 ? roots[0] : null, null, 0, false))
-                    if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedPaths.Length == 1)
-                    { SelectedPath = dialog.SelectedPaths[0]; DialogResult = DialogResult.OK; }
+                var dialog = new RrMissingFilesForm(packFolder, "Font.szs", roots.Length == 1 ? roots[0] : null, null, 0, false);
+                StudioEditor.Open(this, dialog, result => {
+                    if (result == DialogResult.OK && dialog.SelectedPaths.Length == 1)
+                    { SelectedPath = dialog.SelectedPaths[0]; DialogResult = DialogResult.OK; Close(); }
+                });
             };
             buttons.Controls.Add(cancel); buttons.Controls.Add(open); buttons.Controls.Add(browse); buttons.Controls.Add(recover);
             layout.Controls.Add(buttons, 0, 3);

@@ -28,7 +28,7 @@ namespace murumsWiiModStudio
                 Application.SetCompatibleTextRenderingDefault(false);
                 StudioUx.Install();
                 MainForm form = new MainForm();
-                form.Shown += delegate
+                form.StartupCompleted += delegate
                 {
                     StudioUpdateForm.CheckAtStartup(form);
                 };

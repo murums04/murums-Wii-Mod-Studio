@@ -16,6 +16,21 @@ namespace murumsWiiModStudio
     }
     internal sealed class ArchiveMerge
     {
+        internal sealed class VariantSnapshot
+        {
+            readonly string source;
+            readonly byte[] data;
+            internal VariantSnapshot(StudioArchiveCopy archive) { source = archive.Source; data = (byte[])archive.Original.Clone(); }
+            internal StudioArchiveCopy CreateCopy() { return new StudioArchiveCopy(source, data); }
+        }
+        internal sealed class State
+        {
+            internal readonly VariantSnapshot[] Variants;
+            internal readonly int[] Choices;
+            internal State(VariantSnapshot[] variants, int[] choices) { Variants = variants; Choices = choices; }
+            internal static bool Same(State a, State b) { return a.Variants.SequenceEqual(b.Variants) && a.Choices.SequenceEqual(b.Choices); }
+        }
+        readonly List<VariantSnapshot> snapshots = new List<VariantSnapshot>();
         internal readonly StudioArchiveCopy Original;
         internal readonly List<StudioArchiveCopy> Variants = new List<StudioArchiveCopy>();
         internal readonly List<MergeEntry> Entries = new List<MergeEntry>();
@@ -33,7 +48,20 @@ namespace murumsWiiModStudio
                     || Variants.Concat(added).Any(v => v.Source.Equals(full, StringComparison.OrdinalIgnoreCase))) continue;
                 added.Add(new StudioArchiveCopy(full));
             }
-            Variants.AddRange(added); Recalculate();
+            Variants.AddRange(added); snapshots.AddRange(added.Select(v => new VariantSnapshot(v))); Recalculate();
+        }
+        internal State Capture() { return new State(snapshots.ToArray(), Entries.Select(e => e.Choice).ToArray()); }
+        internal void Restore(State state)
+        {
+            if (!snapshots.SequenceEqual(state.Variants))
+            {
+                var restored = state.Variants.Select(v => v.CreateCopy()).ToArray();
+                Variants.Clear(); Variants.AddRange(restored);
+                snapshots.Clear(); snapshots.AddRange(state.Variants);
+                Recalculate();
+            }
+            if (Entries.Count != state.Choices.Length) throw new InvalidOperationException("The merge history does not match its archive entries.");
+            for (int i = 0; i < Entries.Count; i++) Entries[i].Choice = state.Choices[i];
         }
         void Recalculate()
         {

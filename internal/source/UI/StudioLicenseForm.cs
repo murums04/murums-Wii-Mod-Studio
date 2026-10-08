@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
@@ -84,74 +85,66 @@ Required Notice: Copyright (c) 2026 murums04 (https://github.com/murums04)
         public StudioLicenseForm()
         {
             Text = L.T("Credits und Lizenzen", "Credits and licenses") + " — murums Wii Mod Studio";
-            ClientSize = new Size(780, 650);
-            MinimumSize = new Size(640, 500);
+            ClientSize = new Size(900, 680);
+            MinimumSize = new Size(680, 500);
             StartPosition = FormStartPosition.CenterParent;
             Font = new Font("Segoe UI", 10);
-            try
-            {
-                Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            }
-            catch
-            {
-            }
-
-            var text = new RichTextBox
-            {
-                ReadOnly = true,
-                Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.None,
-                Text = LicenseText,
-                ScrollBars = RichTextBoxScrollBars.Vertical
-            };
-            var tabs = new TabControl
-            {
-                Dock = DockStyle.Fill
-            };
+            AutoScaleMode = AutoScaleMode.Font;
+            ShowInTaskbar = false;
+            MinimizeBox = false;
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Margin = Padding.Empty };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.Controls.Add(StudioChrome.Header(L.T("Credits & Lizenzen", "Credits & licenses"), L.T("Studio-Lizenz und Rechte der verwendeten Komponenten", "Studio license and rights of the included components")), 0, 0);
+            var tabs = new DarkTabControl { Dock = DockStyle.Fill, Margin = new Padding(18, 14, 18, 0) };
             var creditsPage = new TabPage(L.T("Credits & Drittanbieter", "Credits & third parties"));
-            var credits = new RichTextBox
-            {
-                ReadOnly = true,
-                Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.None,
-                Text = StudioCredits.Text,
-                ScrollBars = RichTextBoxScrollBars.Vertical,
-                DetectUrls = true
-            };
-            StudioChrome.EnableLinks(credits);
-            creditsPage.Padding = new Padding(14);
-            creditsPage.Controls.Add(credits);
             var licensePage = new TabPage("PolyForm Noncommercial");
-            licensePage.Padding = new Padding(14);
-            licensePage.Controls.Add(text);
+            var credits = Reader(StudioCredits.Text, L.T("Credits und Drittanbieterhinweise", "Credits and third-party notices"));
+            var license = Reader(LicenseText, "PolyForm Noncommercial License 1.0.0");
+            creditsPage.Padding = licensePage.Padding = new Padding(18);
+            creditsPage.Controls.Add(credits);
+            licensePage.Controls.Add(license);
             tabs.TabPages.Add(creditsPage);
             tabs.TabPages.Add(licensePage);
-            var body = new Panel
+            root.Controls.Add(tabs, 0, 1);
+            var note = new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(20, 12, 20, 2), Margin = Padding.Empty, ForeColor = DarkTheme.Muted, UseMnemonic = false,
+                Text = L.T("Drittprogramme und Spieldateien behalten ihre eigenen Lizenzen. Entwickelt von murums mit KI-Unterstützung.", "Third-party programs and game files retain their own licenses. Developed by murums with AI assistance.") };
+            root.Controls.Add(note, 0, 2);
+            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, Padding = new Padding(16, 6, 16, 12), Margin = Padding.Empty };
+            var close = StudioChrome.ActionButton(L.T("Schließen", "Close"));
+            close.DialogResult = DialogResult.OK;
+            actions.Controls.Add(close);
+            var copy = StudioChrome.ActionButton(L.T("Text kopieren", "Copy text"));
+            copy.Click += delegate
             {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(12)
+                var selected = tabs.SelectedIndex == 0 ? credits : license;
+                try { System.Windows.Forms.Clipboard.SetText(selected.Text); copy.Text = L.T("Kopiert", "Copied"); }
+                catch (System.Runtime.InteropServices.ExternalException)
+                {
+                    selected.Focus();
+                    selected.SelectAll();
+                    copy.Text = L.T("Erneut kopieren", "Retry copy");
+                }
             };
-            body.Controls.Add(tabs);
-            var note = new Label
-            {
-                Dock = DockStyle.Bottom,
-                Height = 60,
-                Padding = new Padding(18, 8, 18, 8),
-                Text = L.T("Drittprogramme und Spieldateien behalten ihre eigenen Lizenzen. Entwickelt von murums mit KI-Unterstützung.", "Third-party programs and game files retain their own licenses. Developed by murums with AI assistance.")
-            };
-            var close = new Button
-            {
-                Text = L.T("Schliessen", "Close"),
-                DialogResult = DialogResult.OK,
-                Dock = DockStyle.Bottom,
-                Height = 38
-            };
-            Controls.Add(body);
-            Controls.Add(note);
-            Controls.Add(close);
+            tabs.SelectedIndexChanged += delegate { copy.Text = L.T("Text kopieren", "Copy text"); };
+            actions.Controls.Add(copy);
+            root.Controls.Add(actions, 0, 3);
+            Controls.Add(root);
             AcceptButton = close;
             CancelButton = close;
+            root.SizeChanged += delegate { note.MaximumSize = new Size(Math.Max(100, root.ClientSize.Width), 0); };
             DarkTheme.Apply(this);
+        }
+
+        private static RichTextBox Reader(string text, string name)
+        {
+            var reader = new RichTextBox { ReadOnly = true, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, Text = text, ScrollBars = RichTextBoxScrollBars.Vertical, WordWrap = true, Font = new Font("Segoe UI", 10.5F), AccessibleName = name };
+            StudioChrome.EnableLinks(reader);
+            StudioUx.DisableHover(reader);
+            return reader;
         }
     }
 }

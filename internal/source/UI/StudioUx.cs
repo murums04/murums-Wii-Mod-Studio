@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace murumsWiiModStudio
@@ -16,6 +17,8 @@ namespace murumsWiiModStudio
         static readonly ConditionalWeakTable<Control, Marker> attached = new ConditionalWeakTable<Control, Marker>();
         static readonly ConditionalWeakTable<Form, Marker> forms = new ConditionalWeakTable<Form, Marker>();
         static readonly HashSet<ToolStripDropDown> openMenus = new HashSet<ToolStripDropDown>();
+        static readonly HashSet<ComboBox> openCombos = new HashSet<ComboBox>();
+        static readonly ConditionalWeakTable<ToolStripDropDown, Marker> trackedMenus = new ConditionalWeakTable<ToolStripDropDown, Marker>();
         static readonly ConditionalWeakTable<Control, Marker> quietControls = new ConditionalWeakTable<Control, Marker>();
         static Timer timer;
         static HoverHintWindow hover;
@@ -37,18 +40,18 @@ namespace murumsWiiModStudio
             };
             timer.Tick += delegate
             {
-                foreach (Form form in Application.OpenForms)
+                Form form = HoverHost(Form.ActiveForm);
+                if (!CanPaint(form))
                 {
-                    if (form is HoverHintWindow)
-                        continue;
-                    Marker m;
-                    if (!forms.TryGetValue(form, out m))
-                    {
-                        forms.Add(form, new Marker());
-                        Attach(form);
-                    }
+                    if (shown || last != null) Hide();
+                    return;
                 }
-
+                Marker marker;
+                if (!forms.TryGetValue(form, out marker))
+                {
+                    forms.Add(form, new Marker());
+                    Attach(form);
+                }
                 ShowHover();
             };
             timer.Start();
@@ -73,28 +76,54 @@ namespace murumsWiiModStudio
 
         public static void Attach(Control c)
         {
+            StudioTypography.Initialize(c);
             Marker marker;
             if (attached.TryGetValue(c, out marker))
                 return;
             attached.Add(c, new Marker());
+            StudioSurface.BufferContainer(c);
+            var form = c as Form;
+            if (form != null)
+            {
+                StudioChrome.StyleWindowFrame(form);
+                StudioWindowLayout.Attach(form);
+                form.Shown += delegate { if (!form.IsDisposed && form.IsHandleCreated) SendUiState(form.Handle, 0x127, (IntPtr)0x10001, IntPtr.Zero); };
+                form.Deactivate += delegate { Hide(); };
+                form.Resize += delegate { if (form.WindowState == FormWindowState.Minimized) Hide(); };
+                // Den nativen Schrift-Handle auch bei noch referenzierten geschlossenen Fenstern freigeben.
+                form.Disposed += delegate { form.Font = null; };
+            }
             var b = c as ButtonBase;
             if (b != null && !(b is SelectionClearButton))
             {
                 b.FlatStyle = FlatStyle.Flat;
                 b.UseVisualStyleBackColor = false;
                 b.ForeColor = DarkTheme.Fore;
+                StudioSurface.Track(b);
                 b.Paint += PaintDisabled;
                 b.EnabledChanged += delegate
                 {
                     b.Invalidate();
                 };
                 if (b is CheckBox || b is RadioButton)
-                    b.MinimumSize = new Size(TextRenderer.MeasureText(b.Text, b.Font).Width + 30, b.MinimumSize.Height);
+                {
+                    int width = TextRenderer.MeasureText(b.Text, b.Font).Width + 30;
+                    if (b.MaximumSize.Width > 0) width = Math.Min(width, b.MaximumSize.Width);
+                    b.MinimumSize = new Size(width, b.MinimumSize.Height);
+                }
                 if (b is Button)
                 {
+                    if (b.BackColor == SystemColors.Control) b.BackColor = DarkTheme.Panel2;
+                    b.FlatAppearance.BorderSize = 0;
                     b.FlatAppearance.BorderColor = DarkTheme.Border;
-                    b.FlatAppearance.MouseOverBackColor = DarkTheme.Panel3;
-                    b.FlatAppearance.MouseDownBackColor = DarkTheme.AccentSoft;
+                    Action updateButton = delegate
+                    {
+                        bool primary = b.BackColor == DarkTheme.Accent || b.BackColor == DarkTheme.Accent2;
+                        b.FlatAppearance.MouseOverBackColor = primary ? DarkTheme.Accent : DarkTheme.Panel3;
+                        b.FlatAppearance.MouseDownBackColor = primary ? DarkTheme.PrimaryPressed : DarkTheme.AccentSoft;
+                    };
+                    b.BackColorChanged += delegate { updateButton(); };
+                    updateButton();
                 }
             }
 
@@ -104,11 +133,12 @@ namespace murumsWiiModStudio
                 group.EnabledChanged += delegate { group.Invalidate(); };
                 group.Paint += delegate(object sender, PaintEventArgs e)
                 {
-                    if (group.Enabled || String.IsNullOrEmpty(group.Text)) return;
+                    e.Graphics.Clear(group.BackColor);
+                    if (String.IsNullOrEmpty(group.Text)) return;
                     Size size = TextRenderer.MeasureText(group.Text, group.Font);
                     var bounds = new Rectangle(7, 0, Math.Min(size.Width, Math.Max(0, group.Width - 14)), size.Height);
                     using (var brush = new SolidBrush(group.BackColor)) e.Graphics.FillRectangle(brush, bounds);
-                    TextRenderer.DrawText(e.Graphics, group.Text, group.Font, bounds, DarkTheme.Disabled, TextFormatFlags.NoPrefix);
+                    TextRenderer.DrawText(e.Graphics, group.Text, group.Font, bounds, group.Enabled ? DarkTheme.Muted : DarkTheme.Disabled, TextFormatFlags.NoPrefix);
                 };
             }
             var label = c as Label;
@@ -123,7 +153,7 @@ namespace murumsWiiModStudio
                     Rectangle bounds = label.ClientRectangle;
                     bounds = new Rectangle(bounds.X + label.Padding.Left, bounds.Y + label.Padding.Top,
                         Math.Max(0, bounds.Width - label.Padding.Horizontal), Math.Max(0, bounds.Height - label.Padding.Vertical));
-                    TextFormatFlags flags = label.AutoSize && label.Text.IndexOfAny(new[] { '\r', '\n' }) < 0 ? TextFormatFlags.SingleLine : TextFormatFlags.WordBreak;
+                    TextFormatFlags flags = label.AutoSize && label.MaximumSize.Width == 0 && label.Text.IndexOfAny(new[] { '\r', '\n' }) < 0 ? TextFormatFlags.SingleLine : TextFormatFlags.WordBreak;
                     if (!label.UseMnemonic) flags |= TextFormatFlags.NoPrefix;
                     if (label.AutoEllipsis) flags |= TextFormatFlags.EndEllipsis;
                     if (label.TextAlign == ContentAlignment.MiddleLeft || label.TextAlign == ContentAlignment.MiddleCenter || label.TextAlign == ContentAlignment.MiddleRight) flags |= TextFormatFlags.VerticalCenter;
@@ -138,13 +168,21 @@ namespace murumsWiiModStudio
             {
                 combo.DropDown += delegate
                 {
+                    openCombos.Add(combo);
                     Hide();
                 };
                 combo.DropDownClosed += delegate
                 {
+                    openCombos.Remove(combo);
                     Hide();
                 };
+                combo.Disposed += delegate { openCombos.Remove(combo); };
             }
+
+            StudioScrollChrome.Attach(c);
+            c.GotFocus += delegate { StudioScrollChrome.RefreshAncestors(c); };
+            StudioComboChrome.Attach(c);
+            StudioTrackBarChrome.Attach(c);
 
             var tabControl = c as TabControl;
             if (tabControl != null)
@@ -156,7 +194,9 @@ namespace murumsWiiModStudio
             var strip = c as ToolStrip;
             if (strip != null)
             {
-                strip.ShowItemToolTips = true;
+                var dropDown = strip as ToolStripDropDown;
+                if (dropDown != null) TrackDropDown(dropDown);
+                strip.ShowItemToolTips = !(strip is MenuStrip || strip is ToolStripDropDown);
                 DescribeItems(strip.Items);
                 strip.ItemAdded += delegate
                 {
@@ -164,12 +204,40 @@ namespace murumsWiiModStudio
                 };
             }
 
+            if (c.ContextMenuStrip != null) TrackDropDown(c.ContextMenuStrip);
+            c.ContextMenuStripChanged += delegate { if (c.ContextMenuStrip != null) TrackDropDown(c.ContextMenuStrip); };
+
+            AlignFlowControl(c);
+            c.ParentChanged += delegate { AlignFlowControl(c); };
             c.ControlAdded += delegate (object sender, ControlEventArgs e)
             {
                 Attach(e.Control);
             };
             foreach (Control child in c.Controls)
                 Attach(child);
+        }
+
+        [DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendUiState(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        static void AlignFlowControl(Control control)
+        {
+            var row = control.Parent as FlowLayoutPanel;
+            if (row == null || control.Dock != DockStyle.None
+                || (row.FlowDirection != FlowDirection.LeftToRight && row.FlowDirection != FlowDirection.RightToLeft))
+                return;
+            var label = control as Label;
+            var text = control as TextBox;
+            bool singleLineLabel = label != null && (label.AutoSize || label.Height <= label.Font.Height * 2) && label.MaximumSize.Width == 0
+                && label.Text.IndexOfAny(new[] { '\r', '\n' }) < 0;
+            if (!(control is ButtonBase || control is ComboBox || control is NumericUpDown
+                || text != null && !text.Multiline || singleLineLabel))
+                return;
+
+            // Ohne vertikalen Anker zentriert WinForms die Elemente auch nach einem Zeilenumbruch.
+            control.Anchor = AnchorStyles.Left;
+            var margin = control.Margin;
+            int spacing = Math.Max(3, control.Font.Height / 5);
+            control.Margin = new Padding(margin.Left, spacing, margin.Right, spacing);
         }
 
         static void DescribeItems(ToolStripItemCollection items)
@@ -180,13 +248,40 @@ namespace murumsWiiModStudio
                     item.ToolTipText = ActionHelp(item.Text);
                 var drop = item as ToolStripDropDownItem;
                 if (drop != null)
+                {
+                    TrackDropDown(drop.DropDown);
                     DescribeItems(drop.DropDownItems);
+                }
+                var host = item as ToolStripControlHost;
+                if (host != null) Attach(host.Control);
             }
         }
 
         static void PaintDisabled(object sender, PaintEventArgs e)
         {
             var b = (ButtonBase)sender;
+            if (b is CheckBox || b is RadioButton)
+            {
+                StudioSurface.PaintChoice(b, e.Graphics);
+                return;
+            }
+            var button = b as Button;
+            if (button != null)
+            {
+                StudioSurface.PaintButton(button, e.Graphics);
+                return;
+            }
+            if (StudioHistorySymbols.IsArrow(b.Text))
+            {
+                bool hover = b.Enabled && b.ClientRectangle.Contains(b.PointToClient(Control.MousePosition));
+                Color background = !b.Enabled ? DarkTheme.Panel : hover
+                    ? ((Control.MouseButtons & MouseButtons.Left) != 0 ? DarkTheme.AccentSoft : DarkTheme.Panel3) : b.BackColor;
+                using (var brush = new SolidBrush(background)) e.Graphics.FillRectangle(brush, b.ClientRectangle);
+                using (var border = new Pen(DarkTheme.Border))
+                    e.Graphics.DrawRectangle(border, 0, 0, Math.Max(0, b.Width - 1), Math.Max(0, b.Height - 1));
+                StudioHistorySymbols.Draw(e.Graphics, b.Text, b.Font, b.ClientRectangle, b.Enabled ? DarkTheme.Fore : DarkTheme.Disabled);
+                return;
+            }
             if (b.Enabled)
                 return;
             Color bg = (b is CheckBox || b is RadioButton) ? b.BackColor : DarkTheme.Panel;
@@ -219,7 +314,9 @@ namespace murumsWiiModStudio
                     e.Graphics.DrawRectangle(p, 0, 0, Math.Max(0, b.Width - 1), Math.Max(0, b.Height - 1));
             }
 
-            TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
+            if (!b.UseMnemonic) flags |= TextFormatFlags.NoPrefix;
+            if (b.MaximumSize.Width > 0) flags |= TextFormatFlags.WordBreak;
             if (check == null && radio == null)
                 flags |= TextFormatFlags.HorizontalCenter;
             else
@@ -230,15 +327,16 @@ namespace murumsWiiModStudio
         internal static Form HoverHost(Form active)
         {
             var hint = active as HoverHintWindow;
-            return hint == null ? active : hint.HostForm;
+            Form host = hint == null ? active : hint.HostForm;
+            return host != null && !host.TopLevel ? host.TopLevelControl as Form ?? host : host;
         }
 
         public static void TrackDropDown(ToolStripDropDown menu)
         {
             Marker marker;
-            if (attached.TryGetValue(menu, out marker))
+            if (trackedMenus.TryGetValue(menu, out marker))
                 return;
-            attached.Add(menu, new Marker());
+            trackedMenus.Add(menu, new Marker());
             menu.Opened += delegate
             {
                 openMenus.Add(menu);
@@ -256,49 +354,37 @@ namespace murumsWiiModStudio
         }
         internal static bool HasOpenDropDown(Control control)
         {
-            if (openMenus.Count > 0 || (control.ContextMenuStrip != null && control.ContextMenuStrip.Visible))
-                return true;
-            var combo = control as ComboBox;
-            if (combo != null && combo.DroppedDown)
-                return true;
-            var strip = control as ToolStrip;
-            if (strip != null)
-            {
-                foreach (ToolStripItem item in strip.Items)
-                {
-                    var drop = item as ToolStripDropDownItem;
-                    if (drop != null && drop.HasDropDownItems && drop.DropDown.Visible)
-                        return true;
-                    var list = item as ToolStripComboBox;
-                    if (list != null && list.ComboBox.DroppedDown)
-                        return true;
-                }
-            }
-
-            foreach (Control child in control.Controls)
-                if (HasOpenDropDown(child))
-                    return true;
+            if (!CanPaint(control)) return false;
+            if (control.ContextMenuStrip != null && control.ContextMenuStrip.Visible) return true;
+            foreach (ToolStripDropDown menu in openMenus)
+                if (!menu.IsDisposed && menu.Visible) return true;
+            foreach (ComboBox combo in openCombos)
+                if (CanPaint(combo) && combo.DroppedDown) return true;
             return false;
+        }
+
+        internal static bool CanPaint(Control control)
+        {
+            if (control == null || control.IsDisposed || !control.Visible) return false;
+            var root = control.TopLevelControl as Form;
+            return root == null || !root.IsDisposed && root.Visible && root.WindowState != FormWindowState.Minimized;
         }
 
         static void ShowHover()
         {
             Form form = HoverHost(Form.ActiveForm);
-            if (Control.MouseButtons != MouseButtons.None || form == null || form.IsDisposed || !form.Visible || HasOpenDropDown(form))
+            if (Control.MouseButtons != MouseButtons.None || !CanPaint(form) || HasOpenDropDown(form))
             {
                 Hide();
                 return;
             }
 
             Point screen = Cursor.Position;
-            Control c = form;
-            while (true)
+            if (last != null && screen == lastPoint && CanPaint(last) && last.ClientRectangle.Contains(last.PointToClient(screen)))
             {
-                var next = c.GetChildAtPoint(c.PointToClient(screen), GetChildAtPointSkip.Invisible);
-                if (next == null)
-                    break;
-                c = next;
+                if (shown || (DateTime.UtcNow - since).TotalMilliseconds < 650) return;
             }
+            Control c = HoverControlAt(form, screen);
 
             if (!form.ClientRectangle.Contains(form.PointToClient(screen)))
             {
@@ -338,6 +424,20 @@ namespace murumsWiiModStudio
                 hover.Hide();
             last = null;
             shown = false;
+        }
+
+        internal static Control HoverControlAt(Control root, Point screen)
+        {
+            if (root == null || root.IsDisposed) return null;
+            // Auch deaktivierte und handlelose WinForms-Steuerelemente beruecksichtigen.
+            Point point = root.PointToClient(screen);
+            foreach (Control child in root.Controls)
+            {
+                if (!child.Visible || child.IsDisposed || !child.Bounds.Contains(point)) continue;
+                Control target = HoverControlAt(child, screen);
+                if (target != null) return target;
+            }
+            return root.ClientRectangle.Contains(point) ? root : null;
         }
 
         internal static string HoverHelpAt(Control c, Point point)

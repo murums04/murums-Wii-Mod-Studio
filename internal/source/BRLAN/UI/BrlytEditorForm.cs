@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -70,6 +70,8 @@ namespace murumsWiiModStudio.Brlan
         private readonly Stack<EditorState> _redo = new Stack<EditorState>();
         private DateTime _lastUndoRecord = DateTime.MinValue;
         private bool _applyingUndo;
+        private ToolStripButton _undoTool, _redoTool;
+        private StudioUndoRedo _historyActions;
         public bool Saved { get; private set; }
 
         public BrlytEditorForm(string path)
@@ -77,7 +79,7 @@ namespace murumsWiiModStudio.Brlan
             _path = path;
             Text = L.T("BRLYT Layout Editor", "BRLYT Layout Editor");
             StartPosition = FormStartPosition.CenterParent;
-            MinimumSize = new Size(1050, 700);
+            MinimumSize = new Size(920, 620);
             Size = new Size(1280, 820);
             BackColor = DarkTheme.Back;
             ForeColor = DarkTheme.Fore;
@@ -96,6 +98,7 @@ namespace murumsWiiModStudio.Brlan
             BuildUi();
             DarkTheme.Apply(this);
             LoadDocument();
+            _historyActions = new StudioUndoRedo(this, null, delegate { _undoTool.Enabled = _undo.Count > 0; return _undo.Count > 0; }, delegate { _redoTool.Enabled = _redo.Count > 0; return _redo.Count > 0; }, UndoEdit, RedoEdit);
             FormClosing += OnFormClosing;
             FormClosed += delegate
             {
@@ -133,7 +136,7 @@ namespace murumsWiiModStudio.Brlan
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
             root.RowCount = 4;
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, murumsWiiModStudio.StudioChrome.HeaderHeight));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
@@ -153,11 +156,11 @@ namespace murumsWiiModStudio.Brlan
                 Reload();
             }));
             bar.Items.Add(new ToolStripSeparator());
-            bar.Items.Add(StudioHistorySymbols.Tool(MakeTool(StudioHistorySymbols.Undo, delegate
+            bar.Items.Add(_undoTool = StudioHistorySymbols.Tool(MakeTool(StudioHistorySymbols.Undo, delegate
             {
                 UndoEdit();
             }), false, L.T("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)")));
-            bar.Items.Add(StudioHistorySymbols.Tool(MakeTool(StudioHistorySymbols.Redo, delegate
+            bar.Items.Add(_redoTool = StudioHistorySymbols.Tool(MakeTool(StudioHistorySymbols.Redo, delegate
             {
                 RedoEdit();
             }), true, L.T("Wiederholen (Strg+Y)", "Redo (Ctrl+Y)")));
@@ -184,6 +187,10 @@ namespace murumsWiiModStudio.Brlan
                 ShowHelp();
             }));
             root.Controls.Add(bar, 0, 1);
+            StudioActions.Tool(bar.Items[0], StudioIcon.Save, true);
+            StudioActions.Tool(bar.Items[1], StudioIcon.Refresh, true);
+            StudioActions.Tool(bar.Items[6], StudioIcon.Fit, true);
+            StudioActions.Tool(bar.Items[10], StudioIcon.Help, true);
             SplitContainer outer = new SplitContainer();
             outer.Dock = DockStyle.Fill;
             outer.FixedPanel = FixedPanel.Panel1;
@@ -204,7 +211,8 @@ namespace murumsWiiModStudio.Brlan
             outer.Panel1.Controls.Add(_tree);
             SplitContainer right = new SplitContainer();
             right.Dock = DockStyle.Fill;
-            right.Orientation = Orientation.Horizontal;
+            right.Orientation = Orientation.Vertical;
+            right.FixedPanel = FixedPanel.Panel2;
             right.SplitterWidth = 4;
             right.BackColor = DarkTheme.Border;
             outer.Panel2.Controls.Add(right);
@@ -212,7 +220,7 @@ namespace murumsWiiModStudio.Brlan
             _editorHost.Dock = DockStyle.Fill;
             _editorHost.Padding = new Padding(14);
             _editorHost.AutoScroll = true;
-            right.Panel1.Controls.Add(_editorHost);
+            right.Panel2.Controls.Add(_editorHost);
             TableLayoutPanel previewPanel = new TableLayoutPanel();
             previewPanel.Dock = DockStyle.Fill;
             previewPanel.RowCount = 2;
@@ -239,7 +247,8 @@ namespace murumsWiiModStudio.Brlan
             _summary.ForeColor = DarkTheme.Muted;
             previewPanel.Controls.Add(_preview, 0, 0);
             previewPanel.Controls.Add(_summary, 0, 1);
-            right.Panel2.Controls.Add(previewPanel);
+            right.Panel1.Controls.Add(previewPanel);
+            StudioPreview.AddExpandButton(previewPanel, _preview);
             StatusStrip ss = new StatusStrip();
             ss.Dock = DockStyle.Fill;
             ss.SizingGrip = false;
@@ -264,8 +273,8 @@ namespace murumsWiiModStudio.Brlan
         {
             if (split == null || split.Width <= 0)
                 return;
-            const int desiredDefault = 300;
-            const int minimumLeft = 240;
+            const int desiredDefault = 230;
+            const int minimumLeft = 180;
             const int minimumRight = 600;
             // Start without constraints, move the splitter to a valid position,
             // then apply the constraints. This order is safe on high-DPI and on
@@ -310,14 +319,14 @@ namespace murumsWiiModStudio.Brlan
 
         private static void ConfigureRightSplitter(SplitContainer split)
         {
-            if (split == null || split.Height <= 0)
+            if (split == null || split.Width <= 0)
                 return;
-            int available = split.Height - split.SplitterWidth;
+            int available = split.Width - split.SplitterWidth;
             if (available <= 1)
                 return;
-            int desired = 360;
-            int minimumTop = Math.Min(220, Math.Max(1, available / 3));
-            int minimumBottom = Math.Min(180, Math.Max(1, available / 4));
+            int desired = available - 340;
+            int minimumTop = Math.Min(260, Math.Max(1, available / 3));
+            int minimumBottom = Math.Min(300, Math.Max(1, available / 3));
             int max = available - minimumBottom;
             if (desired < minimumTop)
                 desired = minimumTop;
@@ -483,7 +492,7 @@ namespace murumsWiiModStudio.Brlan
             int r = 0;
             Label title = new Label();
             title.AutoSize = true;
-            title.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             title.ForeColor = Color.White;
             title.Text = p.ToString();
             t.SetColumnSpan(title, 2);
@@ -632,7 +641,7 @@ namespace murumsWiiModStudio.Brlan
             int r = 0;
             Label title = new Label();
             title.AutoSize = true;
-            title.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             title.ForeColor = Color.White;
             title.Text = L.T("Material", "Material") + " #" + m.Index;
             t.SetColumnSpan(title, 2);
@@ -680,7 +689,7 @@ namespace murumsWiiModStudio.Brlan
             int r = 0;
             Label title = new Label();
             title.AutoSize = true;
-            title.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             title.ForeColor = Color.White;
             title.Text = L.T("Textur", "Texture") + " #" + texture.Index;
             t.SetColumnSpan(title, 2);
@@ -734,7 +743,7 @@ namespace murumsWiiModStudio.Brlan
             int r = 0;
             Label title = new Label();
             title.AutoSize = true;
-            title.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
             title.ForeColor = Color.White;
             title.Text = L.T("Font", "Font") + " #" + font.Index;
             t.SetColumnSpan(title, 2);
@@ -944,7 +953,7 @@ namespace murumsWiiModStudio.Brlan
         {
             if (_applyingUndo || _doc == null)
                 return;
-            if ((DateTime.UtcNow - _lastUndoRecord).TotalMilliseconds < 350 && _undo.Count > 0)
+            if ((DateTime.UtcNow - _lastUndoRecord).TotalMilliseconds < 350 && _undo.Count > 0 && _redo.Count == 0)
                 return;
             RecordUndo(false);
         }
@@ -953,7 +962,7 @@ namespace murumsWiiModStudio.Brlan
         {
             if (_applyingUndo || _doc == null)
                 return;
-            if (!force && (DateTime.UtcNow - _lastUndoRecord).TotalMilliseconds < 350 && _undo.Count > 0)
+            if (!force && (DateTime.UtcNow - _lastUndoRecord).TotalMilliseconds < 350 && _undo.Count > 0 && _redo.Count == 0)
                 return;
             _undo.Push(CaptureEditorState());
             while (_undo.Count > 100)

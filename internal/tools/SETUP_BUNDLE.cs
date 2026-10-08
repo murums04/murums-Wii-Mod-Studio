@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
@@ -246,14 +246,14 @@ internal static class SetupBundle
                     return 0;
                 if (documentPath != null)
                 {
-                    MessageBox.Show("Install murums Wii Mod Studio first, then open this file again. Run the downloaded EXE without a file to install it.",
+                    murumsWiiModStudio.Setup.SetupChrome.ShowMessage("Install murums Wii Mod Studio first, then open this file again. Run the downloaded EXE without a file to install it.",
                         "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return 1;
                 }
             }
             catch (Exception e)
             {
-                MessageBox.Show("Studio could not open the requested file or installation.\n" + e.Message,
+                murumsWiiModStudio.Setup.SetupChrome.ShowMessage("Studio could not open the requested file or installation.\n" + e.Message,
                     "murums Wii Mod Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
             }

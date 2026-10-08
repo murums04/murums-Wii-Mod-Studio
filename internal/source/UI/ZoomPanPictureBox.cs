@@ -20,6 +20,7 @@ namespace murumsWiiModStudio
 
         public ZoomPanPictureBox()
         {
+            StudioPreview.AddExpandButton(this);
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.StandardClick | ControlStyles.StandardDoubleClick, true);
             navigationTip.SetToolTip(this, L.T(
                 "Mausrad: zoomen • Mausrad gedrückt ziehen: verschieben • Mausrad-Doppelklick: einpassen",
@@ -53,6 +54,13 @@ namespace murumsWiiModStudio
             CheckImage();
             if (Image == null) return PointF.Empty;
             float x = (point.X - offset.X) / zoom, y = (point.Y - offset.Y) / zoom;
+            RectangleF bounds = ImageRectangle();
+            return new PointF((x - bounds.Left) * Image.Width / bounds.Width,
+                (y - bounds.Top) * Image.Height / bounds.Height);
+        }
+
+        protected RectangleF ImageRectangle()
+        {
             var box = ClientRectangle;
             box = new Rectangle(box.X + Padding.Left, box.Y + Padding.Top,
                 Math.Max(1, box.Width - Padding.Horizontal), Math.Max(1, box.Height - Padding.Vertical));
@@ -66,7 +74,7 @@ namespace murumsWiiModStudio
             float left = box.Left, top = box.Top;
             if (SizeMode == PictureBoxSizeMode.Zoom || SizeMode == PictureBoxSizeMode.CenterImage)
             { left += (box.Width - width) / 2; top += (box.Height - height) / 2; }
-            return new PointF((x - left) * Image.Width / width, (y - top) * Image.Height / height);
+            return new RectangleF(left, top, width, height);
         }
 
         internal void ZoomAt(Point point, int delta)
@@ -174,12 +182,17 @@ namespace murumsWiiModStudio
             {
                 e.Graphics.TranslateTransform(offset.X, offset.Y);
                 e.Graphics.ScaleTransform(zoom, zoom);
-                base.OnPaint(e);
+                PaintPreview(e);
             }
             finally
             {
                 e.Graphics.Restore(state);
             }
+        }
+
+        protected virtual void PaintPreview(PaintEventArgs e)
+        {
+            base.OnPaint(e);
         }
 
         protected override void Dispose(bool disposing)

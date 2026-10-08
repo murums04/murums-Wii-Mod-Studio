@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -235,13 +235,13 @@ namespace murumsWiiModStudio.Setup
             using (var form = new Form
             {
                 Text = "murums Wii Mod Studio — Update",
-                ClientSize = new Size(640, 260),
+                ClientSize = new Size(640, 250),
                 StartPosition = FormStartPosition.CenterScreen,
                 Font = new Font("Segoe UI", 10),
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 MaximizeBox = false,
-                BackColor = Color.FromArgb(20, 21, 26),
-                ForeColor = Color.White
+                BackColor = SetupChrome.Back,
+                ForeColor = SetupChrome.Fore
             }
 
             )
@@ -256,31 +256,44 @@ namespace murumsWiiModStudio.Setup
 
                 var title = new Label
                 {
-                    Text = "Update murums Wii Mod Studio",
-                    Font = new Font("Segoe UI", 17, FontStyle.Bold),
+                    Text = SetupChrome.L("Studio aktualisieren", "Update murums Wii Mod Studio"),
+                    Font = new Font("Segoe UI", 12, FontStyle.Bold),
                     Bounds = new Rectangle(24, 22, 590, 42)
                 };
                 var status = new Label
                 {
-                    Text = "Close Studio to continue. Your projects, settings and optional tools are kept.",
+                    Text = SetupChrome.L("Schliesse Studio, um fortzufahren. Projekte, Einstellungen und optionale Programme bleiben erhalten.", "Close Studio to continue. Your projects, settings and optional tools are kept."),
                     Bounds = new Rectangle(24, 80, 590, 92)
                 };
                 var install = new Button
                 {
-                    Text = "Install and restart",
+                    Text = SetupChrome.L("Installieren und starten", "Install and restart"),
                     Enabled = false,
-                    Bounds = new Rectangle(360, 194, 160, 38),
+                    AutoSize = true, MinimumSize = new Size(160, 36),
                     FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.FromArgb(139, 92, 246)
+                    BackColor = SetupChrome.Primary
                 };
                 var close = new Button
                 {
-                    Text = "Cancel",
-                    Bounds = new Rectangle(530, 194, 86, 38),
+                    Text = SetupChrome.L("Abbrechen", "Cancel"),
+                    AutoSize = true, MinimumSize = new Size(100, 36),
                     FlatStyle = FlatStyle.Flat,
                     DialogResult = DialogResult.Cancel
                 };
-                form.Controls.AddRange(new Control[] { title, status, install, close });
+                var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1, RowCount = 3 };
+                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                title.AutoSize = true; title.Dock = DockStyle.Fill; title.Margin = new Padding(0, 0, 0, 16);
+                status.Dock = DockStyle.Fill; status.Margin = Padding.Empty;
+                var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Margin = new Padding(0, 16, 0, 0) };
+                actions.Controls.Add(install); actions.Controls.Add(close);
+                layout.Controls.Add(title, 0, 0); layout.Controls.Add(status, 0, 1); layout.Controls.Add(actions, 0, 2);
+                form.Controls.Add(layout);
+                form.AutoScaleMode = AutoScaleMode.Font;
+                SetupChrome.Apply(form);
+                form.AcceptButton = install;
                 form.CancelButton = close;
                 string root;
                 try
@@ -289,7 +302,7 @@ namespace murumsWiiModStudio.Setup
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(ex.Message, form.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    SetupChrome.ShowMessage(ex.Message, form.Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -306,7 +319,7 @@ namespace murumsWiiModStudio.Setup
                         {
                             install.Enabled = Ready(root);
                             if (install.Enabled)
-                                status.Text = "Ready to install the new version. Projects, settings and optional tools are kept.";
+                                status.Text = SetupChrome.L("Die neue Version ist bereit. Projekte, Einstellungen und optionale Programme bleiben erhalten.", "Ready to install the new version. Projects, settings and optional tools are kept.");
                         }
                         catch (Exception ex)
                         {
@@ -332,7 +345,7 @@ namespace murumsWiiModStudio.Setup
                             }
                             catch (Exception ex)
                             {
-                                MessageBox.Show("The program was updated, but its Windows registration could not be refreshed. " + ex.Message, form.Text);
+                                SetupChrome.ShowMessage("The program was updated, but its Windows registration could not be refreshed. " + ex.Message, form.Text);
                             }
 
                             Process.Start(new ProcessStartInfo { FileName = Path.Combine(root, PackageFiles[0]), WorkingDirectory = root, UseShellExecute = false });

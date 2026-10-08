@@ -1,4 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$OutputDirectory)
+. (Join-Path $PSScriptRoot 'build-guard.ps1')
+Invoke-StudioBuild {
 $ErrorActionPreference = 'Stop'
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
@@ -20,4 +22,4 @@ $sourceFolder = Join-Path $OutputDirectory 'sources'
 foreach ($name in @('brawllib-studio-source.zip','blender-5.2.2.tar.xz')) { Copy-Item -LiteralPath (Join-Path $deps $name) -Destination $sourceFolder -Force }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'model/StudioModelCodec.cs') -Destination $sourceFolder -Force
 Copy-Item -LiteralPath (Join-Path $deps 'meshoptimizer-1.0/source.zip') -Destination (Join-Path $sourceFolder 'meshoptimizer-1.0.zip') -Force
-
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -7,11 +7,13 @@ namespace murumsWiiModStudio
 {
     internal sealed class FontScriptForm : StudioToolForm
     {
+        SpecialEditorHistory editHistory;
         readonly string[] paths = new string[3];
         readonly Label[] names = new Label[3];
         readonly Label[] coverage = new Label[3];
         readonly Button apply;
         readonly Button[] mainButtons = new Button[3];
+        readonly Button[] chooseButtons = new Button[3];
         int mainScript;
         internal FontScriptSources Selection { get; private set; }
 
@@ -44,6 +46,7 @@ namespace murumsWiiModStudio
                 var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
                 var choose = new Button { Text = L.T("TTF wählen…", "Choose TTF…"), AutoSize = true, Height = 32 };
                 choose.Click += delegate { Guard(delegate { Choose(index); }); };
+                chooseButtons[i] = choose;
                 buttons.Controls.Add(choose);
                 var main = new Button { AutoSize = true, Height = 32 };
                 main.Click += delegate { Guard(delegate {
@@ -78,7 +81,19 @@ namespace murumsWiiModStudio
             CancelButton = cancel;
             Finish();
             RefreshRows();
+            InitializeHistory();
         }
+
+        void InitializeHistory()
+        {
+            editHistory = new SpecialEditorHistory(this, Actions,
+                delegate { return new object[] { paths[0], paths[1], paths[2], mainScript }; },
+                delegate(object[] state) {
+                    for (int i = 0; i < 3; i++) paths[i] = (string)state[i];
+                    mainScript = (int)state[3]; RefreshRows();
+                });
+        }
+
 
         void RefreshRows()
         {
@@ -99,8 +114,10 @@ namespace murumsWiiModStudio
             for (int i = 0; i < mainButtons.Length; i++)
             {
                 mainButtons[i].Text = i == mainScript ? L.T("Hauptschrift", "Main") : L.T("Als Hauptschrift", "Use as main");
-                mainButtons[i].BackColor = i == mainScript ? DarkTheme.Accent : DarkTheme.Accent2;
-                mainButtons[i].ForeColor = Color.White;
+                if (!apply.Enabled) DarkTheme.StylePrimary(chooseButtons[i]);
+                else DarkTheme.StyleNeutral(chooseButtons[i]);
+                DarkTheme.StyleNeutral(mainButtons[i]);
+                if (i == mainScript) mainButtons[i].BackColor = DarkTheme.AccentSoft;
                 StudioUx.SetHelp(mainButtons[i], L.T("Für Bereiche ohne eigene Schrift verwenden. Bestehende Zuordnungen bleiben erhalten.", "Use for ranges without their own font. Existing assignments are kept."));
             }
             Status.Text = apply.Enabled ? L.T("Bereit. Zusätzliche Schriften sind freiwillig; die Zeichenauswahl wird geprüft.", "Ready. Additional fonts are optional; character support is checked.")

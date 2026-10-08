@@ -1,4 +1,4 @@
-import bpy
+﻿import bpy
 import bmesh
 import sys
 import os
@@ -120,6 +120,20 @@ objects = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.visibl
 if not objects:
     raise ValueError('The source contains no meshes.')
 
+def visible_color_input(shader):
+    if shader.type == 'EMISSION':
+        return shader.inputs['Color']
+    base = shader.inputs['Base Color']
+    emission = shader.inputs['Emission Color']
+    strength = shader.inputs['Emission Strength']
+    # Schwarze, untexturierte Grundfarbe: Die Oberflaeche stammt allein aus der Emission.
+    if (not base.links and max(abs(v) for v in base.default_value[:3]) < 0.000001
+            and not strength.links and strength.default_value > 0
+            and (emission.links or max(emission.default_value[:3]) > 0)):
+        return emission
+    return base
+
+
 # Gemischte Grundfarben (etwa Textur mal Vertexfarbe) in der Arbeitskopie backen.
 for obj in objects:
     complex_materials = []
@@ -127,8 +141,8 @@ for obj in objects:
         if not material or not material.use_nodes:
             continue
         shader = next((n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
-        if shader and shader.inputs['Base Color'].links:
-            color_socket = shader.inputs['Base Color']
+        if shader and visible_color_input(shader).links:
+            color_socket = visible_color_input(shader)
             if color_socket.links[0].from_node.type != 'TEX_IMAGE':
                 complex_materials.append((material, color_socket))
     if not complex_materials:
@@ -148,7 +162,7 @@ for obj in objects:
             shader = next((n for n in material.node_tree.nodes if n.type == 'EMISSION'), None)
         if shader is None:
             raise ValueError('Unsupported base colour shader: ' + material.name)
-        complex_materials.append((material, shader.inputs['Color' if shader.type == 'EMISSION' else 'Base Color']))
+        complex_materials.append((material, visible_color_input(shader)))
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
@@ -237,52 +251,119 @@ shift = Vector(((rr_min[0] + rr_max[0]) / 2 - (minimum[0] + maximum[0]) / 2 * fa
                 (rr_min[2] + rr_max[2]) / 2 - (minimum[2] + maximum[2]) / 2 * factor))
 binding_points = [list(point * factor + shift) for point in binding_points]
 # Benannte menschliche Quell-Rigs samt Gewichten erhalten.
-def human_bone(name):
-    if name in bone_names and not name.startswith('pcd_'):
-        return name
-    text = re.sub(r'[^a-z]', '', name.lower())
-    if any(word in text for word in ('adjust', 'twist', 'end', 'weapon')):
-        return None
-    for prefix in ('mixamorig', 'bip', 'def'):
-        if text.startswith(prefix):
-            text = text[len(prefix):]
-    centers = {'hips':'skl_root', 'pelvis':'skl_root', 'spine':'spin', 'head':'face_1'}
-    if text in centers:
-        return centers[text]
-    for side, longside in (('l', 'left'), ('r', 'right')):
-        part = None
-        if text.startswith(longside): part = text[len(longside):]
-        elif text.startswith(side): part = text[1:]
-        elif text.endswith(side): part = text[:-1]
-        targets = {'upperarm':'arm_'+side+'1', 'arm':'arm_'+side+'1',
-                   'forearm':'arm_'+side+'2', 'lowerarm':'arm_'+side+'2',
-                   'hand':'wrist_'+side+'1', 'thigh':'leg_'+side+'1', 'upleg':'leg_'+side+'1',
-                   'calf':'leg_'+side+'2', 'shin':'leg_'+side+'2', 'leg':'leg_'+side+'2',
-                   'foot':'ankle_'+side+'1'}
-        if part in targets: return targets[part]
-    return None
+from ModelRigAnalysis import analyze
+from ModelGripGeometry import open_hand_grip, guard_hand_grips
 
-source_maps = {}
-source_guides = {}
+source_maps, source_direct_maps, source_guides, source_trusted = {}, {}, {}, set()
+source_kinds, conflicts = [], set()
 # Das tragende Koerper-Rig bestimmt die Gelenke, nicht ein zuerst importiertes Zubehoer-Rig.
 armatures.sort(key=lambda rig: sum(len(obj.data.vertices) for obj in objects if obj.find_armature() == rig), reverse=True)
 for armature in armatures:
-    direct = {bone.name: human_bone(bone.name) for bone in armature.data.bones}
-    required = ['arm_l1','arm_l2','wrist_l1','arm_r1','arm_r2','wrist_r1',
-                'leg_l1','leg_l2','ankle_l1','leg_r1','leg_r2','ankle_r1','skl_root','spin','face_1']
-    if not all(name in direct.values() and name in bone_names for name in required):
-        continue
+    source_bones = list(armature.data.bones)
+    lookup = {bone.name: i for i, bone in enumerate(source_bones)}
+    nodes = [{'Name': bone.name, 'Parent': lookup[bone.parent.name] if bone.parent else -1,
+              'Point': list(convert @ (armature.matrix_world @ bone.head_local) * factor + shift)}
+             for bone in source_bones]
+    detected, trusted, kind = analyze(nodes)
+    source_kinds.append(kind)
+    direct = {source_bones[i].name: target for i, target in detected.items() if target in bone_names}
+    source_direct_maps[armature.name] = direct
+    prior_guides = set(source_guides)
     mapping = {}
-    for bone in armature.data.bones:
-        target = direct[bone.name]
-        if target and target in bone_names and target not in source_guides:
-            source_guides[target] = list(convert @ (armature.matrix_world @ bone.head_local) * factor + shift)
+    for i, bone in enumerate(source_bones):
+        target = direct.get(bone.name)
+        if target:
+            point = nodes[i]['Point']
+            if target not in source_guides:
+                source_guides[target] = point
+                if target in trusted:
+                    source_trusted.add(target)
+            elif target in prior_guides and (Vector(point) - Vector(source_guides[target])).length > rr_height * .005:
+                conflicts.add(target)
         ancestor = bone
-        while ancestor and not direct[ancestor.name]:
+        while ancestor and ancestor.name not in direct:
             ancestor = ancestor.parent
-        if ancestor and direct[ancestor.name] in bone_names:
+        if ancestor:
             mapping[bone.name] = bone_names[direct[ancestor.name]]
     source_maps[armature.name] = mapping
+source_trusted.difference_update(conflicts)
+
+# Finger in der Fahrkopie schliessen; die Menuegeometrie bleibt erhalten.
+def make_hand_grips(armature, resolved_bones):
+    transforms, contacts = {}, {}
+    def position(bone):
+        return convert @ (armature.matrix_world @ bone.head_local) * factor + shift
+    for side in ('l', 'r'):
+        target = 'wrist_' + side + '1'
+        wrists = [b for b in armature.data.bones if resolved_bones.get(b.name) == target]
+        if len(wrists) != 1:
+            continue
+        wrist = wrists[0]
+        chains = []
+        for child in wrist.children:
+            label = re.sub(r'[^a-z]', '', child.name.lower())
+            if label.startswith(('deformwrist', 'wristdeform')):
+                continue
+            if 'metacarpal' in label:
+                if len(child.children) != 1:
+                    continue
+                child = child.children[0]
+            # Mehrere Finger koennen eine gemeinsame, unbewegte Handbasis haben.
+            starts = list(child.children) if len(child.children) > 1 else [child]
+            for start in starts:
+                chain = [start]
+                while len(chain) < 4 and len(chain[-1].children) == 1:
+                    chain.append(chain[-1].children[0])
+                if len(chain) >= 3:
+                    chains.append(chain)
+        if len(chains) != 5:
+            continue
+        origin = position(wrist)
+        thumb = min(chains, key=lambda c: (position(c[0]) - origin).length)
+        fingers = [c for c in chains if c is not thumb]
+        fingers.sort(key=lambda c: (position(c[0]) - position(thumb[0])).length)
+        knuckles = sum((position(c[0]) for c in fingers), Vector()) / 4
+        along = (knuckles - origin).normalized()
+        across = position(fingers[-1][0]) - position(fingers[0][0])
+        across = (across - along * across.dot(along)).normalized()
+        palm = along.cross(across) * (-1 if side == 'l' else 1)
+        proximal = sum((position(c[1]) - position(c[0])).length for c in fingers) / 4
+        if min(across.length, palm.length, along.length) < .9 or proximal < .00001:
+            continue
+        center = knuckles + along * proximal * .35 + palm * proximal * .7
+        contacts[target] = {'Point': list(center), 'Axis': list(across)}
+        for chain in fingers + [thumb]:
+            heads = [position(b) for b in chain]
+            if len(heads) == 3:
+                heads.append(heads[-1] + (heads[-1] - heads[-2]) * .7)
+            desired = heads[0].copy()
+            for i, bone in enumerate(chain[:3]):
+                segment = heads[i + 1] - heads[i]
+                if segment.length < .00001:
+                    continue
+                if chain is thumb:
+                    direction = (center + across * proximal * .3 - desired).normalized()
+                else:
+                    angle = math.radians((35, 110, 165)[i])
+                    direction = along * math.cos(angle) + palm * math.sin(angle)
+                rotation = segment.rotation_difference(direction).to_matrix()
+                matrix = rotation.to_4x4()
+                matrix.translation = desired - rotation @ heads[i]
+                transforms[bone.name] = matrix
+                desired += direction * segment.length
+            for bone in chain[3:]:
+                transforms[bone.name] = transforms[chain[2].name]
+    return transforms, contacts
+
+hand_transforms, hand_contacts = {}, {}
+for armature in armatures:
+    if armature.name not in source_maps:
+        continue
+    transforms, contacts = make_hand_grips(armature, source_direct_maps[armature.name])
+    hand_transforms[armature.name] = transforms
+    for name, contact in contacts.items():
+        if name not in hand_contacts:
+            hand_contacts[name] = contact
 
 materials, material_ids, saved_textures = [], {}, {}
 def material_index(material):
@@ -293,6 +374,7 @@ def material_index(material):
     material_ids[key] = index
     color = [0.7, 0.7, 0.75, 1]
     texture = None
+    opacity = 1.0
     if material:
         color = list(material.diffuse_color)
         if material.use_nodes:
@@ -300,8 +382,12 @@ def material_index(material):
             if bsdf is None:
                 bsdf = next((n for n in material.node_tree.nodes if n.type == 'EMISSION'), None)
             if bsdf:
-                color_input = bsdf.inputs['Color' if bsdf.type == 'EMISSION' else 'Base Color']
+                color_input = visible_color_input(bsdf)
                 color = list(color_input.default_value)
+                alpha = bsdf.inputs.get('Alpha')
+                if alpha and not alpha.links:
+                    opacity = max(0.0, min(1.0, alpha.default_value))
+                    color[3] = opacity
                 links = color_input.links
                 image_node = links[0].from_node if links else None
                 if image_node and image_node.type == 'TEX_IMAGE' and image_node.image:
@@ -311,7 +397,7 @@ def material_index(material):
                             raise ValueError('Missing texture: ' + image_node.image.filepath)
                         image_node.image.filepath = adjacent
                         image_node.image.reload()
-                    image_key = image_node.image.name
+                    image_key = (image_node.image.name, opacity)
                     if image_key in saved_textures:
                         texture = saved_textures[image_key]
                     else:
@@ -319,6 +405,10 @@ def material_index(material):
                         if max(image.size) > 1024:
                             ratio = 1024 / max(image.size)
                             image.scale(max(1, round(image.size[0] * ratio)), max(1, round(image.size[1] * ratio)))
+                        if opacity != 1.0:
+                            pixels = list(image.pixels)
+                            pixels[3::4] = [a * opacity for a in pixels[3::4]]
+                            image.pixels = pixels
                         texture = 'studio_tex_' + str(len(saved_textures)) + '.png'
                         image.filepath_raw = os.path.join(output, texture)
                         image.file_format = 'PNG'
@@ -338,10 +428,15 @@ def material_index(material):
             image.save_render(filepath=image.filepath_raw, scene=bpy.context.scene)
             bpy.data.images.remove(image)
             saved_textures[image_key] = texture
-    materials.append({'Name':'studio_' + str(index), 'Color':color, 'Texture':texture})
+    materials.append({'Name':'studio_' + str(index), 'SourceName':key, 'Color':color, 'Texture':texture,
+                      'DoubleSided':not material.use_backface_culling if material else True})
     return index
 points, normals, uvs, faces, face_materials, bone_indices, bone_weights = [], [], [], [], [], [], []
-for obj in objects:
+grip_vertices = []
+geometric_vertices, geometric_contacts = [], {}
+source_weighted, vertex_components = [], []
+component_names = [obj.name for obj in objects]
+for component, obj in enumerate(objects):
     mesh = obj.data
     normal_matrix = convert @ obj.matrix_world.to_3x3().inverted_safe().transposed()
     uv_layer = mesh.uv_layers.active
@@ -349,14 +444,46 @@ for obj in objects:
     assigned = {}
     source_armature = obj.find_armature()
     source_map = source_maps.get(source_armature.name, {}) if source_armature else {}
+    finger_transforms = hand_transforms.get(source_armature.name, {}) if source_armature else {}
+    geometric_grips = {}
+    if source_armature:
+        direct = source_direct_maps.get(source_armature.name, {})
+        mesh_points, mesh_faces = None, None
+        for side in ('l', 'r'):
+            target = 'wrist_' + side + '1'
+            wrists = [b for b in source_armature.data.bones if direct.get(b.name) == target]
+            if target in geometric_contacts or len(wrists) != 1:
+                continue
+            wrist = wrists[0]
+            if wrist.parent is None:
+                continue
+            if mesh_points is None:
+                mesh_points = [list(convert @ (obj.matrix_world @ v.co) * factor + shift) for v in mesh.vertices]
+                mesh_faces = [list(p.vertices) for p in mesh.polygons]
+            hand_bones = {wrist.name} | {bone.name for bone in wrist.children_recursive}
+            wrist_weights = [sum(g.weight for g in v.groups
+                                 if obj.vertex_groups[g.group].name in hand_bones) for v in mesh.vertices]
+            grip = open_hand_grip(mesh_points, mesh_faces, wrist_weights,
+                                  convert @ (source_armature.matrix_world @ wrist.head_local) * factor + shift,
+                                  convert @ (source_armature.matrix_world @ wrist.parent.head_local) * factor + shift,
+                                  side)
+            if grip:
+                geometric_grips.update(grip['Vertices'])
+                geometric_contacts[target] = grip['Contact']
+                if target not in hand_contacts:
+                    hand_contacts[target] = grip['Contact']
     for vertex in mesh.vertices:
         point = convert @ (obj.matrix_world @ vertex.co) * factor + shift
         weights = {}
+        unmapped_weight = 0.0
         for group in vertex.groups:
             name = obj.vertex_groups[group.group].name
             target = source_map.get(name, bone_names.get(name))
+            if group.weight > 0 and (target is None or bones[target]['Name'] in conflicts):
+                unmapped_weight += group.weight
             if target is not None and group.weight > 0:
                 weights[target] = weights.get(target, 0) + group.weight
+        has_source_weights = bool(weights) and unmapped_weight < .0001
         if not weights:
             for _, reference_index, distance in tree.find_n(point, 4):
                 influence = 1 / max(distance * distance, 0.000001)
@@ -364,7 +491,7 @@ for obj in objects:
                     weights[bone] = weights.get(bone, 0) + weight * influence
         selected = sorted(weights.items(), key=lambda p: p[1], reverse=True)[:4]
         total = sum(w for _, w in selected)
-        assigned[vertex.index] = (list(point), [i for i, _ in selected], [w / total for _, w in selected])
+        assigned[vertex.index] = (list(point), [i for i, _ in selected], [w / total for _, w in selected], has_source_weights)
     for triangle in mesh.loop_triangles:
         face = []
         for loop_index in triangle.loops:
@@ -375,19 +502,63 @@ for obj in objects:
             key = (loop.vertex_index, tuple(normal), uv)
             if key not in vertex_cache:
                 vertex_cache[key] = len(points)
-                point, indices, weights = assigned[loop.vertex_index]
+                point, indices, weights, has_source_weights = assigned[loop.vertex_index]
+                source_weighted.append(has_source_weights)
+                vertex_components.append(component)
                 points.append(point); bone_indices.append(indices); bone_weights.append(weights)
                 normals.append(list(normal)); uvs.append(list(uv))
+                vertex = mesh.vertices[loop.vertex_index]
+                if vertex.index in geometric_grips:
+                    geometric_point, geometric_normal = geometric_grips[vertex.index]
+                    geometric_vertices.append({'Index': len(points) - 1, 'Point': list(geometric_point),
+                                               'Normal': list((geometric_normal @ normal).normalized())})
+                finger_weights = [(finger_transforms[obj.vertex_groups[g.group].name], g.weight)
+                                  for g in vertex.groups if obj.vertex_groups[g.group].name in finger_transforms]
+                if finger_weights:
+                    original = Vector(point)
+                    posed, posed_normal = original.copy(), normal.copy()
+                    for matrix, weight in finger_weights:
+                        posed += (matrix @ original - original) * weight
+                        posed_normal += (matrix.to_3x3() @ normal - normal) * weight
+                    grip_vertices.append({'Index': len(points) - 1, 'Point': list(posed),
+                                          'Normal': list(posed_normal.normalized())})
+                elif vertex.index in geometric_grips:
+                    posed, rotation = geometric_grips[vertex.index]
+                    grip_vertices.append({'Index': len(points) - 1, 'Point': list(posed),
+                                          'Normal': list((rotation @ normal).normalized())})
             face.append(vertex_cache[key])
         faces.append(face)
         slot = triangle.material_index
         mat = obj.material_slots[slot].material if slot < len(obj.material_slots) else None
         face_materials.append(material_index(mat))
-    if len(points) > 200000 or len(faces) > 200000:
-        raise ValueError('Optimized source still exceeds the 200,000-vertex/face limit.')
+    # UV-/Normalennaehte erzeugen vor dem Verschweissen bis zu drei Punkte pro Dreieck.
+    if len(points) > 600000 or len(faces) > 200000:
+        raise ValueError('Source exceeds the temporary 600,000-vertex/200,000-face limit.')
 result = {'Points':points,'Normals':normals,'Uvs':uvs,'Faces':faces,'FaceMaterials':face_materials,
           'Materials':materials,'Bones':bones,'BoneIndices':bone_indices,'BoneWeights':bone_weights,
           'ReferenceHeight':rr_height,'OriginalTriangles':original_triangles,'SizePercent':size_percent}
+original_contacts = hand_contacts
+grip_vertices, hand_contacts = guard_hand_grips(points, normals, faces, grip_vertices, original_contacts,
+                                               bone_indices, bone_weights, bones, materials, face_materials)
+adjusted = {name for name, contact in original_contacts.items()
+            if name not in hand_contacts or hand_contacts[name]['Point'] != contact['Point']}
+if adjusted and geometric_vertices:
+    alternatives, alternative_contacts = guard_hand_grips(points, normals, faces, geometric_vertices, geometric_contacts,
+                                                          bone_indices, bone_weights, bones, materials, face_materials)
+    replacements = adjusted & set(alternative_contacts)
+    def grip_side(grip):
+        index = grip['Index']
+        return max(((weight, bones[bone]['Name']) for bone, weight in zip(bone_indices[index], bone_weights[index])
+                    if bones[bone]['Name'] in original_contacts), default=(-1, None))[1]
+    grip_vertices = [grip for grip in grip_vertices if grip_side(grip) not in replacements]
+    grip_vertices.extend(grip for grip in alternatives if grip_side(grip) in replacements)
+    for name in replacements:
+        hand_contacts[name] = alternative_contacts[name]
+    grip_vertices, hand_contacts = guard_hand_grips(points, normals, faces, grip_vertices, hand_contacts,
+                                                   bone_indices, bone_weights, bones, materials, face_materials)
+if hand_contacts and grip_vertices:
+    result['SourceHandGrips'] = hand_contacts
+    result['GripVertices'] = grip_vertices
 if binding_points:
     result['BindingProxyPoints'] = binding_points
     result['BindingProxyFaces'] = binding_faces
@@ -395,8 +566,15 @@ if source_guides:
     result['SourceJointGuides'] = source_guides
     result['SourceBoneIndices'] = bone_indices
     result['SourceBoneWeights'] = bone_weights
+result['SourceRigKind'] = ('multiple' if len(armatures) > 1 else source_kinds[0] if source_kinds else 'unrigged')
+result['SourceTrustedJoints'] = sorted(source_trusted)
+result['SourceWeightedVertices'] = source_weighted
+result['SourceComponentNames'] = component_names
+result['VertexComponents'] = vertex_components
 from ModelMeshOptimize import simplify
 simplify(result, limit, output)
+if len(result['Points']) > 200000 or len(result['Faces']) > 200000:
+    raise ValueError('Optimized source still exceeds the 200,000-vertex/face limit.')
 with open(os.path.join(output, 'rig.json'), 'w', encoding='utf-8') as stream:
     json.dump(result, stream, separators=(',',':'), allow_nan=False)
 print('Studio model prepared:', len(result['Points']), 'vertices,', len(result['Faces']), 'triangles,', len(bones), 'bones')

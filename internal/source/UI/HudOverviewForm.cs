@@ -13,9 +13,9 @@ namespace murumsWiiModStudio
         readonly FlowLayoutPanel gallery = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true };
 
         public HudOverviewForm(List<HudTexture> textures)
-            : base("HUD Preview", "Current pending textures • Pressed/released states together • Illustration of assets, not game placement")
+            : base(L.T("RR-MKWii HUD-Vorschau Tool", "RR-MKWii HUD Preview Tool"), L.T("Aktuelle Texturen • Gedrückte und normale Zustände • Übersicht ohne Spielpositionen", "Current pending textures • Pressed/released states together • Illustration of assets, not game placement"))
         {
-            entries = textures.Where(t => TplTextureEditor.IsTpl(t.Archive.Files[t.Key].Data)).ToList();
+            entries = (textures ?? new List<HudTexture>()).Where(t => TplTextureEditor.IsTpl(t.Archive.Files[t.Key].Data)).ToList();
             Body.Controls.Add(gallery);
             Finish();
             RenderGallery();
@@ -31,7 +31,6 @@ namespace murumsWiiModStudio
             gallery.SuspendLayout();
             while (gallery.Controls.Count > 0)
                 gallery.Controls[0].Dispose();
-            int shown = 0;
             int failed = 0;
             foreach (var texture in entries)
             {
@@ -67,12 +66,11 @@ namespace murumsWiiModStudio
                         };
                         panel.Controls.Add(picture);
                     }
-                    shown++;
                 }
                 else
                 {
                     failed++;
-                    panel.Controls.Add(new Label { Dock = DockStyle.Fill, Text = error });
+                    panel.Controls.Add(new Label { Dock = DockStyle.Fill, Text = L.T("Textur kann nicht angezeigt werden. Bitte Quelle im HUD-Tool prüfen.", "Texture cannot be previewed. Check the source in the HUD tool.") });
                 }
                 panel.Controls.Add(new Label
                 {
@@ -83,7 +81,8 @@ namespace murumsWiiModStudio
             }
             Status.Text = entries.Count + L.T(" Texturen. Alle Einträge durch Scrollen erreichbar.", " textures. Scroll to reach every entry.")
                 + (failed > 0 ? "; " + failed + L.T(" nicht lesbar", " unreadable") : "")
-                + "\n" + L.T("Texturübersicht; keine Simulation von Spielpositionen oder Animationen.", "Texture gallery; does not simulate game placement or animations.");            gallery.ResumeLayout();
+                + "\n" + L.T("Texturübersicht; keine Simulation von Spielpositionen oder Animationen.", "Texture gallery; does not simulate game placement or animations.");
+            gallery.ResumeLayout();
         }
     }
 }

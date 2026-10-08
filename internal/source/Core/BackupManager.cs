@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace murumsWiiModStudio
 {
@@ -13,7 +15,7 @@ namespace murumsWiiModStudio
         {
             internal string Path, Temporary, Backup, BackupFolder;
             internal byte[] Data;
-            internal bool Installed, RecoveryFailed;
+            internal bool Installed, RecoveryFailed, Delete;
         }
 
         static readonly object SaveLock = new object();
@@ -25,8 +27,20 @@ namespace murumsWiiModStudio
             WriteBatch(new[] { new KeyValuePair<string, byte[]>(path, data) });
         }
 
+        static string ExportBackupFolder(string path)
+        {
+            string parent = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)).ToUpperInvariant();
+            using (var hash = SHA256.Create())
+            {
+                string key = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(parent))).Replace("-", "");
+                return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "murums Wii Mod Studio", "ExportRecovery", key);
+            }
+        }
+
         internal static void WriteBatch(IEnumerable<KeyValuePair<string, byte[]>> files,
-            Action<int> afterWrite = null, string backupFolder = null)
+            Action<int> afterWrite = null, string backupFolder = null, bool exportCopy = false,
+            IEnumerable<string> deletePaths = null)
         {
             lock (SaveLock)
             {
@@ -34,15 +48,12 @@ namespace murumsWiiModStudio
                 var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var file in files)
                 {
-                    string path = System.IO.Path.GetFullPath(file.Key);
                     if (file.Value == null) throw new ArgumentNullException("data");
-                    if (!paths.Add(path)) throw new IOException("Duplicate output file: " + path);
-                    if (Directory.Exists(path)) throw new IOException("A folder occupies the output file: " + path);
-                    pending.Add(new PendingWrite { Path = path, Data = file.Value,
-                        BackupFolder = backupFolder == null
-                            ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), ".murums_backups")
-                            : System.IO.Path.GetFullPath(backupFolder) });
+                    pending.Add(PrepareWrite(file.Key, file.Value, false, paths, backupFolder, exportCopy));
                 }
+                if (deletePaths != null)
+                    foreach (string path in deletePaths)
+                        pending.Add(PrepareWrite(path, null, true, paths, backupFolder, exportCopy));
                 if (pending.Any(p => paths.Any(other => other.StartsWith(p.Path + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))))
                     throw new IOException("The output contains conflicting file and folder paths.");
 
@@ -52,14 +63,17 @@ namespace murumsWiiModStudio
                     // Erst alle Inhalte und Sicherungen bereitstellen, dann Dateien ersetzen.
                     foreach (var file in pending)
                     {
-                        if (MatchesFile(file.Path, file.Data)) continue;
+                        if (!file.Delete && MatchesFile(file.Path, file.Data)) continue;
                         string parent = System.IO.Path.GetDirectoryName(file.Path);
-                        Directory.CreateDirectory(parent);
-                        file.Temporary = System.IO.Path.Combine(parent, ".murums-" + Guid.NewGuid().ToString("N") + ".tmp");
-                        using (var stream = new FileStream(file.Temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        if (!file.Delete)
                         {
-                            stream.Write(file.Data, 0, file.Data.Length);
-                            stream.Flush(true);
+                            Directory.CreateDirectory(parent);
+                            file.Temporary = System.IO.Path.Combine(parent, ".murums-" + Guid.NewGuid().ToString("N") + ".tmp");
+                            using (var stream = new FileStream(file.Temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                            {
+                                stream.Write(file.Data, 0, file.Data.Length);
+                                stream.Flush(true);
+                            }
                         }
                         if (File.Exists(file.Path))
                         {
@@ -73,9 +87,10 @@ namespace murumsWiiModStudio
                         }
                     }
                     int completed = 0;
-                    foreach (var file in pending.Where(p => p.Temporary != null))
+                    foreach (var file in pending.Where(p => p.Temporary != null || p.Delete && p.Backup != null))
                     {
-                        if (file.Backup == null) File.Move(file.Temporary, file.Path);
+                        if (file.Delete) File.Delete(file.Path);
+                        else if (file.Backup == null) File.Move(file.Temporary, file.Path);
                         else File.Replace(file.Temporary, file.Path, null);
                         file.Installed = true;
                         completed++;
@@ -117,6 +132,23 @@ namespace murumsWiiModStudio
                     }
                 }
             }
+        }
+
+        static PendingWrite PrepareWrite(string name, byte[] data, bool delete, HashSet<string> paths,
+            string backupFolder, bool exportCopy)
+        {
+            string path = System.IO.Path.GetFullPath(name);
+            if (!paths.Add(path)) throw new IOException("Duplicate output file: " + path);
+            if (Directory.Exists(path)) throw new IOException("A folder occupies the output file: " + path);
+            return new PendingWrite
+            {
+                Path = path,
+                Data = data,
+                Delete = delete,
+                BackupFolder = exportCopy ? ExportBackupFolder(path) : backupFolder == null
+                    ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), ".murums_backups")
+                    : System.IO.Path.GetFullPath(backupFolder)
+            };
         }
 
         static bool MatchesFile(string path, byte[] data)

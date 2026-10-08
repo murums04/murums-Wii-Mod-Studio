@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -11,14 +11,16 @@ namespace murumsWiiModStudio
         private byte[] _data;
         private TexturePreviewResult _preview;
         private int _index;
-        private PictureBox _picture;
+        private TextureChannelPictureBox _picture;
         private Label _info;
         private bool _dirty;
+        readonly ArchiveHistory _history = new ArchiveHistory();
         private ToolStripButton _save, _replace, _export, _previous, _next;
         public StandaloneTextureForm(string path)
         {
             _path = path;
             _data = File.ReadAllBytes(path);
+            _history.Reset(_data);
             Text = "murums Wii Mod Studio — " + Path.GetFileName(path);
             StartPosition = FormStartPosition.CenterParent;
             MinimumSize = new Size(780, 560);
@@ -60,6 +62,9 @@ namespace murumsWiiModStudio
             });
             saveAs.Enabled = editable;
             bar.Items.Add(saveAs);
+            var historyUi = new StudioUndoRedo(this, null, () => _history.CanUndo, () => _history.CanRedo,
+                () => NavigateHistory(false), () => NavigateHistory(true));
+            bar.Items.Add(new ToolStripControlHost(historyUi.Panel) { AutoSize = true, Margin = Padding.Empty, Padding = Padding.Empty });
             bar.Items.Add(new ToolStripSeparator());
             ToolStripButton replace = Make(L.T("Bild ersetzen", "Replace image"), delegate
             {
@@ -86,14 +91,25 @@ namespace murumsWiiModStudio
             });
             _next.ToolTipText = L.T("Nächstes Bild", "Next image");
             bar.Items.Add(_next);
+            StudioActions.Tool(save, StudioIcon.Save, true);
+            StudioActions.Tool(saveAs, StudioIcon.SaveAs, true);
+            StudioActions.Tool(replace, StudioIcon.Image, true);
+            StudioActions.Tool(_export, StudioIcon.Export, true);
+            _previous.Text = _previous.ToolTipText;
+            _next.Text = _next.ToolTipText;
+            StudioActions.Tool(_previous, StudioIcon.Previous, true);
+            StudioActions.Tool(_next, StudioIcon.Next, true);
             Controls.Add(bar);
             DarkTheme.StyleToolStrip(bar, new MurumsDarkToolStripRenderer());
-            _picture = new murumsWiiModStudio.ZoomPanPictureBox();
+            _picture = new TextureChannelPictureBox();
             _picture.Dock = DockStyle.Fill;
             _picture.SizeMode = PictureBoxSizeMode.Zoom;
             _picture.BackColor = DarkTheme.Back;
             Controls.Add(_picture);
             _picture.BringToFront();
+            Control channels = TextureChannelPreview.Selector(_picture);
+            Controls.Add(channels);
+            channels.BringToFront();
             _info = new Label();
             _info.Dock = DockStyle.Bottom;
             _info.Height = 34;
@@ -106,8 +122,10 @@ namespace murumsWiiModStudio
             bar.BringToFront();
             var header = StudioChrome.Header(L.T("Texturen bearbeiten", "Edit textures"), L.T("Bilder ansehen • Ersetzen • Als Kopie speichern", "Preview pictures • Replace • Save a copy"));
             header.Dock = DockStyle.Top;
-            header.Height = 118;
+            header.Height = StudioChrome.HeaderHeight;
             Controls.Add(header);
+            _picture.BringToFront();
+            bar.SendToBack();
             header.SendToBack();
         }
 
@@ -187,7 +205,8 @@ namespace murumsWiiModStudio
                         }
                     }
 
-                    _dirty = true;
+                    _history.Record(_data);
+                    _dirty = _history.IsDirty;
                     RefreshPreview();
                 }
                 catch (Exception ex)
@@ -214,6 +233,7 @@ namespace murumsWiiModStudio
                             _preview.Bitmap.Save(bytes, System.Drawing.Imaging.ImageFormat.Png);
                             BackupManager.WriteAllBytesSafely(d.FileName, bytes.ToArray());
                         }
+                        murumsWiiModStudio.StudioMessageBox.ShowPath(this, d.FileName, L.T("Textur gespeichert.", "Texture saved."), L.T("Gespeichert", "Saved"));
                     }
                     catch (Exception ex)
                     {
@@ -221,6 +241,13 @@ namespace murumsWiiModStudio
                     }
                 }
             }
+        }
+
+        void NavigateHistory(bool forward)
+        {
+            byte[] data = forward ? _history.Redo() : _history.Undo();
+            if (data == null) return;
+            _data = data; _dirty = _history.IsDirty; RefreshPreview();
         }
 
         private void Save(bool saveAs)
@@ -243,6 +270,7 @@ namespace murumsWiiModStudio
                 BackupManager.WriteAllBytesSafely(target, _data);
                 _path = target;
                 _dirty = false;
+                _history.MarkSaved();
                 Text = "murums Wii Mod Studio — " + Path.GetFileName(_path);
                 RefreshPreview();
             }
@@ -272,6 +300,17 @@ namespace murumsWiiModStudio
                 _preview.Dispose();
                 _preview = null;
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _preview != null)
+            {
+                if (_picture != null) _picture.Image = null;
+                _preview.Dispose();
+                _preview = null;
+            }
+            base.Dispose(disposing);
         }
     }
 }

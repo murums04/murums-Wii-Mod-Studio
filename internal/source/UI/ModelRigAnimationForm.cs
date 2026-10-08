@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -20,7 +20,8 @@ namespace murumsWiiModStudio
         Control CreateAnimationEditor()
         {
             animationEditor = new FlowLayoutPanel { Name = "AnimationKeyEditor", AutoSize = true, Width = 232, FlowDirection = FlowDirection.TopDown, WrapContents = false, Visible = false };
-            animationEditor.Controls.Add(new Label { Text = L.T("Schlüsselbilder · gewählter Körperteil", "Keyframes · selected body part"), AutoSize = true, MaximumSize = new Size(232, 0) });
+            RigSection(animationEditor, L.T("Schlüsselbilder", "Keyframes"));
+            animationEditor.Controls.Add(new Label { Text = L.T("Gewählter Körperteil", "Selected body part"), AutoSize = true, MaximumSize = new Size(232, 0) });
             animationEditor.Controls.Add(keyStatus);
             addKey = AddButton(animationEditor, L.T("Schlüsselbild hinzufügen", "Add keyframe"), delegate {
                 if (AnimationName == null || AnimationBone == null) return;
@@ -55,7 +56,7 @@ namespace murumsWiiModStudio
                 AutoSize = true, MaximumSize = new Size(232, 0)
             });
             animationFrame.ValueChanged += delegate {
-                if (updatingKey || mode.SelectedIndex != 3) return;
+                if (updatingKey || (mode.SelectedIndex != 3 && mode.SelectedIndex != 4)) return;
                 play.Checked = false;
                 pose.Value = Math.Max(pose.Minimum, Math.Min(pose.Maximum, (int)animationFrame.Value - 1));
             };
@@ -77,12 +78,17 @@ namespace murumsWiiModStudio
         {
             if (animationEditor == null) return;
             animationEditor.Visible = mode.SelectedIndex == 3 && ActiveReference != null;
+            updatingKey = true;
+            try
+            {
+                animationFrame.Maximum = Math.Max(1, pose.Maximum + 1);
+                animationFrame.Value = Math.Max(1, pose.Value + 1);
+            }
+            finally { updatingKey = false; }
             if (!animationEditor.Visible) return;
             updatingKey = true;
             try
             {
-                animationFrame.Maximum = pose.Maximum + 1;
-                animationFrame.Value = pose.Value + 1;
                 var offset = Result.AnimationOffset(GameContext, AnimationName, AnimationBone, pose.Value);
                 List<JointAnimationKey> keys = null;
                 var settings = Result.GameSettings(GameContext);

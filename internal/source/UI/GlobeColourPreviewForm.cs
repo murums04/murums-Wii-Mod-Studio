@@ -99,6 +99,15 @@ namespace murumsWiiModStudio
     internal sealed class GlobeColourPreviewForm : StudioToolForm
     {
         internal Color GlobeColor, SkyColor, GlowColor;
+        readonly EditHistory<Tuple<int, int, int>> history = new EditHistory<Tuple<int, int, int>>();
+        bool restoringHistory;
+        Tuple<int, int, int> CaptureColours() { return Tuple.Create(GlobeColor.ToArgb(), SkyColor.ToArgb(), GlowColor.ToArgb()); }
+        void RestoreColours(Tuple<int, int, int> state)
+        {
+            restoringHistory = true;
+            try { GlobeColor = Color.FromArgb(state.Item1); SkyColor = Color.FromArgb(state.Item2); GlowColor = Color.FromArgb(state.Item3); Draw(); }
+            finally { restoringHistory = false; }
+        }
         readonly PictureBox picture = new ZoomPanPictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
         readonly bool globeVisible;
         readonly Image background;
@@ -121,6 +130,9 @@ namespace murumsWiiModStudio
             Body.Controls.Add(picture);
             Status.Text = L.T("Schematische Farbkombination mit Beispielbeleuchtung; keine geladenen Globus-Texturen oder Spielsimulation.\nWeiß erhält Originalfarben. Erst „Kopien erstellen“ im Globus-Tool schreibt Dateien.",
                 "Schematic colour combination with sample lighting; not loaded globe textures or a game simulation.\nWhite keeps original colours. Create copies in the globe tool to write files.");
+            history.Reset(CaptureColours());
+            new StudioUndoRedo(this, Actions, () => history.CanUndo, () => history.CanRedo,
+                () => RestoreColours(history.Undo()), () => RestoreColours(history.Redo()));
             Finish(); Draw();
         }
         void Choose(int which)
@@ -136,6 +148,7 @@ namespace murumsWiiModStudio
         }
         void Draw()
         {
+            if (!restoringHistory) history.Record(CaptureColours());
             ColourButton.SetColor(globe, GlobeColor);
             ColourButton.SetColor(sky, SkyColor);
             ColourButton.SetColor(glow, GlowColor);

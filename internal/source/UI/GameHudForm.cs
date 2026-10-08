@@ -96,16 +96,19 @@ namespace murumsWiiModStudio
         {
             embedded = archives != null;
             Size = new Size(1380, 900);
-            MinimumSize = new Size(1120, 760);
+            MinimumSize = new Size(950, 680);
             Status.Padding = new Padding(8, 2, 8, 2);
             Status.AutoEllipsis = false;
             if (!embedded)
             {
-                Action(L.T("Archive hinzufügen…", "Add archive…"), L.T("Mehrere Layout-Archive ergänzen; bestehende Änderungen bleiben erhalten.", "Select multiple layout archives; existing changes are kept."), delegate { OpenArchive(); }).Name = "PackSourceAction";
-                Action(L.T("Auswahl leeren", "Clear selection"), L.T("Geladene Archive entfernen.", "Clear loaded archives."), delegate {
+                var addArchive = Action(L.T("Archive hinzufügen…", "Add archive…"), L.T("Mehrere Layout-Archive ergänzen; bestehende Änderungen bleiben erhalten.", "Select multiple layout archives; existing changes are kept."), delegate { OpenArchive(); });
+                addArchive.Name = "PackSourceAction";
+                StudioActions.Icon(addArchive, StudioIcon.Add);
+                var clearSelection = Action(L.T("Auswahl leeren", "Clear selection"), L.T("Geladene Archive entfernen.", "Clear loaded archives."), delegate {
                     if (unexported && StudioMessageBox.Show(this, L.T("Ungespeicherte Änderungen verwerfen und geladene Archive entfernen?", "Discard unsaved changes and clear loaded archives?"), Text, MessageBoxButtons.YesNo) != DialogResult.Yes) return;
                     Session.Clear(); unexported = false; search.Clear(); RefreshLayouts(); PackSelection.SourceCleared(this);
                 });
+                StudioActions.Icon(clearSelection, StudioIcon.Remove);
             }
             archiveChoice.AccessibleName = L.T("Layout-Archiv auswählen", "Choose layout archive");
             archiveChoice.SelectedIndexChanged += delegate
@@ -124,11 +127,12 @@ namespace murumsWiiModStudio
             {
                 History(true);
             }), true, L.T("Wiederholen (Strg+Y)", "Redo (Ctrl+Y)"));
-            Action(L.T("Ansicht einpassen", "Fit view"), "Reset canvas zoom and pan. Mouse wheel zooms; hold the middle mouse button to pan.", delegate
+            var fit = Action(L.T("Ansicht einpassen", "Fit view"), "Reset canvas zoom and pan. Mouse wheel zooms; hold the middle mouse button to pan.", delegate
             {
                 canvas.ResetView();
             });
-            Action(L.T("Referenzbild…", "Reference image…"), "Optional screenshot behind this layout. Visual reference only; never exported.", ReferenceImage);
+            StudioActions.Icon(fit, StudioIcon.Fit);
+            StudioActions.Icon(Action(L.T("Referenzbild…", "Reference image…"), "Optional screenshot behind this layout. Visual reference only; never exported.", ReferenceImage), StudioIcon.Image);
             clearReference = Action(L.T("Referenz entfernen", "Clear reference"), "Remove the reference screenshot.", delegate
             {
                 if (canvas.Reference != null)
@@ -192,9 +196,9 @@ namespace murumsWiiModStudio
                 ColumnCount = 3,
                 RowCount = 4
             };
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 192));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 264));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -210,6 +214,23 @@ namespace murumsWiiModStudio
             root.Controls.Add(canvas, 1, 3);
             root.Controls.Add(properties, 2, 0);
             root.SetRowSpan(properties, 4);
+            var viewOptions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 2, 0, 0) };
+            var extraView = new FlowLayoutPanel { AutoSize = true, Visible = false, Margin = Padding.Empty };
+            foreach (var option in new[] { grid, snap, outlines })
+            {
+                option.Margin = new Padding(3, 5, 8, 3);
+                extraView.Controls.Add(option);
+            }
+            moveWhole.Margin = new Padding(3, 5, 12, 3);
+            viewOptions.Controls.Add(moveWhole);
+            var viewSettings = new CheckBox { Text = L.T("Ansichtsoptionen", "View options"), AutoSize = true, Margin = new Padding(3, 5, 3, 3) };
+            viewSettings.CheckedChanged += delegate { extraView.Visible = viewSettings.Checked; };
+            viewOptions.Controls.Add(viewSettings); viewOptions.Controls.Add(extraView);
+            root.RowCount = 5;
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.Controls.Add(viewOptions, 0, 4);
+            root.SetColumnSpan(viewOptions, 2);
+            root.SetRowSpan(properties, 5);
             StudioUx.SetHelp(aspectChoice, L.T("Bildformat der HUD-Positionen. Ändert nicht die Renderauflösung des Spiels.", "Aspect ratio for HUD positions. Does not change game render resolution."));
             aspectChoice.Items.AddRange(new object[] { "16:9", "4:3" });
             aspectChoice.SelectedIndex = 0;
@@ -233,7 +254,6 @@ namespace murumsWiiModStudio
             };
             StudioUx.SetHelp(moveWhole, L.T("Zieht die oberste Gruppe mit allen Kindern. Gilt für das gewählte Teillayout, nicht für andere Dateien.", "Drags the top-level group with all children. Affects this component layout, not other files."));
             StudioUx.SetHelp(search, L.T("Layouts nach Dateiname filtern, z. B. button, select, position, map oder inputviewer.", "Filter layout filenames, e.g. button, select, position, map or inputviewer."));
-            Actions.Controls.Add(moveWhole);
             properties.BackColor = DarkTheme.Panel;
             properties.Padding = new Padding(10);
             selectedLabel.Margin = new Padding(0, 0, 0, 8);
@@ -343,7 +363,7 @@ namespace murumsWiiModStudio
             {
                 if (e.Control && e.KeyCode == Keys.Z)
                 {
-                    History(false);
+                    History(e.Shift);
                     e.SuppressKeyPress = true;
                 }
 
@@ -366,6 +386,10 @@ namespace murumsWiiModStudio
             search.Height = layouts.Height;
             RefreshLayouts();
             Sync();
+            var historyBinding = new StudioUndoRedo(this, Actions, delegate { return Session.CanUndo; },
+                delegate { return Session.CanRedo; }, delegate { History(false); }, delegate { History(true); });
+            undo.Parent.Controls.Remove(undo); redo.Parent.Controls.Remove(redo); undo.Dispose(); redo.Dispose();
+            undo = historyBinding.UndoButton; redo = historyBinding.RedoButton;
         }
 
         static Control FieldHeader(string caption, Control field)
@@ -901,8 +925,9 @@ namespace murumsWiiModStudio
             var r = SelectedTexture();
             if (r == null)
                 return;
-            using (var d = new HudTextureColorForm(r.Key, r.Bytes))
-                if (d.ShowDialog(this) == DialogResult.OK)
+            var d = new HudTextureColorForm(r.Key, r.Bytes);
+            StudioEditor.Open(this, d, delegate(DialogResult result) {
+                if (result == DialogResult.OK)
                 {
                     Session.Set(r, d.Result);
                     unexported = true;
@@ -910,6 +935,7 @@ namespace murumsWiiModStudio
                     Sync();
                     canvas.Invalidate();
                 }
+            });
         }
 
         void ReferenceImage()

@@ -19,6 +19,20 @@ namespace murumsWiiModStudio
     internal sealed class RaceHudSession
     {
         public readonly List<RaceHudArchive> Archives = new List<RaceHudArchive>();
+        internal object[] CaptureEdits()
+        {
+            return Archives.Select(a => (object)new object[] { SpecialEditorHistory.Copy(a.Pictures), SpecialEditorHistory.Copy(a.Generated) }).ToArray();
+        }
+        internal void RestoreEdits(object[] state)
+        {
+            for (int i = 0; i < Archives.Count; i++)
+            {
+                var row = (object[])state[i];
+                SpecialEditorHistory.Replace(Archives[i].Pictures, (Dictionary<string, string>)row[0]);
+                SpecialEditorHistory.Replace(Archives[i].Generated, (Dictionary<string, byte[]>)row[1]);
+            }
+        }
+        internal string SourceIdentity { get { return String.Join("|", Archives.Select(a => a.Source + "#" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(a))); } }
         public void Open(string path)
         {
             var loaded = new List<RaceHudArchive>();
@@ -175,7 +189,7 @@ namespace murumsWiiModStudio
             if (pending.Count == 0)
                 throw new InvalidOperationException("Select replacement pictures or enable the shadow switch first.");
             Directory.CreateDirectory(folder);
-            BackupManager.WriteBatch(pending);
+            BackupManager.WriteBatch(pending, exportCopy: true);
             return pending.Keys.ToList();
         }
     }

@@ -32,7 +32,8 @@ namespace murumsWiiModStudio
                 ColumnCount = 1,
                 Padding = new Padding(14)
             };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, StudioChrome.HeaderHeight));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
@@ -48,6 +49,8 @@ namespace murumsWiiModStudio
             layout.Controls.Add(_search, 0, 1);
             _images.ImageSize = new Size(96, 96);
             _images.ColorDepth = ColorDepth.Depth32Bit;
+            // Native Liste zuerst anlegen, bevor temporäre Vorschaubilder freigegeben werden.
+            IntPtr imageHandle = _images.Handle;
             using (Bitmap blank = new Bitmap(96, 96))
                 _images.Images.Add(blank);
             _list.Dock = DockStyle.Fill;

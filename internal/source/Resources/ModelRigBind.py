@@ -1,4 +1,4 @@
-import bpy
+﻿import bpy
 import bmesh
 import json
 import sys
@@ -36,32 +36,53 @@ bm.free()
 # Geschlossene Hilfsoberfläche verhindert den Bone-Heat-Abbruch an Kleidungsnähten.
 bpy.context.view_layer.objects.active = obj
 obj.select_set(True)
-remesh = obj.modifiers.new('Binding proxy', 'REMESH')
-remesh.mode = 'VOXEL'
-remesh.voxel_size = max(max(p[1] for p in data['Points']) - min(p[1] for p in data['Points']), 1.0) / 160
-bpy.ops.object.modifier_apply(modifier=remesh.name)
-smooth = obj.modifiers.new('Stable binding surface', 'SMOOTH')
-smooth.factor = .5
-smooth.iterations = 3
-bpy.ops.object.modifier_apply(modifier=smooth.name)
-mesh = obj.data
-adjacency = [set() for _ in mesh.vertices]
-for edge in mesh.edges:
-    a, b = edge.vertices
-    adjacency[a].add(b); adjacency[b].add(a)
-remaining = set(range(len(mesh.vertices)))
-components = []
-while remaining:
-    component = {remaining.pop()}
-    pending = list(component)
-    while pending:
-        current = pending.pop()
-        for neighbour in adjacency[current]:
-            if neighbour in remaining:
-                remaining.remove(neighbour); component.add(neighbour); pending.append(neighbour)
-    components.append(component)
-largest = max(components, key=len)
-if len(largest) < len(mesh.vertices) * 0.9:
+def prepare_surface():
+    remesh = obj.modifiers.new('Binding proxy', 'REMESH')
+    remesh.mode = 'VOXEL'
+    remesh.voxel_size = max(max(p[1] for p in data['Points']) - min(p[1] for p in data['Points']), 1.0) / 160
+    bpy.ops.object.modifier_apply(modifier=remesh.name)
+    smooth = obj.modifiers.new('Stable binding surface', 'SMOOTH')
+    smooth.factor = .5
+    smooth.iterations = 3
+    bpy.ops.object.modifier_apply(modifier=smooth.name)
+    surface = obj.data
+    adjacency = [set() for _ in surface.vertices]
+    for edge in surface.edges:
+        a, b = edge.vertices
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+    remaining = set(range(len(surface.vertices)))
+    components = []
+    while remaining:
+        component = {remaining.pop()}
+        pending = list(component)
+        while pending:
+            current = pending.pop()
+            for neighbour in adjacency[current]:
+                if neighbour in remaining:
+                    remaining.remove(neighbour)
+                    component.add(neighbour)
+                    pending.append(neighbour)
+        components.append(component)
+    if not components:
+        raise ValueError('The model has no usable binding surface.')
+    return surface, max(components, key=len)
+
+original_surface = mesh.copy()
+mesh, largest = prepare_surface()
+if len(largest) < len(mesh.vertices) * .9:
+    # Dünne offene Schalen nur in der Bindehilfe schliessen; sichtbare Flächen bleiben unverändert.
+    obj.data = original_surface
+    bpy.data.meshes.remove(mesh)
+    solid = obj.modifiers.new('Closed binding shell', 'SOLIDIFY')
+    solid.thickness = max(max(p[1] for p in data['Points']) - min(p[1] for p in data['Points']), 1.0) / 100
+    solid.offset = 0
+    bpy.ops.object.modifier_apply(modifier=solid.name)
+    mesh, largest = prepare_surface()
+    print('Closed thin binding surface')
+else:
+    bpy.data.meshes.remove(original_surface)
+if len(largest) < len(mesh.vertices) * .9:
     raise ValueError('The binding surface has separate body sections. Check the joint positions and mesh connections.')
 # Kleine schwebende Flächen machen Blenders Wärmelösung singulär.
 bm = bmesh.new()

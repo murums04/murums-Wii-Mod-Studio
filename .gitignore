@@ -9,6 +9,8 @@
 !/internal/tools/
 !/internal/build.ps1
 !/internal/build-setup.ps1
+!/internal/build-guard.ps1
+!/internal/resources.txt
 /internal/source/**
 !/internal/source/**/
 !/internal/source/**/*.cs
@@ -27,6 +29,7 @@
 !/assets/
 /assets/*
 !/assets/murums_logo.png
+!/assets/studio-start.jpg
 
 !/internal/tools/UPDATE_INSTALLER.cs
 !/internal/source/Resources/SkyPlane.dae
@@ -46,3 +49,16 @@
 !/internal/source/Resources/ModelRigExport.py
 !/internal/source/Resources/ModelRigBind.py
 !/internal/source/Resources/ModelMeshOptimize.py
+!/internal/source/Resources/ModelGripGeometry.py
+!/internal/source/Resources/ModelRigAnalysis.py
+!/internal/source/Resources/StudioLogo.png
+!/internal/source/Resources/Help/de-character.png
+!/internal/source/Resources/Help/en-character.png
+!/internal/source/Resources/Help/de-font-selection.png
+!/internal/source/Resources/Help/en-font-selection.png
+!/internal/source/Resources/Help/de-fonts.png
+!/internal/source/Resources/Help/en-fonts.png
+!/internal/source/Resources/Help/de-image-import.png
+!/internal/source/Resources/Help/en-image-import.png
+!/internal/source/Resources/Help/de-pack.png
+!/internal/source/Resources/Help/en-pack.png

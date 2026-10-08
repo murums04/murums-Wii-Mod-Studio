@@ -9,6 +9,7 @@ namespace murumsWiiModStudio
 {
     internal sealed class RaceEffectsForm : StudioToolForm
     {
+        SpecialEditorHistory editHistory;
         sealed class Item
         {
             internal StudioArchiveCopy Archive;
@@ -20,6 +21,7 @@ namespace murumsWiiModStudio
         readonly EffectCategory[] categories = EffectCategories.Create();
         readonly List<StudioArchiveCopy> archives = new List<StudioArchiveCopy>();
         readonly List<Item> items = new List<Item>();
+        readonly Dictionary<string, byte[]> originalEffects = new Dictionary<string, byte[]>();
         readonly HashSet<Item> checkedEffects = new HashSet<Item>();
         readonly PictureBox sample = new ZoomPanPictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom };
         bool filling;
@@ -37,17 +39,20 @@ namespace murumsWiiModStudio
             L.T("1. RR-Archive laden • 2. Effekte auswählen • 3. Farben als Kopie speichern",
                 "1. Load RR archives • 2. Select effects • 3. Save colours as copies"))
         {
-            Action(L.T("Archiv hinzufügen…", "Add archive…"), L.T("Common.szs und CommonAssets.szs aus deinem RR-Pack auswählen.", "Choose Common.szs and CommonAssets.szs from your RR pack."), Add).Name = "PackSourceAction";
-            Action(L.T("Auswahl leeren", "Clear selection"), "", Clear);
+            var addArchive = Action(L.T("Archiv hinzufügen…", "Add archive…"), L.T("Common.szs und CommonAssets.szs aus deinem RR-Pack auswählen.", "Choose Common.szs and CommonAssets.szs from your RR pack."), Add);
+            addArchive.Name = "PackSourceAction";
+            StudioActions.Icon(addArchive, StudioIcon.Add);
+            StudioActions.Icon(Action(L.T("Auswahl leeren", "Clear selection"), "", Clear), StudioIcon.Remove);
             group.Items.AddRange(categories);
             group.SelectedIndex = 0;
-            Actions.Controls.Add(group);
             group.SelectedIndexChanged += delegate { RefreshList(); };
-            Action(L.T("Gruppe anhaken", "Check group"), L.T("Hakt alle Effekte dieser Kategorie an. Bereits angehakte andere Gruppen bleiben ausgewählt.",
-                "Check every effect in this category. Other checked groups remain selected."), delegate { SetVisibleChecked(true); }).Name = "CheckEffectGroup";
-            Action(L.T("Gruppe abwählen", "Uncheck group"), L.T("Entfernt nur die Haken der sichtbaren Kategorie.",
-                "Uncheck only the visible category."), delegate { SetVisibleChecked(false); }).Name = "UncheckEffectGroup";
-            Action(L.T("Alle abwählen", "Uncheck all"), L.T("Entfernt die Haken in allen Kategorien.", "Uncheck every category."), delegate {
+            var checkGroup = Action(L.T("Gruppe anhaken", "Check group"), L.T("Hakt alle Effekte dieser Kategorie an. Bereits angehakte andere Gruppen bleiben ausgewählt.",
+                "Check every effect in this category. Other checked groups remain selected."), delegate { SetVisibleChecked(true); });
+            checkGroup.Name = "CheckEffectGroup";
+            var uncheckGroup = Action(L.T("Gruppe abwählen", "Uncheck group"), L.T("Entfernt nur die Haken der sichtbaren Kategorie.",
+                "Uncheck only the visible category."), delegate { SetVisibleChecked(false); });
+            uncheckGroup.Name = "UncheckEffectGroup";
+            var uncheckAll = Action(L.T("Alle abwählen", "Uncheck all"), L.T("Entfernt die Haken in allen Kategorien.", "Uncheck every category."), delegate {
                 checkedEffects.Clear();
                 for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false);
                 UpdateSelection();
@@ -59,16 +64,33 @@ namespace murumsWiiModStudio
                 "Nur RGB-Farbwechsel stoppen. Transparenz, Bewegung und Größenanimationen bleiben erhalten. Ohne Haken können Original-Farbspuren die Auswahl übersteuern.",
                 "Stop RGB colour cycles only. Keep alpha, movement and size animations. Unchecked, original colour tracks may override your choice."));
             apply = ExportAction(L.T("Farben anwenden", "Apply colours"), "", Apply, false);
-            ExportAction(L.T("Zurücksetzen", "Reset changes"), "", ResetChanges, false);
+            var reset = ExportAction(L.T("Zurücksetzen", "Reset changes"), "", ResetChanges, false);
+            StudioActions.Icon(reset, StudioIcon.Undo);
             save = ExportAction(L.T("Effektkopien speichern…", "Save effect copies…"), "", Save);
             var view = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
-            view.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
-            view.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+            view.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 278));
+            view.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             view.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             view.Controls.Add(selection, 0, 0);
             view.Controls.Add(sampleCaption, 1, 0);
-            view.Controls.Add(list, 0, 1);
+            var browser = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+            browser.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            browser.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            browser.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            browser.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            browser.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            group.Dock = DockStyle.Fill;
+            group.Margin = new Padding(0, 0, 0, 6);
+            browser.Controls.Add(group, 0, 0);
+            browser.Controls.Add(list, 0, 1);
+            var bulk = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Visible = false };
+            bulk.Controls.Add(checkGroup); bulk.Controls.Add(uncheckGroup); bulk.Controls.Add(uncheckAll);
+            var bulkToggle = new CheckBox { Text = L.T("Mehrfachauswahl", "Bulk selection"), AutoSize = true };
+            bulkToggle.CheckedChanged += delegate { bulk.Visible = bulkToggle.Checked; };
+            browser.Controls.Add(bulkToggle, 0, 2);
+            browser.Controls.Add(bulk, 0, 3);
+            view.Controls.Add(browser, 0, 1);
             var preview = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
             preview.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             preview.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -77,6 +99,10 @@ namespace murumsWiiModStudio
             colours.Controls.Add(second);
             colours.Controls.Add(fixedColors);
             colours.SetFlowBreak(second, true);
+            colours.SetFlowBreak(fixedColors, true);
+            colours.Controls.Add(apply);
+            colours.Controls.Add(reset);
+            DarkTheme.StylePrimary(apply);
             preview.Controls.Add(colours, 0, 0);
             preview.Controls.Add(sample, 0, 1);
             view.Controls.Add(preview, 1, 1);
@@ -103,13 +129,38 @@ namespace murumsWiiModStudio
             Status.Text = L.T("RR-Quellen laden. Streckeneigene Effekte können globale Farben übersteuern.",
                 "Load RR sources. Track-specific effects can override global colours.");
             Finish();
+            details.TextChanged += delegate { StudioUx.SetHelp(details, details.Text); };
             PackSelection.SourceStep(this, L.T("Archiv hinzufügen…", "Add archive…"),
                 L.T("Common.szs: Standardeffekte und Stern.\nCommonAssets.szs: zusätzliche RR-Driftstufen.\nBeide aus deinem RR-Pack hinzufügen und gewünschte Effekte anhaken.",
                     "Common.szs: standard effects and star.\nCommonAssets.szs: additional RR drift stages.\nAdd both from your RR pack and check the effects to change."), false);
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (dirty && !Discard()) e.Cancel = true; };
             UpdateColors();
             UpdateSelection();
+            editHistory = new SpecialEditorHistory(this, Actions, CaptureHistory, RestoreHistory,
+                delegate { return String.Join("|", archives.Select(a => a.Source)); });
         }
+        static string EffectKey(Item item) { return item.Archive.Source + "|" + item.Path + "|" + item.Effect.Name; }
+        object[] CaptureHistory()
+        {
+            return new object[] { primaryColor, secondaryColor, fixedColors.Checked,
+                checkedEffects.Select(EffectKey).OrderBy(k => k).Cast<object>().ToArray(),
+                archives.Select(a => (object)a.Files.Where(p => p.Key.EndsWith(".breff", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(p => p.Key, p => p.Value.Data)).ToArray() };
+        }
+        void RestoreHistory(object[] state)
+        {
+            var resources = (object[])state[4];
+            for (int i = 0; i < archives.Count; i++)
+                foreach (var pair in (Dictionary<string, byte[]>)resources[i]) archives[i].Files[pair.Key].Data = pair.Value;
+            var keys = new HashSet<string>(((object[])state[3]).Cast<string>());
+            checkedEffects.Clear(); foreach (var item in items) if (keys.Contains(EffectKey(item))) checkedEffects.Add(item);
+            RefreshList();
+            primaryColor = (Color)state[0]; secondaryColor = (Color)state[1]; fixedColors.Checked = (bool)state[2];
+            dirty = archives.Any(a => a.Files.Where(p => p.Key.EndsWith(".breff", StringComparison.OrdinalIgnoreCase))
+                .Any(p => !p.Value.Data.SequenceEqual(originalEffects[a.Source + "|" + p.Key])));
+            UpdateColors(); UpdateSelection();
+        }
+
         bool Discard()
         {
             return StudioMessageBox.Show(this, L.T("Ungespeicherte Effektänderungen verwerfen?", "Discard unsaved effect changes?"),
@@ -120,7 +171,7 @@ namespace murumsWiiModStudio
             if (dirty && !Discard()) return;
             foreach (var texture in textureCache.Values) if (texture != null) texture.Dispose();
             textureCache.Clear();
-            archives.Clear(); items.Clear(); checkedEffects.Clear(); list.Items.Clear(); dirty = false;
+            archives.Clear(); items.Clear(); originalEffects.Clear(); checkedEffects.Clear(); list.Items.Clear(); dirty = false;
             UpdateSelection(); PackSelection.SourceCleared(this); Detail();
         }
         void Add()
@@ -151,6 +202,8 @@ namespace murumsWiiModStudio
             int count = destination.Count;
             foreach (var entry in archive.Files.Where(f => f.Key.EndsWith(".breff", StringComparison.OrdinalIgnoreCase)))
             {
+                string originalKey = archive.Source + "|" + entry.Key;
+                if (!originalEffects.ContainsKey(originalKey)) originalEffects.Add(originalKey, entry.Value.Data);
                 var document = new ParticleEffects(entry.Value.Data);
                 foreach (var effect in document.Items)
                     destination.Add(new Item { Archive = archive, Path = entry.Key, Effect = effect, Category = EffectCategories.Classify(effect.Name, categories) });
@@ -264,8 +317,7 @@ namespace murumsWiiModStudio
         }
         void ResetChanges()
         {
-            if (dirty && !Discard()) return;
-            var next = archives.Select(a => new StudioArchiveCopy(a.Source)).ToList();
+            var next = archives.Select(a => new StudioArchiveCopy(a.Source, a.Original)).ToList();
             var nextItems = new List<Item>();
             foreach (var archive in next) ReadEffects(archive, nextItems);
             archives.Clear(); archives.AddRange(next);

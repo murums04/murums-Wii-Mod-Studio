@@ -12,7 +12,7 @@ namespace murumsWiiModStudio
     internal sealed partial class ModelRig
     {
         public sealed class Bone { public string Name; public int Parent; public float[] Matrix; }
-        public sealed class Material { public string Name, Texture; public float[] Color; }
+        public sealed class Material { public string Name, Texture, SourceName; public float[] Color; public bool? DoubleSided; }
         public float[][] Points, Normals, Uvs, BoneWeights;
         public int[][] Faces, BoneIndices;
         public int[] FaceMaterials;
@@ -20,9 +20,13 @@ namespace murumsWiiModStudio
         public Material[] Materials;
         public float ReferenceHeight, SizePercent;
         public int OriginalTriangles;
+        public string MovementCode;
+        public string HumanAnimationStyle;
+        public bool StarEffect = true;
+        public int MovementSlot;
         internal string Folder, Reference;
         internal static JavaScriptSerializer Serializer() { return new JavaScriptSerializer { MaxJsonLength = 100 * 1024 * 1024, RecursionLimit = 100 }; }
-        internal static ModelRig Prepare(CharacterModelImport source, string template, float sizePercent, int triangles, CancellationToken token)
+        internal static ModelRig Prepare(CharacterModelImport source, string template, float sizePercent, int triangles, CancellationToken token, float targetHeight = 0)
         {
             string folder = ModelRuntime.NewWorkFolder();
             string reference = Path.Combine(folder, "reference.dae");
@@ -34,10 +38,17 @@ namespace murumsWiiModStudio
                 input = Path.Combine(folder, "source.glb");
                 IntegratedModelImport.ExportCopy(source.Source, input, 1, "glb2");
             }
-            RunScript("ModelRigPrepare.py", folder, token, input, reference, folder, triangles.ToString(), sizePercent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            float referenceSize = sizePercent;
+            if (targetHeight > 0)
+            {
+                var templateModel = CharacterModelImport.Load(reference);
+                referenceSize *= targetHeight / (templateModel.Points.Max(p => p[1]) - templateModel.Points.Min(p => p[1]));
+            }
+            RunScript("ModelRigPrepare.py", folder, token, input, reference, folder, triangles.ToString(), referenceSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 Path.GetExtension(source.Source).Equals(".dae", StringComparison.OrdinalIgnoreCase) ? "merge" : "keep");
             var rig = Read(Path.Combine(folder, "rig.json"));
             rig.Reference = reference;
+            rig.SizePercent = sizePercent;
             return rig;
         }
         internal static ModelRig Read(string path)
@@ -57,7 +68,10 @@ namespace murumsWiiModStudio
                 || Normals == null || Normals.Length != Points.Length || Uvs == null || Uvs.Length != Points.Length
                 || FaceMaterials == null || FaceMaterials.Length != Faces.Length) throw new InvalidDataException("Invalid rig structure.");
             ValidateGamePoses();
+            ValidateSurfaceReviewState();
             ValidateSourceBinding();
+            ValidateAnatomyMetadata();
+            ValidateHandGrips();
             if (JointGuides != null && (JointGuides.Length != Bones.Length || JointGuides.Any(p => p == null || p.Length != 3 || p.Any(v => Single.IsNaN(v) || Single.IsInfinity(v) || Math.Abs(v) > 1e8))))
                 throw new InvalidDataException("Invalid joint guides.");
             if (ManualVertices != null && (ManualVertices.Length > Points.Length || ManualVertices.Any(v => v < 0 || v >= Points.Length))) throw new InvalidDataException("Invalid manually assigned vertices.");
@@ -145,6 +159,10 @@ namespace murumsWiiModStudio
             var selectedVertices = vertices.Distinct().ToArray();
             if (selectedVertices.Any(v => v < 0 || v >= Points.Length)) throw new ArgumentException("Unknown vertex.");
             InvalidateAlignment();
+            ComponentsReviewed = false; SurfaceReviewFingerprint = null;
+            if (RigidVertices != null) RigidVertices = RigidVertices.Except(selectedVertices).ToArray();
+            if (RigidComponentBones != null && VertexComponents != null)
+                foreach (int component in selectedVertices.Select(v => VertexComponents[v]).Distinct()) RigidComponentBones[component] = -1;
             foreach (int vertex in selectedVertices)
             {
                 var weights = new Dictionary<int, float>();
@@ -165,8 +183,9 @@ namespace murumsWiiModStudio
             return copy;
         }
 
-        internal string ExportDae(CancellationToken token, int triangleLimit = 0, string reference = null, int gameContext = 0, RigPoseReference gameReference = null)
+        internal string ExportDae(CancellationToken token, int triangleLimit = 0, string reference = null, int gameContext = 0, RigPoseReference gameReference = null, RigPoseReference boneReference = null)
         {
+            RequireExportReview();
             string path = Path.Combine(Folder, "rig-reviewed.json");
             Validate();
             var output = (ModelRig)MemberwiseClone();
@@ -177,21 +196,15 @@ namespace murumsWiiModStudio
             output.ActiveVehicle = null;
             output.NaturalVehicleFitting = false;
             output.JointGuides = null;
-            if (gameReference != null)
-            {
-                var mapping = Enumerable.Range(0, Bones.Length).Select(bone => {
-                    int referenceBone = gameReference.MatchBone(this, bone);
-                    int mapped = referenceBone < 0 ? -1 : Array.FindIndex(Bones, b => b.Name == gameReference.Names[referenceBone]);
-                    return mapped < 0 ? bone : mapped;
-                }).ToArray();
-                output.BoneIndices = BoneIndices.Select(indices => indices.Select(bone => mapping[bone]).ToArray()).ToArray();
-            }
             output.AlignToReference = false;
             output.Validate();
+            var mappingReference = gameReference ?? boneReference;
             // Der Export braucht weder Bindehilfe noch Undo-/Quellgewichte; nur einmal serialisieren.
             var document = new {
                 output.Points, output.Normals, output.Uvs, output.Faces, output.FaceMaterials,
                 output.Materials, output.Bones, output.BoneIndices, output.BoneWeights,
+                ExportBoneNames = mappingReference == null ? null : mappingReference.BoneMap(this)
+                    .Select(index => index < 0 ? null : mappingReference.Names[index]).ToArray(),
                 ExportSkinMatrices = gameReference == null ? null : gameReference.Names.Select((name, index) => new { name, index })
                     .ToDictionary(b => b.name, b => gameReference.Matrices[b.index])
             };
@@ -202,8 +215,9 @@ namespace murumsWiiModStudio
         }
         internal static void RunScript(string name, string work, CancellationToken token, params string[] args)
         {
-            using (var helper = Assembly.GetExecutingAssembly().GetManifestResourceStream("Studio.ModelMeshOptimize.py"))
-            using (var output = File.Create(Path.Combine(work, "ModelMeshOptimize.py")))
+            foreach (string helperName in new[] { "ModelMeshOptimize.py", "ModelRigAnalysis.py", "ModelGripGeometry.py" })
+            using (var helper = Assembly.GetExecutingAssembly().GetManifestResourceStream("Studio." + helperName))
+            using (var output = File.Create(Path.Combine(work, helperName)))
             {
                 if (helper == null) throw new IOException("Missing internal model optimization resource.");
                 helper.CopyTo(output);

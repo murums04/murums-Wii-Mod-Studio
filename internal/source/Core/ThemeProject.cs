@@ -178,7 +178,7 @@ namespace murumsWiiModStudio
                 if (writes.Keys.Any(other => other.StartsWith(dest + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
                     throw new IOException(L.T("Die Ausgabe enthält widersprüchliche Datei- und Ordnerpfade.", "The output contains conflicting file and folder paths."));
 
-            BackupManager.WriteBatch(writes, afterWrite);
+            BackupManager.WriteBatch(writes, afterWrite, exportCopy: true);
         }
     }
 }

@@ -42,8 +42,10 @@ namespace murumsWiiModStudio
 
         internal bool RestoreSourceBinding()
         {
+            if (SourceWeightedVertices == null || SourceWeightedVertices.Any(v => !v)) return false;
             if (SourceJointGuides == null || SourceBoneIndices == null || SourceBoneWeights == null
                 || SourceBoneIndices.Length != Points.Length || SourceBoneWeights.Length != Points.Length) return false;
+            if (AnatomyChains.SelectMany(c => c).Any(name => PoseBone(name) >= 0 && !SourceJointGuides.ContainsKey(name))) return false;
             for (int b = 0; b < Bones.Length; b++)
                 if (SourceJointGuides.ContainsKey(Bones[b].Name)
                     && RigVector.Length(RigVector.Sub(JointGuides[b], SourceJointGuides[Bones[b].Name])) > .0001) return false;
@@ -63,11 +65,31 @@ namespace murumsWiiModStudio
             }
             BindingWarning = null; BindingMethod = "Source rig weights"; AlignToReference = true; InvalidateAlignment(); return true;
         }
+        bool CanKeepSourceWeights(int vertex)
+        {
+            if (SourceWeightedVertices == null || !SourceWeightedVertices[vertex]
+                || SourceBoneIndices == null || SourceBoneWeights == null || SourceJointGuides == null) return false;
+            foreach (int bone in SourceBoneIndices[vertex])
+            {
+                if (!BoneEnabled(bone)) return false;
+                var chain = AnatomyChains.FirstOrDefault(c => c.Contains(Bones[bone].Name));
+                if (chain == null) return false;
+                foreach (string name in chain)
+                {
+                    float[] source;
+                    int index = PoseBone(name);
+                    if (index < 0 || !SourceJointGuides.TryGetValue(name, out source) || !SameJoint(source, JointGuides[index])) return false;
+                }
+            }
+            return true;
+        }
+
         sealed class BoundVertex { public int[] Indices; public float[] Weights; }
         sealed class BindingResult { public BoundVertex[] Vertices; public int Missing; }
 
         internal void BindWithBlender(CancellationToken token)
         {
+            RequireAnatomy();
             if (JointGuides == null) throw new InvalidOperationException("Place the joints first.");
             if (RestoreSourceBinding()) return;
             string work = ModelRuntime.NewWorkFolder();
@@ -100,6 +122,12 @@ namespace murumsWiiModStudio
             for (int v = 0; v < Points.Length; v++)
             {
                 if (fixedVertices.Contains(v)) continue;
+                if (CanKeepSourceWeights(v))
+                {
+                    BoneIndices[v] = (int[])SourceBoneIndices[v].Clone();
+                    BoneWeights[v] = (float[])SourceBoneWeights[v].Clone();
+                    continue;
+                }
                 var vertex = result.Vertices[v];
                 if (vertex.Indices.Length == 0)
                 {
@@ -111,6 +139,7 @@ namespace murumsWiiModStudio
                 BoneWeights[v] = (float[])vertex.Weights.Clone();
             }
             BindingWarning = null;
+            ComponentsReviewed = false;
             ModelRuntime.DeleteWorkFolder(work);
             BindingMethod = "Blender bone heat";
             AlignToReference = true;

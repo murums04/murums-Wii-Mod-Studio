@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Drawing;
 using System.IO;
 using System.Text;
@@ -8,16 +9,15 @@ using murumsWiiModStudio.Brlan;
 
 namespace murumsWiiModStudio
 {
-    internal sealed class MainForm : Form
+    internal sealed class MainForm : StudioFrame
     {
         private const string AppName = "murums Wii Mod Studio";
-        private const string AppVersion = StudioVersion.Current;
         private MenuStrip _menu;
         private ToolStrip _toolbar;
         private TreeView _tree;
         private TabControl _tabs;
-        private TextBox _details;
-        private TextBox _raw;
+        private StudioReadOnlyText _details;
+        private StudioReadOnlyText _raw;
         private RichTextBox _help;
         private TabPage _helpPage;
         private PictureBox _preview;
@@ -26,11 +26,16 @@ namespace murumsWiiModStudio
         private Button _previewNext;
         private Button _previewExport;
         private Button _previewImportTpl;
+        private FlowLayoutPanel _previewTools;
+        private StudioEmptyState _previewEmpty;
+        private StudioEmptyState _detailsEmpty;
+        private StudioEmptyState _rawEmpty;
         private TexturePreviewResult _previewResult;
         private ArchiveEntry _previewEntry;
         private int _previewImageIndex;
         private string _lastFindText;
         private ToolStripStatusLabel _status;
+        private ToolStripStatusLabel _documentStatus;
         private Label _selectionInfo;
         private TreeNode _dragHoverNode;
         private enum TreeDropPlacement
@@ -48,15 +53,22 @@ namespace murumsWiiModStudio
         private ToolStripButton _redoButton;
         private ToolStripMenuItem _undoMenu;
         private ToolStripMenuItem _redoMenu;
+        private StudioWorkspace _workspace;
+        private StudioStartup _startup;
+        private bool _startupNotified;
+        internal event EventHandler StartupCompleted;
+        internal bool StartupReady { get { return _startup != null && _startup.Completed; } }
+
         public MainForm()
         {
-            Text = AppName + " v" + AppVersion;
+            Text = AppName;
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(1000, 680);
             Size = new Size(1320, 820);
+            WindowState = FormWindowState.Maximized;
             BackColor = DarkTheme.Back;
             ForeColor = DarkTheme.Fore;
-            Font = new Font("Segoe UI", 10.5F);
+            Font = StudioTypography.Body;
             AutoScaleMode = AutoScaleMode.Dpi;
             DoubleBuffered = true;
             AllowDrop = true;
@@ -69,10 +81,23 @@ namespace murumsWiiModStudio
             }
 
             BuildUi();
+            BuildWorkspace();
             ApplyTheme();
+            UpdateSelection();
             DragEnter += OnDragEnter;
             DragDrop += OnDragDrop;
             FormClosing += OnFormClosing;
+            _startup = new StudioStartup(this, _workspace, delegate(string message)
+            {
+                _menu.Enabled = true;
+                if (!String.IsNullOrEmpty(message)) _status.Text = message;
+                if (!_startupNotified)
+                {
+                    _startupNotified = true;
+                    if (StartupCompleted != null) StartupCompleted(this, EventArgs.Empty);
+                }
+            });
+            Shown += delegate { _menu.Enabled = false; _startup.Start(); };
         }
 
         private void BuildUi()
@@ -85,20 +110,19 @@ namespace murumsWiiModStudio
             shell.ColumnCount = 1;
             shell.RowCount = 5;
             shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 118F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
             shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
             Controls.Add(shell);
-            Panel brand = murumsWiiModStudio.StudioChrome.Header(L.T("Dein Wii-Modding-Studio", "Your Wii modding studio"), L.T("Menübilder und Animationen gestalten • Spieldateien öffnen und bearbeiten", "Create menu pictures and animations • Open and edit game files"));
-            shell.Controls.Add(brand, 0, 0);
+
             _menu = new MenuStrip();
             _menu.Dock = DockStyle.Fill;
             _menu.Margin = new Padding(0);
             _menu.Padding = new Padding(8, 3, 0, 3);
-            _menu.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
-            ToolStripMenuItem file = new ToolStripMenuItem(L.T("Datei", "File"));
+            _menu.Font = StudioTypography.Body;
+            ToolStripMenuItem file = new ToolStripMenuItem(L.T("&Datei", "&File"));
             file.DropDownItems.Add(MakeMenu(L.T("Öffnen...", "Open..."), Keys.Control | Keys.O, delegate
             {
                 OpenDialog();
@@ -107,20 +131,14 @@ namespace murumsWiiModStudio
             {
                 OpenStandaloneResourceDialog();
             }));
-            file.DropDownItems.Add(MakeMenu(L.T("Speichern", "Save"), Keys.Control | Keys.S, delegate
-            {
-                SaveArchive(false);
-            }));
-            file.DropDownItems.Add(MakeMenu(L.T("Speichern unter...", "Save as..."), Keys.Control | Keys.Shift | Keys.S, delegate
-            {
-                SaveArchive(true);
-            }));
+            file.DropDownItems.Add(MakeCommandMenu(L.T("Speichern", "Save"), Keys.Control | Keys.S, ArchiveCommand.Save));
+            file.DropDownItems.Add(MakeCommandMenu(L.T("Speichern unter...", "Save as..."), Keys.Control | Keys.Shift | Keys.S, ArchiveCommand.SaveAs));
             file.DropDownItems.Add(new ToolStripSeparator());
             file.DropDownItems.Add(MakeMenu(L.T("Beenden", "Exit"), Keys.None, delegate
             {
                 Close();
             }));
-            ToolStripMenuItem edit = new ToolStripMenuItem(L.T("Bearbeiten", "Edit"));
+            ToolStripMenuItem edit = new ToolStripMenuItem(L.T("&Bearbeiten", "&Edit"));
             _undoMenu = MakeMenu(StudioHistorySymbols.Undo + "  " + L.T("Rückgängig", "Undo"), Keys.Control | Keys.Z, delegate
             {
                 NavigateHistory(false);
@@ -134,163 +152,94 @@ namespace murumsWiiModStudio
             edit.DropDownItems.Add(_undoMenu);
             edit.DropDownItems.Add(_redoMenu);
             edit.DropDownItems.Add(new ToolStripSeparator());
-            edit.DropDownItems.Add(MakeMenu(L.T("Dateien importieren...", "Import files..."), Keys.Control | Keys.I, delegate
-            {
-                ImportFiles();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Ordner importieren...", "Import folder..."), Keys.None, delegate
-            {
-                ImportFolder();
-            }));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Dateien importieren...", "Import files..."), Keys.Control | Keys.I, ArchiveCommand.ImportFiles));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Ordner importieren...", "Import folder..."), Keys.None, ArchiveCommand.ImportFolder));
             edit.DropDownItems.Add(new ToolStripSeparator());
-            edit.DropDownItems.Add(MakeMenu(L.T("Ausgewählte Ressource bearbeiten...", "Edit selected resource..."), Keys.Control | Keys.Enter, delegate
-            {
-                EditSelectedResource();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Ausgewählte Datei ersetzen...", "Replace selected file..."), Keys.Control | Keys.R, delegate
-            {
-                ReplaceSelected();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("TPL-Bild importieren...", "Import TPL texture..."), Keys.Control | Keys.T, delegate
-            {
-                ImportTextureSelected();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Ausgewählten Eintrag exportieren...", "Export selected entry..."), Keys.Control | Keys.E, delegate
-            {
-                ExportSelected();
-            }));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Ausgewählte Ressource bearbeiten...", "Edit selected resource..."), Keys.Control | Keys.Enter, ArchiveCommand.Edit));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Ausgewählte Datei ersetzen...", "Replace selected file..."), Keys.Control | Keys.R, ArchiveCommand.Replace));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("TPL-Bild importieren...", "Import TPL texture..."), Keys.Control | Keys.T, ArchiveCommand.ImportTexture));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Ausgewählten Eintrag exportieren...", "Export selected entry..."), Keys.Control | Keys.E, ArchiveCommand.Export));
             edit.DropDownItems.Add(new ToolStripSeparator());
-            edit.DropDownItems.Add(MakeMenu(L.T("Neuer Ordner...", "New folder..."), Keys.Control | Keys.Shift | Keys.N, delegate
-            {
-                NewFolder();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Duplizieren", "Duplicate"), Keys.Control | Keys.D, delegate
-            {
-                DuplicateSelected();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Umbenennen", "Rename"), Keys.F2, delegate
-            {
-                RenameSelected();
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Löschen", "Delete"), Keys.Delete, delegate
-            {
-                DeleteSelected();
-            }));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Neuer Ordner...", "New folder..."), Keys.Control | Keys.Shift | Keys.N, ArchiveCommand.NewFolder));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Duplizieren", "Duplicate"), Keys.Control | Keys.D, ArchiveCommand.Duplicate));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Umbenennen", "Rename"), Keys.F2, ArchiveCommand.Rename));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Löschen", "Delete"), Keys.Delete, ArchiveCommand.Delete));
             edit.DropDownItems.Add(new ToolStripSeparator());
-            edit.DropDownItems.Add(MakeMenu(L.T("Nach oben verschieben", "Move up"), Keys.Control | Keys.Up, delegate
-            {
-                MoveSelected(-1);
-            }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Nach unten verschieben", "Move down"), Keys.Control | Keys.Down, delegate
-            {
-                MoveSelected(1);
-            }));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Nach oben verschieben", "Move up"), Keys.Control | Keys.Up, ArchiveCommand.MoveUp));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Nach unten verschieben", "Move down"), Keys.Control | Keys.Down, ArchiveCommand.MoveDown));
             edit.DropDownItems.Add(new ToolStripSeparator());
-            edit.DropDownItems.Add(MakeMenu(L.T("Eintrag suchen...", "Find entry..."), Keys.Control | Keys.F, delegate
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Eintrag suchen...", "Find entry..."), Keys.Control | Keys.F, ArchiveCommand.Find));
+            edit.DropDownItems.Add(MakeCommandMenu(L.T("Weitersuchen", "Find next"), Keys.F3, ArchiveCommand.FindNext));
+            ToolStripMenuItem tools = new ToolStripMenuItem(L.T("&Werkzeuge", "&Tools"));
+            var packs = new ToolStripMenuItem(L.T("Packs erstellen & verwalten", "Create & manage packs"));
+            var visuals = new ToolStripMenuItem(L.T("Bilder, Schrift & Layout", "Pictures, fonts & layout"));
+            var characters = new ToolStripMenuItem(L.T("Charaktere", "Characters"));
+            var advancedTools = new ToolStripMenuItem(L.T("Weitere Werkzeuge", "More tools"));
+            tools.DropDownItems.AddRange(new ToolStripItem[] { packs, visuals, characters, advancedTools });
+            packs.DropDownItems.Add(MakeMenu("RR-MKWii Custom Pack Maker Tool...", Keys.None, delegate
             {
-                FindEntry(false);
+                OpenWorkspace("pack");
             }));
-            edit.DropDownItems.Add(MakeMenu(L.T("Weitersuchen", "Find next"), Keys.F3, delegate
+            packs.DropDownItems.Add(MakeMenu("RR-MKWii Mod Merge Tool...", Keys.None, delegate
             {
-                FindEntry(true);
+                OpenWorkspace("merge");
             }));
-            ToolStripMenuItem tools = new ToolStripMenuItem(L.T("Tools", "Tools"));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Custom Pack Maker Tool...", Keys.None, delegate
+            packs.DropDownItems.Add(MakeMenu("RR-MKWii Pack Workshop Tool...", Keys.None, delegate
             {
-                using (var maker = new CustomPackMakerForm())
-                    maker.ShowDialog(this);
+                OpenWorkspace("workshop");
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Mod Merge Tool...", Keys.None, delegate
+            visuals.DropDownItems.Add(MakeMenu("RR-MKWii Game HUD Tool...", Keys.None, delegate
             {
-                using (var merge = new ArchiveMergeForm()) merge.ShowDialog(this);
+                OpenWorkspace("menu");
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Pack Workshop Tool...", Keys.None, delegate
+            visuals.DropDownItems.Add(MakeMenu("RR-MKWii Race HUD Tool...", Keys.None, delegate
             {
-                using (var workshop = new PackWorkbenchForm()) workshop.ShowDialog(this);
+                OpenWorkspace("hud");
             }));
-            tools.DropDownItems.Add(new ToolStripSeparator());
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Game HUD Tool...", Keys.None, delegate
+            visuals.DropDownItems.Add(MakeMenu("RR-MKWii Race Effects Tool...", Keys.None, delegate
             {
-                using (var hud = new GameHudForm())
-                    hud.ShowDialog(this);
+                OpenWorkspace("effects");
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Race HUD Tool...", Keys.None, delegate
-            {
-                using (var hud = new RaceHudForm())
-                    hud.ShowDialog(this);
-            }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Race Effects Tool...", Keys.None, delegate
-            {
-                using (var effects = new RaceEffectsForm()) effects.ShowDialog(this);
-            }));
-            tools.DropDownItems.Add(MakeMenu(L.T("RR-MKWii Backgrounds Tool...", "RR-MKWii Backgrounds Tool..."), Keys.None, delegate
+            visuals.DropDownItems.Add(MakeMenu(L.T("RR-MKWii Backgrounds Tool...", "RR-MKWii Backgrounds Tool..."), Keys.None, delegate
             {
                 OpenRetroRewindGifWizard();
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Font Changer Tool...", Keys.None, delegate
+            visuals.DropDownItems.Add(MakeMenu("RR-MKWii Font Changer Tool...", Keys.None, delegate
             {
-                using (var f = new FontChangerForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("font");
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Theme Project Tool...", Keys.None, delegate
+            packs.DropDownItems.Add(MakeMenu("RR-MKWii Theme Project Tool...", Keys.None, delegate
             {
-                using (var f = new ThemeProjectForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("theme");
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Character Builder Tool...", Keys.None, delegate
+            characters.DropDownItems.Add(MakeMenu("RR-MKWii Character Builder Tool...", Keys.None, delegate
             {
-                using (var f = new CharacterBuilderForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("character");
             }));
-            tools.DropDownItems.Add(MakeMenu("RR-MKWii Menu Text Tool...", Keys.None, delegate
+            visuals.DropDownItems.Add(MakeMenu("RR-MKWii Menu Text Tool...", Keys.None, delegate
             {
-                using (var f = new MenuTextForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("text");
             }));
-            tools.DropDownItems.Add(new ToolStripSeparator());
-            tools.DropDownItems.Add(MakeMenu("MKWii Archive Compare Tool...", Keys.None, delegate
+            packs.DropDownItems.Add(MakeMenu("MKWii Archive Compare Tool...", Keys.None, delegate
             {
-                using (var f = new ArchiveCompareForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("compare");
             }));
             tools.DropDownItems.Add(MakeMenu("MKWii Music && Loops Tool...", Keys.None, delegate
             {
-                using (var f = new MusicLoopForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("audio");
             }));
-            tools.DropDownItems.Add(new ToolStripSeparator());
-            tools.DropDownItems.Add(MakeMenu(L.T("Ausgewählte BRLAN bearbeiten / GIF", "Edit selected BRLAN / GIF"), Keys.None, delegate
-            {
-                EditSelectedBrlan();
-            }));
-            tools.DropDownItems.Add(MakeMenu(L.T("Ausgewählte BRLYT bearbeiten", "Edit selected BRLYT"), Keys.None, delegate
-            {
-                EditSelectedBrlyt();
-            }));
-            tools.DropDownItems.Add(new ToolStripSeparator());
-            tools.DropDownItems.Add(MakeMenu(L.T("Archiv validieren", "Validate archive"), Keys.None, delegate
-            {
-                ValidateArchive();
-            }));
-            tools.DropDownItems.Add(MakeMenu(L.T("Streckendateien prüfen...", "Check race-track files..."), Keys.None, delegate
+            advancedTools.DropDownItems.Add(MakeCommandMenu(L.T("Ausgewählte BRLAN bearbeiten / GIF", "Edit selected BRLAN / GIF"), Keys.None, ArchiveCommand.EditBrlan));
+            advancedTools.DropDownItems.Add(MakeCommandMenu(L.T("Ausgewählte BRLYT bearbeiten", "Edit selected BRLYT"), Keys.None, ArchiveCommand.EditBrlyt));
+            advancedTools.DropDownItems.Add(MakeCommandMenu(L.T("Archiv validieren", "Validate archive"), Keys.None, ArchiveCommand.Validate));
+            advancedTools.DropDownItems.Add(MakeMenu(L.T("Streckendateien prüfen...", "Check race-track files..."), Keys.None, delegate
             {
                 CheckCourse();
             }));
-            tools.DropDownItems.Add(MakeMenu(L.T("Toolchain-Status...", "Toolchain status..."), Keys.None, delegate
+            advancedTools.DropDownItems.Add(MakeMenu(L.T("Toolchain-Status...", "Toolchain status..."), Keys.None, delegate
             {
-                using (ToolchainForm f = new ToolchainForm())
-                    f.ShowDialog(this);
+                OpenWorkspace("settings");
             }));
-            tools.DropDownItems.Add(new ToolStripSeparator());
-            tools.DropDownItems.Add(MakeMenu(L.T("Alles aufklappen", "Expand all"), Keys.None, delegate
-            {
-                _tree.ExpandAll();
-            }));
-            tools.DropDownItems.Add(MakeMenu(L.T("Alles zuklappen", "Collapse all"), Keys.None, delegate
-            {
-                CollapseTree();
-            }));
-            ToolStripMenuItem language = new ToolStripMenuItem(L.T("Sprache", "Language"));
+            ToolStripMenuItem language = new ToolStripMenuItem(L.T("&Sprache", "&Language"));
             ToolStripMenuItem german = new ToolStripMenuItem("Deutsch");
             ToolStripMenuItem english = new ToolStripMenuItem("English");
             german.Checked = L.Current == UiLanguage.German;
@@ -305,19 +254,18 @@ namespace murumsWiiModStudio
             };
             language.DropDownItems.Add(german);
             language.DropDownItems.Add(english);
-            ToolStripMenuItem helpMenu = new ToolStripMenuItem(L.T("Hilfe", "Help"));
+            ToolStripMenuItem helpMenu = new ToolStripMenuItem(L.T("&Hilfe", "&Help"));
             helpMenu.DropDownItems.Add(MakeMenu(L.T("Nach Updates suchen…", "Check for updates…"), Keys.None, delegate
             {
-                StudioUpdateForm.ShowUpdates(this, null);
+                CheckForUpdates();
             }));
             helpMenu.DropDownItems.Add(MakeMenu("Changelog", Keys.None, delegate
             {
-                using (var dialog = new StudioChangelogForm())
-                    dialog.ShowDialog(this);
+                ShowChangelog();
             }));
             helpMenu.DropDownItems.Add(MakeMenu(L.T("Allgemeine Hilfe", "General help"), Keys.F1, delegate
             {
-                StudioHelpWindow.Show(this, _helpPage, L.T("Hilfe", "Help"));
+                OpenWorkspace("help");
             }));
             helpMenu.DropDownItems.Add(MakeMenu(L.T("Über ", "About ") + AppName, Keys.None, delegate
             {
@@ -337,7 +285,7 @@ namespace murumsWiiModStudio
             _toolbar.Height = 42;
             _toolbar.GripStyle = ToolStripGripStyle.Hidden;
             _toolbar.Padding = new Padding(8, 5, 0, 5);
-            _toolbar.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
+            _toolbar.Font = StudioTypography.Body;
             _toolbar.Items.Add(MakeToolButton(L.T("Öffnen", "Open"), delegate
             {
                 OpenDialog();
@@ -346,14 +294,8 @@ namespace murumsWiiModStudio
             {
                 BrowseTextures();
             }));
-            _toolbar.Items.Add(MakeToolButton(L.T("Speichern", "Save"), delegate
-            {
-                SaveArchive(false);
-            }));
-            _toolbar.Items.Add(MakeToolButton(L.T("Speichern unter", "Save as"), delegate
-            {
-                SaveArchive(true);
-            }));
+            _toolbar.Items.Add(MakeCommandButton(L.T("Speichern", "Save"), ArchiveCommand.Save));
+            _toolbar.Items.Add(MakeCommandButton(L.T("Speichern unter", "Save as"), ArchiveCommand.SaveAs));
             _undoButton = MakeToolButton(StudioHistorySymbols.Undo, delegate
             {
                 NavigateHistory(false);
@@ -362,53 +304,27 @@ namespace murumsWiiModStudio
             {
                 NavigateHistory(true);
             });
-            _undoButton.ToolTipText = L.T("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)");
-            _redoButton.ToolTipText = L.T("Wiederholen (Strg+Y)", "Redo (Ctrl+Y)");
+            StudioHistorySymbols.Tool(_undoButton, false, L.T("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)"));
+            StudioHistorySymbols.Tool(_redoButton, true, L.T("Wiederholen (Strg+Y / Strg+Umschalt+Z)", "Redo (Ctrl+Y / Ctrl+Shift+Z)"));
+            new StudioUndoRedo(this, null, delegate { return _history.CanUndo; }, delegate { return _history.CanRedo; }, delegate { NavigateHistory(false); }, delegate { NavigateHistory(true); });
             _undoButton.Enabled = false;
             _redoButton.Enabled = false;
             _toolbar.Items.Add(_undoButton);
             _toolbar.Items.Add(_redoButton);
             _toolbar.Items.Add(new ToolStripSeparator());
-            _toolbar.Items.Add(MakeToolButton(L.T("+ Dateien", "+ Files"), delegate
-            {
-                ImportFiles();
-            }));
-            _toolbar.Items.Add(MakeToolButton(L.T("Bearbeiten", "Edit"), delegate
-            {
-                EditSelectedResource();
-            }));
-            _toolbar.Items.Add(MakeToolButton(L.T("Ersetzen", "Replace"), delegate
-            {
-                ReplaceSelected();
-            }));
+            _toolbar.Items.Add(MakeCommandButton(L.T("+ Dateien", "+ Files"), ArchiveCommand.ImportFiles));
+            _toolbar.Items.Add(MakeCommandButton(L.T("Bearbeiten", "Edit"), ArchiveCommand.Edit));
+            _toolbar.Items.Add(MakeCommandButton(L.T("Ersetzen", "Replace"), ArchiveCommand.Replace));
             ToolStripDropDownButton more = new ToolStripDropDownButton(L.T("Weitere Aktionen", "More actions"));
-            more.DropDownItems.Add(MakeMenu(L.T("Texturbild importieren...", "Import texture image..."), Keys.None, delegate
-            {
-                ImportTextureSelected();
-            }));
-            more.DropDownItems.Add(MakeMenu(L.T("Umbenennen...", "Rename..."), Keys.None, delegate
-            {
-                RenameSelected();
-            }));
-            more.DropDownItems.Add(MakeMenu(L.T("Duplizieren", "Duplicate"), Keys.None, delegate
-            {
-                DuplicateSelected();
-            }));
-            more.DropDownItems.Add(MakeMenu(L.T("Löschen", "Delete"), Keys.None, delegate
-            {
-                DeleteSelected();
-            }));
+            more.DropDownItems.Add(MakeCommandMenu(L.T("Texturbild importieren...", "Import texture image..."), Keys.None, ArchiveCommand.ImportTexture));
+            more.DropDownItems.Add(MakeCommandMenu(L.T("Umbenennen...", "Rename..."), Keys.None, ArchiveCommand.Rename));
+            more.DropDownItems.Add(MakeCommandMenu(L.T("Duplizieren", "Duplicate"), Keys.None, ArchiveCommand.Duplicate));
+            more.DropDownItems.Add(MakeCommandMenu(L.T("Löschen", "Delete"), Keys.None, ArchiveCommand.Delete));
             _toolbar.Items.Add(more);
-            _toolbar.Items.Add(MakeToolButton(L.T("Export", "Export"), delegate
-            {
-                ExportSelected();
-            }));
+            _toolbar.Items.Add(MakeCommandButton(L.T("Export", "Export"), ArchiveCommand.Export));
             _toolbar.Items.Add(new ToolStripSeparator());
             ToolStripDropDownButton checks = new ToolStripDropDownButton(L.T("Prüfen", "Check"));
-            checks.DropDownItems.Add(MakeMenu(L.T("Archivstruktur", "Archive structure"), Keys.None, delegate
-            {
-                ValidateArchive();
-            }));
+            checks.DropDownItems.Add(MakeCommandMenu(L.T("Archivstruktur", "Archive structure"), Keys.None, ArchiveCommand.Validate));
             checks.DropDownItems.Add(MakeMenu(L.T("Streckendateien prüfen...", "Check race-track files..."), Keys.None, delegate
             {
                 CheckCourse();
@@ -421,12 +337,14 @@ namespace murumsWiiModStudio
             mainSplit.FixedPanel = FixedPanel.Panel1;
             mainSplit.SplitterWidth = 4;
             mainSplit.BackColor = DarkTheme.Border;
+            mainSplit.Panel1.BackColor = DarkTheme.Navigation;
+            mainSplit.Panel2.BackColor = DarkTheme.Panel;
             shell.Controls.Add(mainSplit, 0, 3);
             Shown += delegate
             {
                 try
                 {
-                    int desired = 300;
+                    int desired = 270;
                     int minimumLeft = 200;
                     int minimumRight = 430;
                     int maxAllowed = Math.Max(minimumLeft, mainSplit.Width - minimumRight - mainSplit.SplitterWidth);
@@ -465,7 +383,7 @@ namespace murumsWiiModStudio
             archiveHeader.TextAlign = ContentAlignment.MiddleLeft;
             archiveHeader.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
             archiveHeader.ForeColor = DarkTheme.Muted;
-            archiveHeader.BackColor = DarkTheme.Panel2;
+            archiveHeader.BackColor = DarkTheme.Navigation;
             left.Controls.Add(archiveHeader, 0, 0);
             _tree = new TreeView();
             _tree.ImageList = CreateTreeImageList();
@@ -473,7 +391,7 @@ namespace murumsWiiModStudio
             _tree.Margin = new Padding(0);
             _tree.HideSelection = false;
             _tree.AllowDrop = true;
-            _tree.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
+            _tree.Font = StudioTypography.Body;
             _tree.AfterSelect += delegate
             {
                 UpdateSelection();
@@ -490,7 +408,7 @@ namespace murumsWiiModStudio
             TableLayoutPanel right = new TableLayoutPanel();
             right.Dock = DockStyle.Fill;
             right.Margin = new Padding(0);
-            right.Padding = new Padding(12);
+            right.Padding = new Padding(12, 4, 12, 4);
             right.ColumnCount = 1;
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             right.RowCount = 2;
@@ -500,25 +418,27 @@ namespace murumsWiiModStudio
             _selectionInfo = new Label();
             _selectionInfo.Dock = DockStyle.Fill;
             _selectionInfo.Text = L.T("Kein Archiv geöffnet", "No archive opened");
+            _selectionInfo.AutoEllipsis = true;
             _selectionInfo.TextAlign = ContentAlignment.MiddleLeft;
-            _selectionInfo.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
+            _selectionInfo.Font = new Font(StudioTypography.Body, FontStyle.Bold);
             _selectionInfo.ForeColor = DarkTheme.Fore;
             right.Controls.Add(_selectionInfo, 0, 0);
-            _tabs = new TabControl();
+            _tabs = new DarkTabControl();
             _tabs.Dock = DockStyle.Fill;
             _tabs.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
             TabPage previewTab = new TabPage(L.T("Vorschau", "Preview"));
-            previewTab.Padding = new Padding(10);
+            previewTab.Padding = new Padding(0, 8, 0, 0);
             TableLayoutPanel previewLayout = new TableLayoutPanel();
             previewLayout.Dock = DockStyle.Fill;
             previewLayout.Margin = new Padding(0);
             previewLayout.Padding = new Padding(0);
             previewLayout.ColumnCount = 1;
             previewLayout.RowCount = 3;
-            previewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
+            previewLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             previewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            previewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
-            FlowLayoutPanel previewTools = new FlowLayoutPanel();
+            previewLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            FlowLayoutPanel previewTools = _previewTools = new FlowLayoutPanel();
+            previewTools.AutoSize = true;
             previewTools.Dock = DockStyle.Fill;
             previewTools.FlowDirection = FlowDirection.LeftToRight;
             previewTools.WrapContents = false;
@@ -545,6 +465,8 @@ namespace murumsWiiModStudio
             previewTools.Controls.Add(_previewNext);
             previewTools.Controls.Add(_previewExport);
             previewTools.Controls.Add(_previewImportTpl);
+            _previewPrevious.AccessibleName = L.T("Vorheriges Bild", "Previous image");
+            _previewNext.AccessibleName = L.T("Nächstes Bild", "Next image");
             _previewPrevious.Enabled = false;
             _previewNext.Enabled = false;
             _previewExport.Enabled = false;
@@ -552,15 +474,20 @@ namespace murumsWiiModStudio
             Panel imageHost = new Panel();
             imageHost.Dock = DockStyle.Fill;
             imageHost.Margin = new Padding(0);
-            imageHost.Padding = new Padding(8);
-            imageHost.BackColor = Color.FromArgb(28, 28, 33);
+            imageHost.Padding = Padding.Empty;
+            imageHost.BackColor = DarkTheme.Panel2;
             _preview = new murumsWiiModStudio.ZoomPanPictureBox();
             _preview.Dock = DockStyle.Fill;
             _preview.SizeMode = PictureBoxSizeMode.Zoom;
-            _preview.BackColor = Color.FromArgb(38, 38, 44);
+            _preview.BackColor = DarkTheme.Panel2;
             imageHost.Controls.Add(_preview);
+            _previewEmpty = CreateEmptyState();
+            imageHost.Controls.Add(_previewEmpty);
+            _previewEmpty.BringToFront();
             _previewInfo = new Label();
             _previewInfo.Dock = DockStyle.Fill;
+            _previewInfo.AutoSize = true;
+            _previewInfo.Padding = new Padding(0, 5, 0, 5);
             _previewInfo.TextAlign = ContentAlignment.MiddleLeft;
             _previewInfo.ForeColor = DarkTheme.Muted;
             _previewInfo.Text = L.T("Wähle eine TPL- oder Bilddatei aus.", "Select a TPL or image file.");
@@ -570,27 +497,21 @@ namespace murumsWiiModStudio
             previewTab.Controls.Add(previewLayout);
             _tabs.TabPages.Add(previewTab);
             TabPage detailsTab = new TabPage(L.T("Details", "Details"));
-            detailsTab.Padding = new Padding(10);
-            _details = new TextBox();
-            _details.Dock = DockStyle.Fill;
-            _details.Multiline = true;
-            _details.ReadOnly = true;
-            _details.ScrollBars = ScrollBars.Vertical;
-            _details.BorderStyle = BorderStyle.None;
-            _details.Font = new Font("Consolas", 10.5F);
-            detailsTab.Controls.Add(_details);
+            detailsTab.Padding = new Padding(0, 8, 0, 0);
+            _details = new StudioReadOnlyText();
+            detailsTab.Controls.Add(StudioReadOnlyText.Surface(_details));
+            _detailsEmpty = CreateEmptyState();
+            detailsTab.Controls.Add(_detailsEmpty);
             _tabs.TabPages.Add(detailsTab);
             TabPage rawTab = new TabPage(L.T("Raw / Hex", "Raw / Hex"));
-            rawTab.Padding = new Padding(10);
-            _raw = new TextBox();
-            _raw.Dock = DockStyle.Fill;
-            _raw.Multiline = true;
-            _raw.ReadOnly = true;
-            _raw.ScrollBars = ScrollBars.Both;
-            _raw.WordWrap = false;
-            _raw.BorderStyle = BorderStyle.None;
-            _raw.Font = new Font("Consolas", 9.5F);
-            rawTab.Controls.Add(_raw);
+            rawTab.Padding = new Padding(0, 8, 0, 0);
+            _raw = new StudioReadOnlyText {
+                WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both,
+                Font = new Font("Consolas", 9.5F)
+            };
+            rawTab.Controls.Add(StudioReadOnlyText.Surface(_raw));
+            _rawEmpty = CreateEmptyState();
+            rawTab.Controls.Add(_rawEmpty);
             _tabs.TabPages.Add(rawTab);
             TabPage helpTab = new TabPage(L.T("Hilfe", "Help"));
             helpTab.Padding = new Padding(14);
@@ -598,7 +519,7 @@ namespace murumsWiiModStudio
             _help.Dock = DockStyle.Fill;
             _help.ReadOnly = true;
             _help.BorderStyle = BorderStyle.None;
-            _help.Font = new Font("Segoe UI", 10.5F);
+            _help.Font = StudioTypography.Body;
             StudioChrome.EnableLinks(_help);
             _help.Text = BuildHelpText();
             StudioHelp.BuildNavigation(helpTab, _help);
@@ -612,10 +533,103 @@ namespace murumsWiiModStudio
             statusStrip.Dock = DockStyle.Fill;
             statusStrip.Margin = new Padding(0);
             statusStrip.SizingGrip = false;
-            _status = new ToolStripStatusLabel(L.T("Bereit", "Ready"));
+            _status = new ToolStripStatusLabel(L.T("Bereit", "Ready")) { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+            _documentStatus = new ToolStripStatusLabel();
             statusStrip.Items.Add(_status);
+            statusStrip.Items.Add(_documentStatus);
             shell.Controls.Add(statusStrip, 0, 4);
             ResumeLayout(true);
+        }
+
+        private void BuildWorkspace()
+        {
+            Control archiveView = Controls[0];
+            var archiveLayout = (TableLayoutPanel)archiveView;
+            archiveLayout.Controls.Remove(_menu);
+            archiveLayout.RowStyles[1].Height = 0;
+            Controls.Remove(archiveView);
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.Controls.Add(TitleBar(_menu), 0, 0);
+            _workspace = new StudioWorkspace(archiveView);
+            root.Controls.Add(_workspace, 0, 1);
+            Controls.Add(root);
+            _workspace.Group(L.T("DATEIEN & PACKS", "FILES & PACKS"));
+            _workspace.Add("archive", L.T("Archiv", "Archive"), StudioIcon.Archive, null);
+            _workspace.Add("pack", "Pack Maker", StudioIcon.Pack, () => new CustomPackMakerForm());
+            _workspace.Add("workshop", L.T("Pack-Werkstatt", "Pack workshop"), StudioIcon.Folder, () => new PackWorkbenchForm());
+            _workspace.Group(L.T("GESTALTEN", "CREATE"));
+            _workspace.Add("character", L.T("Charakter", "Character"), StudioIcon.Character, () => new CharacterBuilderForm());
+            _workspace.Add("background", L.T("Hintergründe", "Backgrounds"), StudioIcon.Image, () => new RetroRewindGifWizard(_currentPath));
+            _workspace.Add("textures", L.T("Menübilder", "Menu images"), StudioIcon.Image, () => new MenuTextureForm());
+            _workspace.Add("font", L.T("Schriften", "Fonts"), StudioIcon.Font, () => new FontChangerForm());
+            _workspace.Add("text", L.T("Spieltexte", "Game text"), StudioIcon.Font, () => new MenuTextForm());
+            _workspace.Add("menu", L.T("Menü-Layout", "Menu layout"), StudioIcon.Layout, () => new GameHudForm());
+            _workspace.Add("hud", L.T("Rennanzeigen", "Race HUD"), StudioIcon.Layout, () => new RaceHudForm());
+            _workspace.Add("effects", L.T("Effekte", "Effects"), StudioIcon.Effects, () => new RaceEffectsForm());
+            _workspace.Add("audio", L.T("Musik & Loops", "Music & loops"), StudioIcon.Audio, () => new MusicLoopForm());
+            _workspace.Group(L.T("ZUSAMMENSTELLEN", "ASSEMBLE"));
+            _workspace.Add("theme", "Theme Project", StudioIcon.Pack, () => new ThemeProjectForm());
+            _workspace.Add("merge", L.T("Zusammenführen", "Merge changes"), StudioIcon.Import, () => new ArchiveMergeForm());
+            _workspace.Add("compare", L.T("Vergleichen", "Compare archives"), StudioIcon.Compare, () => new ArchiveCompareForm());
+            _workspace.Group(L.T("STUDIO", "STUDIO"));
+            _workspace.Add("help", L.T("Hilfe", "Help"), StudioIcon.Help, () => new StudioHelpForm());
+            _workspace.Add("settings", L.T("Programme", "Tools & settings"), StudioIcon.Settings, () => new ToolchainForm());
+            _workspace.PageOpening += delegate(Form window)
+            {
+                var backgrounds = window as RetroRewindGifWizard;
+                if (backgrounds != null) backgrounds.ActivateStartupSource(_currentPath);
+            };
+            _workspace.ActivePageChanged += delegate {
+                _menu.Items[0].Enabled = _menu.Items[1].Enabled = _workspace.ArchiveActive;
+                AllowDrop = _workspace.ArchiveActive;
+                UpdateTitle();
+            };
+            _workspace.Open("archive");
+            StudioActions.Tool(_toolbar.Items[0], StudioIcon.Open, true);
+            StudioActions.Tool(_toolbar.Items[1], StudioIcon.Search, false);
+            StudioActions.Tool(_toolbar.Items[2], StudioIcon.Save, true);
+            StudioActions.Tool(_toolbar.Items[3], StudioIcon.SaveAs, true);
+            StudioActions.Tool(_toolbar.Items[7], StudioIcon.Import, true);
+            StudioActions.Tool(_toolbar.Items[11], StudioIcon.Export, true);
+            StudioActions.Icon(_previewPrevious, StudioIcon.Previous);
+            StudioActions.Icon(_previewNext, StudioIcon.Next);
+            StudioActions.Icon(_previewExport, StudioIcon.Export);
+            StudioActions.Icon(_previewImportTpl, StudioIcon.Image);
+        }
+
+        internal void OpenWorkspace(string key)
+        {
+            if (_startup != null && _startup.Running) return;
+            _workspace.Open(key);
+        }
+
+        internal void CheckForUpdates()
+        {
+            StudioUpdateForm.ShowUpdates(this, null);
+        }
+
+        internal void ShowChangelog()
+        {
+            StudioEditor.Open(this, new StudioChangelogForm(), delegate { });
+        }
+
+        internal void ShowEditor(Form editor, Action<DialogResult> completed)
+        {
+            _workspace.ShowDetail(editor, completed);
+        }
+
+        protected override bool ProcessCmdKey(ref Message message, Keys keys)
+        {
+            if (keys == (Keys.Control | Keys.F) && _workspace != null && _workspace.ActiveKey == "help" && !_workspace.HasDetail)
+            {
+                var search = Controls.Find("HelpSearch", true).OfType<TextBox>().FirstOrDefault(c => c.Visible);
+                if (search != null && search.Focus()) { search.SelectAll(); return true; }
+            }
+            if (keys == Keys.Escape && !StudioUx.HasOpenDropDown(this) && _workspace != null && _workspace.CloseDetail()) return true;
+            return base.ProcessCmdKey(ref message, keys);
         }
 
         private void ApplyTheme()
@@ -623,9 +637,9 @@ namespace murumsWiiModStudio
             DarkTheme.Apply(this);
             DarkTheme.StyleTree(_tree);
             DarkTheme.StyleTabs(_tabs);
-            _details.BackColor = DarkTheme.Panel;
+            _details.BackColor = DarkTheme.Panel2;
             _details.ForeColor = DarkTheme.Fore;
-            _raw.BackColor = DarkTheme.Panel;
+            _raw.BackColor = DarkTheme.Panel2;
             _raw.ForeColor = DarkTheme.Fore;
             _help.BackColor = DarkTheme.Panel;
             _help.ForeColor = DarkTheme.Fore;
@@ -639,6 +653,87 @@ namespace murumsWiiModStudio
                 statusStrip.BackColor = DarkTheme.Panel2;
                 statusStrip.ForeColor = DarkTheme.Fore;
                 statusStrip.Renderer = renderer;
+            }
+        }
+
+        private enum ArchiveCommand { Save, SaveAs, ImportFiles, ImportFolder, Edit, Replace, ImportTexture, Export, NewFolder, Duplicate, Rename, Delete, MoveUp, MoveDown, Find, FindNext, Validate, EditBrlan, EditBrlyt }
+        private readonly Dictionary<ToolStripItem, ArchiveCommand> _commands = new Dictionary<ToolStripItem, ArchiveCommand>();
+
+        private ToolStripMenuItem MakeCommandMenu(string text, Keys shortcut, ArchiveCommand command)
+        {
+            var item = MakeMenu(text, shortcut, delegate { ExecuteCommand(command); });
+            _commands.Add(item, command);
+            item.Disposed += delegate { _commands.Remove(item); };
+            item.Enabled = CanExecute(command);
+            return item;
+        }
+
+        private ToolStripButton MakeCommandButton(string text, ArchiveCommand command)
+        {
+            var item = MakeToolButton(text, delegate { ExecuteCommand(command); });
+            _commands.Add(item, command);
+            item.Disposed += delegate { _commands.Remove(item); };
+            return item;
+        }
+
+        private bool CanExecute(ArchiveCommand command)
+        {
+            if (_workspace != null && !_workspace.ArchiveActive) return false;
+            if (_archive == null) return false;
+            ArchiveEntry entry = SelectedEntry();
+            switch (command)
+            {
+                case ArchiveCommand.Save: return _dirty;
+                case ArchiveCommand.SaveAs:
+                case ArchiveCommand.Validate:
+                case ArchiveCommand.Find:
+                case ArchiveCommand.FindNext: return true;
+                case ArchiveCommand.ImportFiles:
+                case ArchiveCommand.ImportFolder:
+                case ArchiveCommand.NewFolder:
+                case ArchiveCommand.Export: return entry != null;
+                case ArchiveCommand.Edit:
+                case ArchiveCommand.Replace: return entry != null && !entry.IsDirectory;
+                case ArchiveCommand.ImportTexture: return entry != null && !entry.IsDirectory && TplTextureEditor.IsTpl(entry.Data);
+                case ArchiveCommand.EditBrlan: return entry != null && !entry.IsDirectory && ResourceDetector.Detect(entry.Name, entry.Data).Kind == ResourceKind.Brlan;
+                case ArchiveCommand.EditBrlyt: return entry != null && !entry.IsDirectory && ResourceDetector.Detect(entry.Name, entry.Data).Kind == ResourceKind.Brlyt;
+                case ArchiveCommand.MoveUp: return entry != null && entry.Parent != null && entry.Parent.Children.IndexOf(entry) > 0;
+                case ArchiveCommand.MoveDown: return entry != null && entry.Parent != null && entry.Parent.Children.IndexOf(entry) < entry.Parent.Children.Count - 1;
+                default: return entry != null && entry != _archive.Root;
+            }
+        }
+
+        private void UpdateCommandState()
+        {
+            foreach (var binding in _commands) binding.Key.Enabled = CanExecute(binding.Value);
+            if (_documentStatus != null)
+                _documentStatus.Text = _archive == null ? String.Empty : (_dirty ? L.T("Ungespeicherte Änderungen", "Unsaved changes") : L.T("Keine Änderungen", "No changes"));
+        }
+
+        private void ExecuteCommand(ArchiveCommand command)
+        {
+            if (!CanExecute(command)) return;
+            switch (command)
+            {
+                case ArchiveCommand.Save: SaveArchive(false); break;
+                case ArchiveCommand.SaveAs: SaveArchive(true); break;
+                case ArchiveCommand.ImportFiles: ImportFiles(); break;
+                case ArchiveCommand.ImportFolder: ImportFolder(); break;
+                case ArchiveCommand.Edit: EditSelectedResource(); break;
+                case ArchiveCommand.Replace: ReplaceSelected(); break;
+                case ArchiveCommand.ImportTexture: ImportTextureSelected(); break;
+                case ArchiveCommand.Export: ExportSelected(); break;
+                case ArchiveCommand.NewFolder: NewFolder(); break;
+                case ArchiveCommand.Duplicate: DuplicateSelected(); break;
+                case ArchiveCommand.Rename: RenameSelected(); break;
+                case ArchiveCommand.Delete: DeleteSelected(); break;
+                case ArchiveCommand.MoveUp: MoveSelected(-1); break;
+                case ArchiveCommand.MoveDown: MoveSelected(1); break;
+                case ArchiveCommand.Find: FindEntry(false); break;
+                case ArchiveCommand.FindNext: FindEntry(true); break;
+                case ArchiveCommand.Validate: ValidateArchive(); break;
+                case ArchiveCommand.EditBrlan: EditSelectedBrlan(); break;
+                case ArchiveCommand.EditBrlyt: EditSelectedBrlyt(); break;
             }
         }
 
@@ -686,6 +781,8 @@ namespace murumsWiiModStudio
 
         public void OpenFromPath(string path)
         {
+            if (_workspace != null && _workspace.HasDetail)
+                return;
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
                 return;
             ResourceInfo info = ResourceDetector.Detect(path);
@@ -697,13 +794,18 @@ namespace murumsWiiModStudio
                 return;
             }
 
-            if (Visible)
+            if (Visible && StartupReady)
                 OpenStandaloneResource(path);
             else
-                Shown += delegate
+            {
+                EventHandler open = null;
+                open = delegate
                 {
-                    OpenStandaloneResource(path);
+                    StartupCompleted -= open;
+                    if (!IsDisposed && !Disposing) OpenStandaloneResource(path);
                 };
+                StartupCompleted += open;
+            }
         }
 
         private void OpenStandaloneResourceDialog()
@@ -725,45 +827,41 @@ namespace murumsWiiModStudio
             ResourceInfo info = ResourceDetector.Detect(path);
             if (info.Kind == ResourceKind.Brlan)
             {
-                using (murumsWiiModStudio.Brlan.MainForm editor = new murumsWiiModStudio.Brlan.MainForm())
+                var editor = new murumsWiiModStudio.Brlan.MainForm();
+                try
                 {
                     editor.OpenFromPath(path);
-                    editor.ShowDialog(this);
+                    StudioEditor.Open(this, editor, delegate { });
                 }
+                catch { editor.Dispose(); throw; }
             }
             else if (info.Kind == ResourceKind.Brlyt)
             {
-                using (murumsWiiModStudio.Brlan.BrlytEditorForm editor = new murumsWiiModStudio.Brlan.BrlytEditorForm(path))
-                    editor.ShowDialog(this);
+                StudioEditor.Open(this, new murumsWiiModStudio.Brlan.BrlytEditorForm(path), delegate { });
             }
             else if (info.Kind == ResourceKind.Tpl || info.Kind == ResourceKind.Image)
             {
-                using (StandaloneTextureForm editor = new StandaloneTextureForm(path))
-                    editor.ShowDialog(this);
+                StudioEditor.Open(this, new StandaloneTextureForm(path), delegate { });
             }
             else
             {
-                using (FormatInspectorForm inspector = new FormatInspectorForm(path))
-                    inspector.ShowDialog(this);
+                StudioEditor.Open(this, new FormatInspectorForm(path), delegate { });
             }
         }
 
         public void ShowStartCenter()
         {
-            using (StartCenterForm start = new StartCenterForm(this))
-                start.ShowDialog(this);
+            StudioEditor.Open(this, new StartCenterForm(this), delegate { });
         }
 
         public void OpenRetroRewindGifWizard()
         {
-            using (RetroRewindGifWizard wizard = new RetroRewindGifWizard(_currentPath))
-            {
-                wizard.ShowDialog(this);
-            }
+            OpenWorkspace("background");
         }
 
         private void OpenDialog()
         {
+            if (_workspace != null && !_workspace.ArchiveActive) return;
             string path = GameArchiveImportForm.Select(this, ResourceDetector.OpenFilter);
             if (path != null)
                 OpenFromPath(path);
@@ -780,6 +878,10 @@ namespace murumsWiiModStudio
                 _currentPath = path;
                 _dirty = false;
                 RebuildTree();
+                // Beim ersten Öffnen bleibt der Browser neutral: erst eine
+                // bewusste Auswahl zeigt Details, Vorschau und Aktionen.
+                _tree.SelectedNode = null;
+                UpdateSelection();
                 _status.Text = L.F("Geöffnet: {0} ({1})", "Opened: {0} ({1})", Path.GetFileName(path), _archive.WasCompressed ? "Yaz0 + U8" : "U8");
                 UpdateTitle();
             }
@@ -1049,20 +1151,31 @@ namespace murumsWiiModStudio
                     return;
                 try
                 {
-                    using (Bitmap source = TplTextureEditor.LoadSourceBitmap(dialog.FileName))
+                    string sourcePath = dialog.FileName;
+                    Bitmap source = null;
+                    OpenResourceEditor(delegate
                     {
-                        using (var preview = new TextureImportPreviewForm(entry.Data, imageIndex, source))
+                        source = TplTextureEditor.LoadSourceBitmap(sourcePath);
+                        return new TextureImportPreviewForm(entry.Data, imageIndex, source);
+                    }, delegate(TextureImportPreviewForm preview, DialogResult result)
+                    {
+                        if (result != DialogResult.OK || preview.Result == null) return;
+                        entry.Data = preview.Result;
+                        MarkDirty();
+                        UpdateSelection();
+                        UpdatePreview(entry, imageIndex, true);
+                        TplTextureInfo saved = TplTextureEditor.GetImageInfo(entry.Data, imageIndex);
+                        _status.Text = L.T("TPL-Bild ersetzt: ", "TPL image replaced: ") + GetEntryPath(entry)
+                            + " • " + saved.FormatName + " • "
+                            + L.F("{0} Mipmap-Zusatzstufen", "{0} extra mipmap levels", saved.MaxLod);
+                    }, delegate
+                    {
+                        if (source != null)
                         {
-                            if (preview.ShowDialog(this) != DialogResult.OK) return;
-                            entry.Data = preview.Result;
+                            source.Dispose();
+                            source = null;
                         }
-                    }
-
-                    MarkDirty();
-                    UpdateSelection();
-                    UpdatePreview(entry, imageIndex, true);
-                    string mip = info.HasMipMaps ? L.T(" Verkleinerte Texturstufen wurden ebenfalls aktualisiert.", " Smaller texture levels were also updated.") : string.Empty;
-                    _status.Text = L.T("TPL-Bild ersetzt; Name/Format/Parameter beibehalten: ", "TPL image replaced; name/format/settings preserved: ") + GetEntryPath(entry) + mip;
+                    }, L.T("TPL-Bild konnte nicht importiert werden", "TPL texture import failed"));
                 }
                 catch (Exception ex)
                 {
@@ -1093,6 +1206,7 @@ namespace murumsWiiModStudio
                         string target = Path.Combine(dialog.SelectedPath, folderName);
                         ExportDirectory(entry, target);
                         _status.Text = L.T("Ordner exportiert: ", "Folder exported: ") + target;
+                        murumsWiiModStudio.StudioMessageBox.ShowPath(this, target, L.T("Ordner exportiert.", "Folder exported."), L.T("Export", "Export"));
                     }
                 }
                 else
@@ -1106,6 +1220,7 @@ namespace murumsWiiModStudio
                             return;
                         File.WriteAllBytes(dialog.FileName, entry.Data ?? new byte[0]);
                         _status.Text = L.T("Exportiert: ", "Exported: ") + entry.Name;
+                        murumsWiiModStudio.StudioMessageBox.ShowPath(this, dialog.FileName, L.T("Datei exportiert.", "File exported."), L.T("Export", "Export"));
                     }
                 }
             }
@@ -1377,12 +1492,13 @@ namespace murumsWiiModStudio
                 sb.AppendLine("• " + issues[i]);
             if (issues.Count > 40)
                 sb.AppendLine("...");
-            murumsWiiModStudio.StudioMessageBox.Show(this, sb.ToString(), L.T("Validierungsprobleme", "Validation issues"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowArchiveReport(L.T("Validierungsprobleme", "Validation issues"), sb.ToString());
             _status.Text = L.F("Validierung: {0} Problem(e)", "Validation: {0} issue(s)", issues.Count);
         }
 
         public void BrowseTextures()
         {
+            if (_workspace != null && !_workspace.ArchiveActive) return;
             if (_archive == null)
             {
                 OpenDialog();
@@ -1390,14 +1506,15 @@ namespace murumsWiiModStudio
                     return;
             }
 
-            using (TextureBrowserForm browser = new TextureBrowserForm(_archive.Root))
+            var browser = new TextureBrowserForm(_archive.Root);
+            StudioEditor.Open(this, browser, delegate(DialogResult result)
             {
-                if (browser.ShowDialog(this) == DialogResult.OK && browser.SelectedTexture != null)
+                if (result == DialogResult.OK && browser.SelectedTexture != null)
                 {
                     RebuildTreeAndSelect(browser.SelectedTexture);
                     _status.Text = L.T("Bild ausgewählt. Mit „Bild ersetzen“ in der Vorschau dein eigenes Bild einsetzen.", "Image selected. Use Replace image in the preview to insert your own picture.");
                 }
-            }
+            });
         }
 
         public void BrowseTexturesFromFile(string path)
@@ -1428,7 +1545,7 @@ namespace murumsWiiModStudio
                 byte[] snapshot = _archive.BuildU8();
                 Enabled = false;
                 _status.Text = L.T("Strecke wird geprüft...", "Checking course...");
-                string report = await System.Threading.Tasks.Task.Run(delegate
+                string report = await ToolStatus.RunAsync(this, delegate
                 {
                     File.WriteAllBytes(temp, snapshot);
                     string output, error;
@@ -1436,24 +1553,7 @@ namespace murumsWiiModStudio
                     return (ok ? L.T("Prüfung abgeschlossen.", "Check completed.") : L.T("Prüfung meldet Hinweise oder Fehler.", "Check reported warnings or errors.")) + "\r\n\r\n" + output + "\r\n" + error;
                 });
                 Enabled = true;
-                using (Form result = new Form())
-                {
-                    result.Text = L.T("MKW-Streckenprüfung — aktueller Bearbeitungsstand", "MKW course check — current edits");
-                    result.Size = new Size(900, 650);
-                    result.StartPosition = FormStartPosition.CenterParent;
-                    TextBox box = new TextBox
-                    {
-                        Dock = DockStyle.Fill,
-                        Multiline = true,
-                        ReadOnly = true,
-                        ScrollBars = ScrollBars.Both,
-                        WordWrap = false,
-                        Text = report
-                    };
-                    result.Controls.Add(box);
-                    DarkTheme.Apply(result);
-                    result.ShowDialog(this);
-                }
+                ShowArchiveReport(L.T("MKW-Streckenprüfung — aktueller Bearbeitungsstand", "MKW course check — current edits"), report);
 
                 _status.Text = L.T("Streckenprüfung abgeschlossen; Originaldatei unverändert.", "Course check completed; original file unchanged.");
             }
@@ -1499,13 +1599,6 @@ namespace murumsWiiModStudio
                 else if (child.Data == null)
                     issues.Add(childPath + ": file data is null");
             }
-        }
-
-        private void CollapseTree()
-        {
-            _tree.CollapseAll();
-            if (_tree.Nodes.Count > 0)
-                _tree.Nodes[0].Expand();
         }
 
         private ImageList CreateTreeImageList()
@@ -1650,6 +1743,7 @@ namespace murumsWiiModStudio
                 ArchiveEntry child = parentEntry.Children[i];
                 TreeNode node = new TreeNode(child.Name);
                 node.Tag = child;
+                node.ToolTipText = GetEntryPath(child);
                 node.ImageKey = GetTreeImageKey(child);
                 node.SelectedImageKey = node.ImageKey;
                 if (child.IsDirectory)
@@ -1673,15 +1767,35 @@ namespace murumsWiiModStudio
             return null;
         }
 
+        private StudioEmptyState CreateEmptyState()
+        {
+            return new StudioEmptyState(L.T("Datei öffnen…", "Open file…"), delegate { OpenDialog(); });
+        }
+
+        private static void ShowTextContent(StudioReadOnlyText text, StudioEmptyState empty,
+            string content, string message, bool canOpen)
+        {
+            bool hasContent = !String.IsNullOrEmpty(content);
+            text.Text = content;
+            text.Parent.Visible = hasContent;
+            empty.SetContent(message, canOpen);
+            empty.Visible = !hasContent;
+            if (!hasContent) empty.BringToFront();
+        }
+
         private void UpdateSelection()
         {
             ArchiveEntry entry = SelectedEntry();
-            if (entry == null)
+            UpdateCommandState();
+            if (_archive == null || entry == null)
             {
                 _selectionInfo.Text = _archive == null ? L.T("Kein Archiv geöffnet", "No archive opened") : string.Empty;
-                _details.Text = _archive == null ? L.T("Öffne eine Wii .szs/.arc/.u8-Datei.", "Open a Wii .szs/.arc/.u8 archive.") : string.Empty;
-                _raw.Text = string.Empty;
-                ClearPreview(L.T("Wähle eine TPL- oder Bilddatei aus.", "Select a TPL or image file."));
+                string message = _archive == null
+                    ? L.T("Öffne eine Wii-Datei, um ihre Ressourcen zu bearbeiten.", "Open a Wii file to work with its resources.")
+                    : L.T("Wähle links eine Ressource aus.", "Select a resource on the left.");
+                ShowTextContent(_details, _detailsEmpty, String.Empty, message, _archive == null);
+                ShowTextContent(_raw, _rawEmpty, String.Empty, message, _archive == null);
+                ClearPreview(message);
                 return;
             }
 
@@ -1704,7 +1818,7 @@ namespace murumsWiiModStudio
                     sb.AppendLine(L.T("MKWii GIF-Hintergrund: Hier gehören bg_anim_000.tpl ... bg_anim_020.tpl hinein.", "MKWii GIF background: import bg_anim_000.tpl ... bg_anim_020.tpl here."));
                 }
 
-                ClearPreview(L.T("Ordner haben keine Bildvorschau.", "Directories do not have an image preview."));
+                ClearPreview(L.T("Wähle links eine Datei aus diesem Ordner aus.", "Select a file from this folder on the left."));
             }
             else
             {
@@ -1721,8 +1835,12 @@ namespace murumsWiiModStudio
                 UpdatePreview(entry, 0, false);
             }
 
-            _details.Text = sb.ToString();
-            _raw.Text = entry.IsDirectory ? L.T("Ordner besitzen keine Raw-Daten.", "Directories have no raw data.") : BuildHexPreview(entry.Data);
+            ShowTextContent(_details, _detailsEmpty, sb.ToString(), String.Empty, false);
+            string raw = entry.IsDirectory || entry.Data == null || entry.Data.Length == 0
+                ? String.Empty : BuildHexPreview(entry.Data);
+            ShowTextContent(_raw, _rawEmpty, raw, entry.IsDirectory
+                ? L.T("Wähle links eine Datei aus, um ihre Raw-Daten zu sehen.", "Select a file on the left to view its raw data.")
+                : L.T("Diese Datei enthält keine Daten.", "This file contains no data."), false);
         }
 
         private long GetRecursiveSize(ArchiveEntry entry)
@@ -1778,7 +1896,16 @@ namespace murumsWiiModStudio
             _previewEntry = null;
             _previewImageIndex = 0;
             if (_previewInfo != null)
-                _previewInfo.Text = message ?? string.Empty;
+            {
+                _previewInfo.Text = String.Empty;
+                _previewInfo.Visible = false;
+            }
+            if (_previewEmpty != null)
+            {
+                _previewEmpty.Visible = true;
+                _previewEmpty.SetContent(message, _archive == null);
+                _preview.Visible = false;
+            }
             UpdatePreviewButtons();
         }
 
@@ -1807,6 +1934,9 @@ namespace murumsWiiModStudio
             _previewEntry = entry;
             _previewImageIndex = decoded.ImageIndex;
             _preview.Image = decoded.Bitmap;
+            _previewEmpty.Visible = false;
+            _previewInfo.Visible = true;
+            _preview.Visible = true;
             StringBuilder info = new StringBuilder();
             info.Append(decoded.TypeName);
             if (!string.IsNullOrEmpty(decoded.FormatName))
@@ -1828,6 +1958,9 @@ namespace murumsWiiModStudio
         {
             bool has = _previewResult != null && _previewResult.Bitmap != null;
             int count = has ? _previewResult.ImageCount : 0;
+            if (_previewTools != null) _previewTools.Visible = has;
+            _previewPrevious.Visible = count > 1;
+            _previewNext.Visible = count > 1;
             if (_previewPrevious != null)
                 _previewPrevious.Enabled = has && count > 1 && _previewImageIndex > 0;
             if (_previewNext != null)
@@ -1883,6 +2016,7 @@ namespace murumsWiiModStudio
                     return;
                 _previewResult.Bitmap.Save(dialog.FileName, System.Drawing.Imaging.ImageFormat.Png);
                 _status.Text = L.T("PNG exportiert: ", "PNG exported: ") + Path.GetFileName(dialog.FileName);
+                murumsWiiModStudio.StudioMessageBox.ShowPath(this, dialog.FileName, L.T("PNG exportiert.", "PNG exported."), L.T("Export", "Export"));
             }
         }
 
@@ -1960,6 +2094,8 @@ namespace murumsWiiModStudio
 
         private void NavigateHistory(bool redo)
         {
+            if (_workspace != null && !_workspace.ArchiveActive)
+                return;
             ArchiveEntry selected = SelectedEntry();
             string selectedPath = selected == null ? "/" : GetEntryPath(selected);
             byte[] snapshot = redo ? _history.Redo() : _history.Undo();
@@ -1988,9 +2124,11 @@ namespace murumsWiiModStudio
         private void UpdateTitle()
         {
             string name = string.IsNullOrEmpty(_currentPath) ? string.Empty : " — " + Path.GetFileName(_currentPath);
-            Text = AppName + " v" + AppVersion + name + (_dirty ? " *" : string.Empty);
-            _undoButton.Enabled = _undoMenu.Enabled = _history.CanUndo;
-            _redoButton.Enabled = _redoMenu.Enabled = _history.CanRedo;
+            Text = AppName + name + (_dirty ? " *" : string.Empty);
+            UpdateCommandState();
+            bool active = _workspace == null || _workspace.ArchiveActive;
+            _undoButton.Enabled = _undoMenu.Enabled = active && _history.CanUndo;
+            _redoButton.Enabled = _redoMenu.Enabled = active && _history.CanRedo;
         }
 
         private bool ConfirmDiscardChanges()
@@ -2008,8 +2146,16 @@ namespace murumsWiiModStudio
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
+            if (_startup != null) _startup.Pause();
+            if (_workspace != null && !_workspace.CloseEditors())
+            {
+                if (_startup != null) { _menu.Enabled = false; _startup.RestartAfterCancelledClose(); }
+                e.Cancel = true;
+                return;
+            }
             if (!ConfirmDiscardChanges())
             {
+                if (_startup != null) { _menu.Enabled = false; _startup.RestartAfterCancelledClose(); }
                 e.Cancel = true;
                 return;
             }
@@ -2072,7 +2218,7 @@ namespace murumsWiiModStudio
 
         private void OnNodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
         {
-            if (e.Button != MouseButtons.Right)
+            if (e.Button != MouseButtons.Right || _archive == null)
                 return;
             _tree.SelectedNode = e.Node;
             ArchiveEntry entry = e.Node.Tag as ArchiveEntry;
@@ -2086,22 +2232,22 @@ namespace murumsWiiModStudio
             menu.Font = new Font("Segoe UI", 10F);
             if (entry.IsDirectory)
             {
-                menu.Items.Add(L.T("Dateien importieren...", "Import files..."), null, delegate
+                if (e.Node.Nodes.Count > 0)
                 {
-                    ImportFiles();
-                });
-                menu.Items.Add(L.T("Ordner importieren...", "Import folder..."), null, delegate
-                {
-                    ImportFolder();
-                });
-                menu.Items.Add(L.T("Exportieren...", "Export..."), null, delegate
-                {
-                    ExportSelected();
-                });
-                menu.Items.Add(L.T("Neuer Ordner...", "New folder..."), null, delegate
-                {
-                    NewFolder();
-                });
+                    menu.Items.Add(L.T("Diesen Ordner aufklappen", "Expand this folder"), null, delegate
+                    {
+                        e.Node.ExpandAll();
+                    });
+                    menu.Items.Add(L.T("Diesen Ordner zuklappen", "Collapse this folder"), null, delegate
+                    {
+                        e.Node.Collapse();
+                    });
+                    menu.Items.Add(new ToolStripSeparator());
+                }
+                menu.Items.Add(MakeCommandMenu(L.T("Dateien importieren...", "Import files..."), Keys.None, ArchiveCommand.ImportFiles));
+                menu.Items.Add(MakeCommandMenu(L.T("Ordner importieren...", "Import folder..."), Keys.None, ArchiveCommand.ImportFolder));
+                menu.Items.Add(MakeCommandMenu(L.T("Exportieren...", "Export..."), Keys.None, ArchiveCommand.Export));
+                menu.Items.Add(MakeCommandMenu(L.T("Neuer Ordner...", "New folder..."), Keys.None, ArchiveCommand.NewFolder));
             }
             else
             {
@@ -2123,58 +2269,38 @@ namespace murumsWiiModStudio
                         EditTplEntry(entry);
                     });
                 else
-                    menu.Items.Add(L.T("Smart Edit / Inspector...", "Smart Edit / Inspector..."), null, delegate
-                    {
-                        EditSelectedResource();
-                    });
+                    menu.Items.Add(MakeCommandMenu(L.T("Smart Edit / Inspector...", "Smart Edit / Inspector..."), Keys.None, ArchiveCommand.Edit));
                 menu.Items.Add(new ToolStripSeparator());
-                menu.Items.Add(L.T("Ersetzen...", "Replace..."), null, delegate
-                {
-                    ReplaceSelected();
-                });
+                menu.Items.Add(MakeCommandMenu(L.T("Ersetzen...", "Replace..."), Keys.None, ArchiveCommand.Replace));
                 if (TplTextureEditor.IsTpl(entry.Data))
                 {
-                    menu.Items.Add(L.T("TPL-Bild importieren...", "Import TPL texture..."), null, delegate
-                    {
-                        ImportTextureSelected();
-                    });
+                    menu.Items.Add(MakeCommandMenu(L.T("TPL-Bild importieren...", "Import TPL texture..."), Keys.None, ArchiveCommand.ImportTexture));
                     menu.Items.Add(L.T("PNG exportieren...", "Export PNG..."), null, delegate
                     {
                         ExportSelectedPreviewPng();
                     });
                 }
 
-                menu.Items.Add(L.T("Exportieren...", "Export..."), null, delegate
-                {
-                    ExportSelected();
-                });
+                menu.Items.Add(MakeCommandMenu(L.T("Exportieren...", "Export..."), Keys.None, ArchiveCommand.Export));
             }
 
             if (_archive != null && entry != _archive.Root)
             {
                 menu.Items.Add(new ToolStripSeparator());
-                menu.Items.Add(L.T("Duplizieren", "Duplicate"), null, delegate
-                {
-                    DuplicateSelected();
-                });
-                menu.Items.Add(L.T("Umbenennen", "Rename"), null, delegate
-                {
-                    RenameSelected();
-                });
-                menu.Items.Add(L.T("Nach oben", "Move up"), null, delegate
-                {
-                    MoveSelected(-1);
-                });
-                menu.Items.Add(L.T("Nach unten", "Move down"), null, delegate
-                {
-                    MoveSelected(1);
-                });
-                menu.Items.Add(L.T("Löschen", "Delete"), null, delegate
-                {
-                    DeleteSelected();
-                });
+                menu.Items.Add(MakeCommandMenu(L.T("Duplizieren", "Duplicate"), Keys.None, ArchiveCommand.Duplicate));
+                menu.Items.Add(MakeCommandMenu(L.T("Umbenennen", "Rename"), Keys.None, ArchiveCommand.Rename));
+                menu.Items.Add(MakeCommandMenu(L.T("Nach oben", "Move up"), Keys.None, ArchiveCommand.MoveUp));
+                menu.Items.Add(MakeCommandMenu(L.T("Nach unten", "Move down"), Keys.None, ArchiveCommand.MoveDown));
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add(MakeCommandMenu(L.T("Löschen", "Delete"), Keys.None, ArchiveCommand.Delete));
             }
 
+            DarkTheme.StyleToolStrip(menu, new MurumsDarkToolStripRenderer());
+            menu.Closed += delegate
+            {
+                if (!IsDisposed && IsHandleCreated) BeginInvoke((Action)delegate { menu.Dispose(); });
+                else menu.Dispose();
+            };
             menu.Show(_tree, e.Location);
         }
 
@@ -2220,12 +2346,13 @@ namespace murumsWiiModStudio
         private void EditTplEntry(ArchiveEntry entry)
         {
             string temp = Path.Combine(Path.GetTempPath(), "murums_wii_" + Guid.NewGuid().ToString("N") + ".tpl");
-            try
+            byte[] original = entry.Data == null ? new byte[0] : (byte[])entry.Data.Clone();
+            OpenResourceEditor(delegate
             {
-                byte[] original = entry.Data == null ? new byte[0] : (byte[])entry.Data.Clone();
                 File.WriteAllBytes(temp, original);
-                using (StandaloneTextureForm editor = new StandaloneTextureForm(temp))
-                    editor.ShowDialog(this);
+                return new StandaloneTextureForm(temp);
+            }, delegate(StandaloneTextureForm editor, DialogResult result)
+            {
                 byte[] edited = File.ReadAllBytes(temp);
                 if (!ByteArraysEqual(original, edited))
                 {
@@ -2234,34 +2361,20 @@ namespace murumsWiiModStudio
                     RebuildTreeAndSelect(entry);
                     _status.Text = L.T("TPL aktualisiert.", "TPL updated.");
                 }
-            }
-            catch (Exception ex)
-            {
-                murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, "TPL", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                try
-                {
-                    if (File.Exists(temp))
-                        File.Delete(temp);
-                }
-                catch
-                {
-                }
-            }
+            }, delegate { DeleteTemporaryResource(temp, false); }, "TPL");
         }
 
         private void InspectArchiveEntry(ArchiveEntry entry, ResourceInfo info)
         {
             string ext = Path.GetExtension(entry.Name ?? "");
             string temp = Path.Combine(Path.GetTempPath(), "murums_wii_" + Guid.NewGuid().ToString("N") + ext);
-            try
+            byte[] original = entry.Data == null ? new byte[0] : (byte[])entry.Data.Clone();
+            OpenResourceEditor(delegate
             {
-                byte[] original = entry.Data == null ? new byte[0] : (byte[])entry.Data.Clone();
                 File.WriteAllBytes(temp, original);
-                using (FormatInspectorForm inspector = new FormatInspectorForm(temp))
-                    inspector.ShowDialog(this);
+                return new FormatInspectorForm(temp);
+            }, delegate(FormatInspectorForm inspector, DialogResult result)
+            {
                 byte[] edited = File.Exists(temp) ? File.ReadAllBytes(temp) : original;
                 if (!ByteArraysEqual(original, edited))
                 {
@@ -2270,22 +2383,89 @@ namespace murumsWiiModStudio
                     RebuildTreeAndSelect(entry);
                     _status.Text = L.T("Ressource aktualisiert: ", "Resource updated: ") + entry.Name;
                 }
-            }
-            catch (Exception ex)
+            }, delegate { DeleteTemporaryResource(temp, false); }, AppName);
+        }
+
+        private void OpenResourceEditor<T>(Func<T> create, Action<T, DialogResult> completed, Action cleanup, string caption) where T : Form
+        {
+            T editor = null;
+            bool cleaned = false;
+            Action release = delegate
             {
-                murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
+                if (cleaned) return;
+                cleaned = true;
+                cleanup();
+            };
+            try
             {
-                try
+                editor = create();
+                editor.Disposed += delegate { release(); };
+                StudioEditor.Open(this, editor, delegate(DialogResult result)
                 {
-                    if (File.Exists(temp))
-                        File.Delete(temp);
-                }
-                catch
-                {
-                }
+                    try { completed(editor, result); }
+                    catch (Exception error)
+                    {
+                        StudioMessageBox.Show(this, error.Message, caption, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                });
             }
+            catch (Exception error)
+            {
+                if (editor != null) editor.Dispose();
+                release();
+                StudioMessageBox.Show(this, error.Message, caption, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private static void DeleteTemporaryResource(string path, bool directory)
+        {
+            try
+            {
+                if (directory)
+                {
+                    if (Directory.Exists(path)) Directory.Delete(path, true);
+                }
+                else if (File.Exists(path)) File.Delete(path);
+            }
+            catch (IOException error) { System.Diagnostics.Trace.WriteLine(error.Message); }
+            catch (UnauthorizedAccessException error) { System.Diagnostics.Trace.WriteLine(error.Message); }
+        }
+
+        private void ShowArchiveReport(string title, string text)
+        {
+            var report = new Form
+            {
+                Text = title,
+                Size = new Size(900, 650),
+                StartPosition = FormStartPosition.CenterParent,
+                Font = new Font("Segoe UI", 10),
+                AutoScaleMode = AutoScaleMode.Font
+            };
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(8) };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var box = new StudioReadOnlyText
+            {
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = RichTextBoxScrollBars.Both,
+                WordWrap = false,
+                Text = text,
+                AccessibleName = title
+            };
+            root.Controls.Add(StudioReadOnlyText.Surface(box), 0, 0);
+            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
+            var close = StudioChrome.ActionButton(L.T("Schließen", "Close"));
+            close.DialogResult = DialogResult.Cancel;
+            close.Click += delegate { report.Close(); };
+            actions.Controls.Add(close);
+            root.Controls.Add(actions, 0, 1);
+            report.Controls.Add(root);
+            report.CancelButton = close;
+            DarkTheme.Apply(report);
+            StudioEditor.Open(this, report, delegate { });
         }
 
         private void EditSelectedBrlan()
@@ -2365,85 +2545,79 @@ namespace murumsWiiModStudio
             string animDir = Path.Combine(tempRoot, "anim");
             string blytDir = Path.Combine(tempRoot, "blyt");
             string timgDir = Path.Combine(tempRoot, "timg");
-            Directory.CreateDirectory(animDir);
-            Directory.CreateDirectory(blytDir);
-            Directory.CreateDirectory(timgDir);
             string tempBrlan = Path.Combine(animDir, entry.Name);
             byte[] original = entry.Data == null ? new byte[0] : (byte[])entry.Data.Clone();
-            File.WriteAllBytes(tempBrlan, original);
             ArchiveEntry scope = FindLayoutScope(entry);
             ArchiveEntry blyt = scope == null ? null : scope.FindChild("blyt");
             ArchiveEntry timg = scope == null ? null : scope.FindChild("timg");
-            ExportDirectoryFilesToTemp(blyt, blytDir, ".brlyt");
-            ExportDirectoryFilesToTemp(timg, timgDir, ".tpl");
-            System.Collections.Generic.List<string> generatedTpls = new System.Collections.Generic.List<string>();
-            System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> generatedTplNamesByPrefix = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-            try
+            var stagedGifs = new murumsWiiModStudio.Brlan.GifStagedState();
+            OpenResourceEditor(delegate
             {
-                using (murumsWiiModStudio.Brlan.MainForm editor = new murumsWiiModStudio.Brlan.MainForm())
+                Directory.CreateDirectory(animDir);
+                Directory.CreateDirectory(blytDir);
+                Directory.CreateDirectory(timgDir);
+                File.WriteAllBytes(tempBrlan, original);
+                ExportDirectoryFilesToTemp(blyt, blytDir, ".brlyt");
+                ExportDirectoryFilesToTemp(timg, timgDir, ".tpl");
+                var editor = new murumsWiiModStudio.Brlan.MainForm();
+                try
                 {
                     editor.ExternalGifOutputFolder = timgDir;
                     editor.ExternalHostAutoSave = true;
+                    editor.CaptureExternalGifState = delegate { return stagedGifs.Clone(); };
+                    editor.RestoreExternalGifState = delegate(murumsWiiModStudio.Brlan.GifStagedState state) { stagedGifs = state.Clone(); };
                     editor.ExternalGifCompleted = delegate (murumsWiiModStudio.Brlan.GifImportResult result)
                     {
-                        if (result == null)
-                            return;
+                        if (result == null) return;
                         string prefix = result.Prefix ?? string.Empty;
-                        System.Collections.Generic.HashSet<string> names = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        int i;
-                        for (i = 0; i < result.TplNames.Count; i++)
+                        var next = stagedGifs.Clone();
+                        List<string> previous;
+                        if (next.NamesByPrefix.TryGetValue(prefix, out previous))
+                            foreach (string name in previous) next.Payloads.Remove(name);
+                        var names = new List<string>();
+                        foreach (string name in result.TplNames)
                         {
-                            string name = result.TplNames[i];
-                            names.Add(name);
                             string path = Path.Combine(result.OutputFolder, name);
-                            if (File.Exists(path) && !generatedTpls.Contains(path))
-                                generatedTpls.Add(path);
+                            if (File.Exists(path)) { next.Payloads[name] = File.ReadAllBytes(path); names.Add(name); }
                         }
-
-                        if (!String.IsNullOrWhiteSpace(prefix))
-                            generatedTplNamesByPrefix[prefix] = names;
+                        if (!String.IsNullOrWhiteSpace(prefix)) next.NamesByPrefix[prefix] = names;
+                        stagedGifs = next;
                     };
                     editor.OpenFromPath(tempBrlan);
-                    editor.ShowDialog(this);
+                    return editor;
                 }
-
+                catch { editor.Dispose(); throw; }
+            }, delegate(murumsWiiModStudio.Brlan.MainForm editor, DialogResult result)
+            {
                 byte[] edited = File.Exists(tempBrlan) ? File.ReadAllBytes(tempBrlan) : original;
-                if (!ByteArraysEqual(original, edited))
+                if (!ByteArraysEqual(original, edited) || stagedGifs.Payloads.Count > 0)
                 {
                     entry.Data = edited;
-                    if (generatedTpls.Count > 0)
+                    if (stagedGifs.Payloads.Count > 0)
                     {
                         ArchiveEntry targetTimg = timg;
                         if (targetTimg == null && scope != null)
                             targetTimg = EnsureChildDirectory(scope, "timg");
                         if (targetTimg != null)
                         {
-                            foreach (System.Collections.Generic.KeyValuePair<string, System.Collections.Generic.HashSet<string>> pair in generatedTplNamesByPrefix)
-                                RemoveStaleGeneratedTpls(targetTimg, pair.Key, pair.Value);
-                            ImportGeneratedTpls(targetTimg, generatedTpls);
+                            foreach (var pair in stagedGifs.NamesByPrefix)
+                                RemoveStaleGeneratedTpls(targetTimg, pair.Key, new HashSet<string>(pair.Value, StringComparer.OrdinalIgnoreCase));
+                            var paths = new List<string>();
+                            foreach (var pair in stagedGifs.Payloads)
+                            {
+                                string path = Path.Combine(timgDir, pair.Key);
+                                File.WriteAllBytes(path, pair.Value);
+                                paths.Add(path);
+                            }
+                            ImportGeneratedTpls(targetTimg, paths);
                         }
                     }
 
                     MarkDirty();
                     RebuildTreeAndSelect(entry);
-                    _status.Text = L.F("BRLAN aktualisiert{0}.", "BRLAN updated{0}.", generatedTpls.Count > 0 ? L.F(" + {0} TPLs", " + {0} TPLs", generatedTpls.Count) : "");
+                    _status.Text = L.F("BRLAN aktualisiert{0}.", "BRLAN updated{0}.", stagedGifs.Payloads.Count > 0 ? L.F(" + {0} TPLs", " + {0} TPLs", stagedGifs.Payloads.Count) : "");
                 }
-            }
-            catch (Exception ex)
-            {
-                murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, L.T("BRLAN-Editor", "BRLAN editor"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                try
-                {
-                    if (Directory.Exists(tempRoot))
-                        Directory.Delete(tempRoot, true);
-                }
-                catch
-                {
-                }
-            }
+            }, delegate { DeleteTemporaryResource(tempRoot, true); }, L.T("BRLAN-Editor", "BRLAN editor"));
         }
 
         private static void RemoveStaleGeneratedTpls(ArchiveEntry timg, string prefix, System.Collections.Generic.HashSet<string> keepNames)
@@ -2494,19 +2668,20 @@ namespace murumsWiiModStudio
             SyncResourceEditorLanguage();
             string tempRoot = Path.Combine(Path.GetTempPath(), "murums_wii_" + Guid.NewGuid().ToString("N"));
             string blytDir = Path.Combine(tempRoot, "blyt");
-            Directory.CreateDirectory(blytDir);
             string timgDir = Path.Combine(tempRoot, "timg");
-            Directory.CreateDirectory(timgDir);
             string tempBrlyt = Path.Combine(blytDir, entry.Name);
             byte[] original = entry.Data == null ? new byte[0] : (byte[])entry.Data.Clone();
-            File.WriteAllBytes(tempBrlyt, original);
             ArchiveEntry scope = FindLayoutScope(entry);
             ArchiveEntry timg = scope == null ? null : scope.FindChild("timg");
-            ExportDirectoryFilesToTemp(timg, timgDir, ".tpl");
-            try
+            OpenResourceEditor(delegate
             {
-                using (murumsWiiModStudio.Brlan.BrlytEditorForm editor = new murumsWiiModStudio.Brlan.BrlytEditorForm(tempBrlyt))
-                    editor.ShowDialog(this);
+                Directory.CreateDirectory(blytDir);
+                Directory.CreateDirectory(timgDir);
+                File.WriteAllBytes(tempBrlyt, original);
+                ExportDirectoryFilesToTemp(timg, timgDir, ".tpl");
+                return new murumsWiiModStudio.Brlan.BrlytEditorForm(tempBrlyt);
+            }, delegate(murumsWiiModStudio.Brlan.BrlytEditorForm editor, DialogResult result)
+            {
                 byte[] edited = File.Exists(tempBrlyt) ? File.ReadAllBytes(tempBrlyt) : original;
                 if (!ByteArraysEqual(original, edited))
                 {
@@ -2515,22 +2690,7 @@ namespace murumsWiiModStudio
                     RebuildTreeAndSelect(entry);
                     _status.Text = L.T("BRLYT aktualisiert.", "BRLYT updated.");
                 }
-            }
-            catch (Exception ex)
-            {
-                murumsWiiModStudio.StudioMessageBox.Show(this, ex.Message, L.T("BRLYT-Editor", "BRLYT editor"), MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                try
-                {
-                    if (Directory.Exists(tempRoot))
-                        Directory.Delete(tempRoot, true);
-                }
-                catch
-                {
-                }
-            }
+            }, delegate { DeleteTemporaryResource(tempRoot, true); }, L.T("BRLYT-Editor", "BRLYT editor"));
         }
 
         private static bool ByteArraysEqual(byte[] a, byte[] b)
@@ -2548,7 +2708,7 @@ namespace murumsWiiModStudio
 
         private void OnDragEnter(object sender, DragEventArgs e)
         {
-            if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
+            if ((_workspace == null || _workspace.ArchiveActive) && e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
                 e.Effect = DragDropEffects.Copy;
             else
                 e.Effect = DragDropEffects.None;
@@ -2556,6 +2716,7 @@ namespace murumsWiiModStudio
 
         private void OnDragDrop(object sender, DragEventArgs e)
         {
+            if (_workspace != null && !_workspace.ArchiveActive) return;
             string[] paths = e.Data == null ? null : e.Data.GetData(DataFormats.FileDrop) as string[];
             if (paths == null || paths.Length == 0)
                 return;
@@ -2828,10 +2989,9 @@ namespace murumsWiiModStudio
             }
         }
 
-        private void ShowAbout()
+        internal void ShowAbout()
         {
-            using (var about = new StudioAboutForm(AppVersion))
-                about.ShowDialog(this);
+            StudioEditor.Open(this, new StudioAboutForm(StudioVersion.Current), delegate { });
         }
     }
 }
